@@ -81,6 +81,8 @@ static pthread_mutex_t PauseMutex;
 static pthread_cond_t WaitCleanCondition;
 static pthread_mutex_t WaitCleanMutex;
 
+static pthread_mutex_t TrickSpeedMutex;
+
 static pthread_t DecodeThread;		///< video decode thread
 
 static pthread_t FilterThread;
@@ -2257,10 +2259,16 @@ void VideoPause(VideoRender * render)
 ///	@param hw_render	video hardware render
 ///	@param speed		trick speed (0 = normal)
 ///
-void VideoSetTrickSpeed(VideoRender * render, int speed)
+void VideoSetTrickSpeed(VideoRender * render, int speed, int forward)
 {
-	Debug("VideoSetTrickSpeed: set trick speed %d", speed);
+	Debug("VideoSetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
+	pthread_mutex_lock(&TrickSpeedMutex);
 	render->TrickSpeed = speed;
+	render->TrickCounter = speed;
+	render->TrickForward = forward;
+	render->TrickSpeedChange = 1;
+	pthread_mutex_unlock(&TrickSpeedMutex);
+
 	if (speed) {
 		render->Closing = 0;	// ???
 	}
