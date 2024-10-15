@@ -75,13 +75,11 @@ static int VideoDisplayWidth = 0;
 static int VideoDisplayHeight = 0;
 static uint32_t VideoDisplayRefresh = 0;
 
-static pthread_cond_t PauseCondition;
-static pthread_mutex_t PauseMutex;
-
 static pthread_cond_t WaitCleanCondition;
 static pthread_mutex_t WaitCleanMutex;
 
 static pthread_mutex_t TrickSpeedMutex;
+static pthread_mutex_t PlaybackMutex;
 
 static pthread_t DecodeThread;		///< video decode thread
 
@@ -1540,6 +1538,12 @@ static int Frame2Display(VideoRender * render)
 		goto page_flip;
 	}
 
+	if (VideoIsPaused(render)) {
+		usleep(10000);
+		skip_video = 1;
+		goto page_flip;
+	}
+
 dequeue:
 	while (!atomic_read(&render->FramesFilled)) {
 		if (render->Closing) {
@@ -1621,12 +1625,6 @@ static void *DisplayHandlerThread(void * arg)
 
 	while (1) {
 		pthread_testcancel();
-
-		if (render->VideoPaused) {
-			pthread_mutex_lock(&PauseMutex);
-			pthread_cond_wait(&PauseCondition, &PauseMutex);
-			pthread_mutex_unlock(&PauseMutex);
-		}
 
 		int ret = Frame2Display(render);
 
@@ -1793,9 +1791,6 @@ void VideoThreadExit(void)
 		if (pthread_join(DecodeThread, &retval) || retval != PTHREAD_CANCELED)
 			Error("VideoThreadExit: can't cancel decoding thread");
 		DecodeThread = 0;
-
-		pthread_cond_destroy(&PauseCondition);
-		pthread_mutex_destroy(&PauseMutex);
 	}
 
 	if (DisplayThread) {
@@ -1819,9 +1814,6 @@ void VideoThreadWakeup(VideoRender * render, int decoder, int display)
 
 	if (decoder && !DecodeThread) {
 		Debug("DisplayThreadWakeup: wakeup decoding thread");
-		pthread_cond_init(&PauseCondition,NULL);
-		pthread_mutex_init(&PauseMutex, NULL);
-
 		pthread_cond_init(&WaitCleanCondition,NULL);
 		pthread_mutex_init(&WaitCleanMutex, NULL);
 
@@ -1860,7 +1852,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	render->Stream = stream;
 	render->Closing = 0;
 	render->enqueue_buffer = 0;
-	render->VideoPaused = 0;
+	VideoResume(render);
 
 	return render;
 }
@@ -2301,11 +2293,10 @@ int64_t VideoGetClock(const VideoRender * render)
 ///
 void StartVideo(VideoRender * render)
 {
-	render->VideoPaused = 0;
+	VideoResume(render);
 	render->StartCounter = 0;
-	Debug("StartVideo: reset PauseCondition StartCounter %d Closing %d TrickSpeed %d",
+	Debug("StartVideo: reset StartCounter %d Closing %d TrickSpeed %d",
 		render->StartCounter, render->Closing, render->TrickSpeed);
-	pthread_cond_signal(&PauseCondition);
 }
 
 ///
@@ -2321,10 +2312,8 @@ void VideoSetClosing(VideoRender * render)
 	if (render->buffers){
 		render->Closing = 1;
 
-		if (render->VideoPaused) {
+		if (VideoIsPaused(render))
 			StartVideo(render);
-		}
-
 
 		pthread_mutex_lock(&WaitCleanMutex);
 		Debug("VideoSetClosing: pthread_cond_wait");
@@ -2344,7 +2333,32 @@ void VideoSetClosing(VideoRender * render)
 void VideoPause(VideoRender * render)
 {
 	Debug("VideoPause:");
+	pthread_mutex_lock(&PlaybackMutex);
 	render->VideoPaused = 1;
+	pthread_mutex_unlock(&PlaybackMutex);
+}
+
+///
+//	Resume video.
+//
+void VideoResume(VideoRender * render)
+{
+	Debug("VideoResume:");
+	pthread_mutex_lock(&PlaybackMutex);
+	render->VideoPaused = 0;
+	pthread_mutex_unlock(&PlaybackMutex);
+}
+
+///
+//	Check pause status
+//
+int VideoIsPaused(VideoRender * render)
+{
+	int ret;
+	pthread_mutex_lock(&PlaybackMutex);
+	ret = render->VideoPaused;
+	pthread_mutex_unlock(&PlaybackMutex);
+	return ret;
 }
 
 ///
@@ -2367,7 +2381,7 @@ void VideoSetTrickSpeed(VideoRender * render, int speed, int forward)
 		render->Closing = 0;	// ???
 	}
 
-	if (render->VideoPaused) {
+	if (VideoIsPaused(render)) {
 		StartVideo(render);
 	}
 }

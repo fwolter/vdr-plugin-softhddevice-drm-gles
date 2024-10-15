@@ -236,6 +236,8 @@ extern void VideoSetOutputPosition(VideoRender *, int, int, int, int);
 extern void VideoFlushBuffers(VideoRender *);
 
 extern void VideoPause(VideoRender *);
+extern void VideoResume(VideoRender *);
+extern int VideoIsPaused(VideoRender *);
 
 extern void VideoPlay(VideoRender *);
 

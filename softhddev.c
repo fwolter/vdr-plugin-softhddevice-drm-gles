@@ -1688,6 +1688,7 @@ int SetPlayMode(int play_mode)
 		}
 		StreamFreezed = 0;
 		SkipAudio = 0;
+		AudioPlay();
 		break;
 	case 1:			// audio/video
 		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
