@@ -1261,151 +1261,34 @@ dequeue:
 }
 
 ///
-///	Draw a video frame.
+///	Commit the frame to the hardware
 ///
-//	retval 0	modesetting and commit was done, need to process outstanding DRM events
-//	retval 1	no new frames or OSD, no modesetting was done
-//	retval -1	something went wrong, no modesetting was done
+//	retval 2	VIDEO and OSD modesetting and commit was done, need to process outstanding DRM events
+//	retval 1	VIDEO only modesetting and commit was done, need to process outstanding DRM events
+//	retval 0	OSD only modesetting and commit was done, need to process outstanding DRM events
+//	retval -1	no modesetting and commit was done
+//	retval -2	something went wrong, no modesetting was done
 //
 ///
-static int Frame2Display(VideoRender * render)
+static int VideoDrmCommit(VideoRender *render, struct drm_buf *buf, int skip_video)
 {
-	struct drm_buf *buf = 0;
+	int dirty = 0; // 0: no commit, 1: osd only, 2: video only, 3: both
 	AVFrame *frame = NULL;
-	AVDRMFrameDescriptor *primedata = NULL;
-	int64_t audio_pts;
-	int64_t video_pts;
-	int i;
-	int dirty = 0; // 0: nothing, 1: osd only, 2: video only, 3: both
 
 	drmModeAtomicReqPtr ModeReq;
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
 	if (!(ModeReq = drmModeAtomicAlloc())) {
 		Error("Frame2Display: cannot allocate atomic request (%d): %m", errno);
-		return -1;
+		return -2;
 	}
 
-	if (render->Closing) {
-closing:
-		// set a black FB
-		Debug("Frame2Display: closing, set a black FB");
-		buf = &render->buf_black;
-		goto page_flip;
-	}
+	if (skip_video)
+		goto skip_video;
 
-dequeue:
-	while (!atomic_read(&render->FramesFilled)) {
-		if (render->Closing)
-			goto closing;
-		// We had draw activity on the osd buffer
-		if (render->buf_osd && render->buf_osd->dirty) {
-			Debug2(L_DRM, "Frame2Display: no video, set a black FB instead");
-			buf = &render->buf_black;
-			goto page_flip;
-		}
-		usleep(10000);
-	}
+	if (buf)
+		frame = buf->frame;
 
-	frame = render->FramesRb[render->FramesRead];
-	render->FramesRead = (render->FramesRead + 1) % VIDEO_SURFACES_MAX;
-	atomic_dec(&render->FramesFilled);
-	primedata = (AVDRMFrameDescriptor *)frame->data[0];
-
-	// search or made fd / FB combination
-	for (i = 0; i < render->buffers; i++) {
-		if (render->bufs[i].fd_prime == primedata->objects[0].fd) {
-			buf = &render->bufs[i];
-			break;
-		}
-	}
-	if (buf == 0) {
-		buf = &render->bufs[render->buffers];
-		buf->width = (uint32_t)frame->width;
-		buf->height = (uint32_t)frame->height;
-		buf->fd_prime = primedata->objects[0].fd;
-
-		if (SetupFB(render, buf, primedata, 1)) {
-			av_frame_free(&frame);
-			return -1;
-		}
-	}
-
-	render->pts = frame->pts;
-	video_pts = frame->pts * 1000 * av_q2d(*render->timebase);
-	if(!render->StartCounter && !render->Closing && !render->TrickSpeed) {
-		Debug("Frame2Display: start PTS %s", Timestamp2String(video_pts));
-avready:
-		if (AudioVideoReady(video_pts)) {
-			usleep(10000);
-			if (render->Closing)
-				goto closing;
-			goto avready;
-		}
-	}
-
-audioclock:
-	audio_pts = AudioGetClock();
-
-	if (render->Closing)
-		goto closing;
-
-	if (audio_pts == (int64_t)AV_NOPTS_VALUE && !render->TrickSpeed) {
-		usleep(20000);
-		goto audioclock;
-	}
-
-	int diff = video_pts - audio_pts - VideoAudioDelay;
-
-	if (diff < -5 && !render->TrickSpeed && !(abs(diff) > 5000)) {
-		render->FramesDropped++;
-		Debug2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-			render->FramesDropped, render->FramesDuped,
-			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
-			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
-			Timestamp2String(video_pts), VideoAudioDelay, diff);
-		av_frame_free(&frame);
-
-		if (!render->StartCounter)
-			render->StartCounter++;
-		goto dequeue;
-	}
-
-	if (diff > 35 && !render->TrickSpeed && !(abs(diff) > 5000)) {
-		render->FramesDuped++;
-		Debug2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-			render->FramesDropped, render->FramesDuped,
-			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
-			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
-			Timestamp2String(video_pts), VideoAudioDelay, diff);
-		usleep(20000);
-		goto audioclock;
-	}
-
-	if (abs(diff) > 5000) {	// more than 5s
-		if (video_pts)
-			Debug2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-				VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
-				atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
-				Timestamp2String(video_pts), VideoAudioDelay, diff);
-		else
-			Debug2(L_AV_SYNC, "Video frame with AV_NOPTS_VALUE arrived ... Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-				VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
-				atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
-				Timestamp2String(video_pts), VideoAudioDelay, diff);
-				av_frame_free(&frame);
-	}
-
-	if (!render->TrickSpeed)
-		render->StartCounter++;
-
-	if (render->TrickSpeed)
-		usleep(20000 * render->TrickSpeed);
-
-	buf->frame = frame;
-
-// handle the video plane
-page_flip:
-	render->act_buf = buf;
+	// handle the video plane
 	// Get video size and position and set crtc rect
 	uint64_t DispWidth = render->mode.hdisplay;
 	uint64_t DispHeight = render->mode.vdisplay;
@@ -1456,7 +1339,8 @@ page_flip:
 	SetPlane(ModeReq, render->planes[VIDEO_PLANE]);
 	dirty += 2;
 
-// handle the osd plane
+skip_video:
+	// handle the osd plane
 	// We had draw activity on the osd buffer
 	if (render->buf_osd && render->buf_osd->dirty) {
 		if (render->use_zpos) {
@@ -1490,7 +1374,7 @@ page_flip:
 	// return without an atomic commit (no video frame and osd activity)
 	if (!dirty) {
 		drmModeAtomicFree(ModeReq);
-		return 1;
+		return -1;
 	}
 
 	// do the atomic commit
@@ -1501,15 +1385,225 @@ page_flip:
 
 		drmModeAtomicFree(ModeReq);
 		Error("Frame2Display: page flip failed (%d): %m", errno);
-		return -1;
+		return -2;
 	}
 
 	drmModeAtomicFree(ModeReq);
 
+	return dirty - 1;
+}
+
+///
+///	Sync the frames
+///
+//	retval 1	close video
+//	retval 0	success
+//	retval -1	frame was dropped
+//
+///
+static int VideoSync(VideoRender *render, AVFrame *frame)
+{
+	int64_t audio_pts;
+	int64_t video_pts;
+
+	render->pts = frame->pts;
+	video_pts = frame->pts * 1000 * av_q2d(*render->timebase);
+	if(!render->StartCounter && !render->Closing) {
+		Debug("Frame2Display: start PTS %s", Timestamp2String(video_pts));
+avready:
+		if (AudioVideoReady(video_pts)) {
+			usleep(10000);
+			if (render->Closing)
+				return 1;
+
+			goto avready;
+		}
+	}
+
+audioclock:
+	if (render->Closing)
+		return 1;
+
+	audio_pts = AudioGetClock();
+
+	if (audio_pts == (int64_t)AV_NOPTS_VALUE) {
+		usleep(20000);
+		goto audioclock;
+	}
+
+	int diff = video_pts - audio_pts - VideoAudioDelay;
+
+	if (diff < -5 && !(abs(diff) > 5000)) {
+		render->FramesDropped++;
+		Debug2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+			render->FramesDropped, render->FramesDuped,
+			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
+			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
+			Timestamp2String(video_pts), VideoAudioDelay, diff);
+
+		if (!render->StartCounter)
+			render->StartCounter++;
+
+		return -1;
+	}
+
+	if (diff > 35 && !(abs(diff) > 5000)) {
+		render->FramesDuped++;
+		Debug2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+			render->FramesDropped, render->FramesDuped,
+			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
+			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
+			Timestamp2String(video_pts), VideoAudioDelay, diff);
+		usleep(20000);
+		goto audioclock;
+	}
+
+	if (abs(diff) > 5000) {	// more than 5s
+		if (video_pts)
+			Debug2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+				VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
+				atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
+				Timestamp2String(video_pts), VideoAudioDelay, diff);
+		else
+			Debug2(L_AV_SYNC, "Video frame with AV_NOPTS_VALUE arrived ... Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+				VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
+				atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
+				Timestamp2String(video_pts), VideoAudioDelay, diff);
+
+		return -1;
+	}
+
+	return 0;
+}
+
+///
+///	Get video frame and buffer
+///
+//	retval 0	got a frame and buffer
+//	retval 1	sth went wrong
+//
+///
+static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm_buf **buf)
+{
+	AVDRMFrameDescriptor *primedata = NULL;
+	struct drm_buf *pbuf = NULL;
+	AVFrame *pframe = NULL;
+	int i;
+
+	pframe = render->FramesRb[render->FramesRead];
+	render->FramesRead = (render->FramesRead + 1) % VIDEO_SURFACES_MAX;
+	atomic_dec(&render->FramesFilled);
+	primedata = (AVDRMFrameDescriptor *)pframe->data[0];
+
+	// search or made fd / FB combination
+	for (i = 0; i < render->buffers; i++) {
+		if (render->bufs[i].fd_prime == primedata->objects[0].fd) {
+			pbuf = &render->bufs[i];
+			break;
+		}
+	}
+	if (pbuf == 0) {
+		pbuf = &render->bufs[render->buffers];
+		pbuf->width = (uint32_t)pframe->width;
+		pbuf->height = (uint32_t)pframe->height;
+		pbuf->fd_prime = primedata->objects[0].fd;
+
+		if (SetupFB(render, pbuf, primedata, 1)) {
+			av_frame_free(&pframe);
+			return 1;
+		}
+	}
+
+	*frame = pframe;
+	*buf = pbuf;
+	return 0;
+}
+
+///
+///	Draw a video frame.
+///
+//	retval 0	modesetting and commit was done, need to process outstanding DRM events
+//	retval 1	no new frames or OSD, no modesetting was done, don't process outstanding DRM events
+//
+///
+static int Frame2Display(VideoRender * render)
+{
+	int ret = 0;
+	struct drm_buf *buf = NULL;
+	AVFrame *frame = NULL;
+	int skip_video = 0;
+
+	if (render->Closing) {
+		// set a black FB
+		Debug("Frame2Display: closing, set a black FB");
+		buf = &render->buf_black;
+		goto page_flip;
+	}
+
+dequeue:
+	while (!atomic_read(&render->FramesFilled)) {
+		if (render->Closing) {
+			// set a black FB
+			Debug("Frame2Display: closing, set a black FB");
+			buf = &render->buf_black;
+			goto page_flip;
+		}
+		// No frames in the ringbuffer, but we had draw activity on the osd
+		if (render->buf_osd && render->buf_osd->dirty) {
+			Debug2(L_DRM, "Frame2Display: no video, set a black FB");
+			buf = &render->buf_black;
+			goto page_flip;
+		}
+		usleep(10000);
+	}
+
+	if (VideoGetFrameBuffer(render, &frame, &buf))
+		return 1;
+
+	if (render->TrickSpeed)
+		goto skip_sync;
+
+	// sync audio/video
+	ret = VideoSync(render, frame);
+
+	if (ret < 0) {
+		// frame dropped, get a new one
+		av_frame_free(&frame);
+		goto dequeue;
+	}
+
+	if (ret > 0) {
+		// closing
+		av_frame_free(&frame);
+		buf = &render->buf_black;
+		goto page_flip;
+	}
+
+	render->StartCounter++;
+
+skip_sync:
+	if (render->TrickSpeed)
+		usleep(20000 * render->TrickSpeed);
+
+	buf->frame = frame;
+
+page_flip:
+	ret = VideoDrmCommit(render, buf, skip_video);
+
+	// no modesetting was done
+	if (ret < 0)
+		return 1;
+
+	// only osd was set
+	if (ret == 0)
+		return 0;
+
+	// new video frame was sent, rotate the frames
 	if (render->lastframe)
 		av_frame_free(&render->lastframe);
-	if (render->act_buf && (render->act_buf->fb_id != render->buf_black.fb_id))
-		render->lastframe = render->act_buf->frame;
+
+	if (buf && buf->fb_id != render->buf_black.fb_id)
+		render->lastframe = buf->frame;
 
 	return 0;
 }
