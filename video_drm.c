@@ -80,6 +80,7 @@ static pthread_mutex_t WaitCleanMutex;
 
 static pthread_mutex_t TrickSpeedMutex;
 static pthread_mutex_t PlaybackMutex;
+static pthread_mutex_t VideoClockMutex;
 
 static pthread_t DecodeThread;		///< video decode thread
 
@@ -1229,10 +1230,6 @@ static void CleanDisplayThread(VideoRender * render)
 	AVFrame *frame;
 	int i;
 
-	if (render->lastframe) {
-		av_frame_free(&render->lastframe);
-	}
-
 dequeue:
 	if (atomic_read(&render->FramesFilled)) {
 		frame = render->FramesRb[render->FramesRead];
@@ -1241,6 +1238,12 @@ dequeue:
 		av_frame_free(&frame);
 		goto dequeue;
 	}
+
+	if (render->lastframe) {
+		av_frame_free(&render->lastframe);
+	}
+
+	VideoSetClock(render, AV_NOPTS_VALUE);
 
 	// Destroy FBs
 	if (render->buffers) {
@@ -1404,7 +1407,6 @@ static int VideoSync(VideoRender *render, AVFrame *frame)
 	int64_t audio_pts;
 	int64_t video_pts;
 
-	render->pts = frame->pts;
 	video_pts = frame->pts * 1000 * av_q2d(*render->timebase);
 	if(!render->StartCounter && !render->Closing) {
 		Debug("Frame2Display: start PTS %s", Timestamp2String(video_pts));
@@ -1563,6 +1565,8 @@ dequeue:
 
 	if (VideoGetFrameBuffer(render, &frame, &buf))
 		return 1;
+
+	VideoSetClock(render, frame->pts);
 
 	if (render->TrickSpeed)
 		goto skip_sync;
@@ -2272,6 +2276,16 @@ fillframe:
 }
 
 ///
+///	Set video clock.
+///
+void VideoSetClock(VideoRender * render, int64_t pts)
+{
+	pthread_mutex_lock(&VideoClockMutex);
+	render->pts = pts;
+	pthread_mutex_unlock(&VideoClockMutex);
+}
+
+///
 ///	Get video clock.
 ///
 ///	@param hw_decoder	video hardware decoder
@@ -2281,9 +2295,13 @@ fillframe:
 ///
 int64_t VideoGetClock(const VideoRender * render)
 {
-	Debug("VideoGetClock: %s",
-		Timestamp2String(render->pts * 1000 * av_q2d(*render->timebase)));
-	return render->pts;
+	int64_t pts;
+	pthread_mutex_lock(&VideoClockMutex);
+//	Debug("VideoGetClock: %s",
+//		Timestamp2String(render->pts * 1000 * av_q2d(*render->timebase)));
+	pts = render->pts;
+	pthread_mutex_unlock(&VideoClockMutex);
+	return pts;
 }
 
 ///

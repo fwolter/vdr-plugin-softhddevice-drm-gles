@@ -262,6 +262,9 @@ extern void VideoSetDisplay(const char *);
     /// Get video clock.
 extern int64_t VideoGetClock(const VideoRender *);
 
+    /// Set video clock.
+extern void VideoSetClock(VideoRender *, int64_t);
+
     /// Display handler.
 extern void VideoThreadWakeup(VideoRender *, int, int);
 extern void VideoThreadExit(void);
