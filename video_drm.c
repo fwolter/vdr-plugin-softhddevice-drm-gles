@@ -1535,7 +1535,7 @@ static int Frame2Display(VideoRender * render)
 
 	if (render->Closing) {
 		// set a black FB
-		Debug("Frame2Display: closing, set a black FB");
+		Debug2(L_DRM, "Frame2Display: closing, set a black FB");
 		buf = &render->buf_black;
 		goto page_flip;
 	}
@@ -1550,7 +1550,7 @@ dequeue:
 	while (!atomic_read(&render->FramesFilled)) {
 		if (render->Closing) {
 			// set a black FB
-			Debug("Frame2Display: closing, set a black FB");
+			Debug2(L_DRM, "Frame2Display: closing, set a black FB");
 			buf = &render->buf_black;
 			goto page_flip;
 		}
