@@ -81,7 +81,7 @@ struct __video_stream__
 
     volatile char NewStream;		///< flag new video stream
     volatile char ClosingStream;	///< flag closing video stream
-    volatile char TrickSpeed;		///< current trick speed
+    volatile char NewTrickSpeed;	///< TrickSpeed was triggered
 
     AVPacket PacketRb[VIDEO_PACKET_MAX];	///< PES packet ring buffer
     int PacketWrite;			///< ring buffer write pointer
@@ -92,6 +92,8 @@ struct __video_stream__
 static VideoStream MyVideoStream[1];	///< normal video stream
 
 static pthread_mutex_t PktsLockMutex;	///< video packets lock mutex
+static pthread_mutex_t WaitReopenMutex;		///< mutex for codec reopen
+static pthread_cond_t WaitReopenCondition;	///< condition for codec reopen
 
 //////////////////////////////////////////////////////////////////////////////
 //	Audio
@@ -1095,6 +1097,16 @@ int VideoDecodeInput(VideoStream * stream)
 		return 1;
 	}
 
+	// re-open decoder for trickspeed
+	if (stream->NewTrickSpeed && stream->CodecID != AV_CODEC_ID_NONE) {
+		ClearVideo(stream);
+		CodecVideoClose(stream->Decoder);
+		CodecVideoOpen(stream->Decoder, stream->CodecID, NULL,
+			&stream->timebase);
+		stream->NewTrickSpeed = 0;
+		pthread_cond_signal(&WaitReopenCondition);
+	}
+
 	if (stream->ClosingStream && stream->CodecID != AV_CODEC_ID_NONE) {
 		ClearVideo(stream);
 		CodecVideoClose(stream->Decoder);
@@ -1548,15 +1560,22 @@ int PlayVideoPkts(AVPacket * pkt)
 */
 void TrickSpeed(int speed, int forward)
 {
-	Debug("TrickSpeed: speed %d %s", speed, forward ? "forward" : "backward");
-	MyVideoStream->TrickSpeed = speed;
-	VideoSetTrickSpeed(MyVideoStream->Render, speed, forward);
+	Debug("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
 
 	if (StreamFreezed) {
 		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", StreamFreezed, SkipAudio);
 		ClearAudio();
 	}
 	StreamFreezed = 0;
+
+	// force decoder thread to reopen the codec
+	MyVideoStream->NewTrickSpeed = 1;
+	pthread_mutex_lock(&WaitReopenMutex);
+	pthread_cond_wait(&WaitReopenCondition, &WaitReopenMutex);
+	pthread_mutex_unlock(&WaitReopenMutex);
+	Debug("TrickSpeed: after wait condition");
+
+	VideoSetTrickSpeed(MyVideoStream->Render, speed, forward);
 }
 
 /**
