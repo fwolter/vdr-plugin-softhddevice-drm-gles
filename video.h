@@ -125,7 +125,6 @@ struct _Drm_Render_
 	VideoStream *Stream;		///< video stream
 	int TrickSpeed;			///< current trick speed
 	int TrickCounter;			///< current trick speed counter
-	int TrickSpeedChange;		///< flag, if a new TrickSpeed was set
 	int TrickForward;		///< true, if trickspeed plays forward
 	int VideoPaused;
 	int Closing;			///< flag about closing current stream
@@ -227,8 +226,14 @@ extern void VideoOsdDrawARGB(VideoRender *, int, int, int,
     /// Set closing flag.
 extern void VideoSetClosing(VideoRender *);
 
-    /// Set trick play speed.
+    /// Deal with trick play mode
+extern void VideoTrickSpeed(VideoRender *, int, int);
 extern void VideoSetTrickSpeed(VideoRender *, int, int);
+extern int VideoGetTrickSpeed(VideoRender *);
+extern int VideoGetTrickForward(VideoRender *);
+extern int VideoGetTrickCounter(VideoRender *);
+extern void VideoSetTrickCounter(VideoRender *, int);
+extern int VideoDecTrickCounter(VideoRender *);
 
     /// Set video output position and size
 extern void VideoSetOutputPosition(VideoRender *, int, int, int, int);

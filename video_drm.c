@@ -1568,7 +1568,7 @@ dequeue:
 
 	VideoSetClock(render, frame->pts);
 
-	if (render->TrickSpeed)
+	if (VideoGetTrickSpeed(render))
 		goto skip_sync;
 
 	// sync audio/video
@@ -1590,8 +1590,8 @@ dequeue:
 	render->StartCounter++;
 
 skip_sync:
-	if (render->TrickSpeed)
-		usleep(20000 * render->TrickSpeed);
+	if (VideoGetTrickSpeed(render))
+		usleep(20000 * VideoGetTrickSpeed(render));
 
 	buf->frame = frame;
 
@@ -2314,7 +2314,7 @@ void StartVideo(VideoRender * render)
 	VideoResume(render);
 	render->StartCounter = 0;
 	Debug("StartVideo: reset StartCounter %d Closing %d TrickSpeed %d",
-		render->StartCounter, render->Closing, render->TrickSpeed);
+		render->StartCounter, render->Closing, VideoGetTrickSpeed(render));
 }
 
 ///
@@ -2342,7 +2342,7 @@ void VideoSetClosing(VideoRender * render)
 	render->StartCounter = 0;
 	render->FramesDuped = 0;
 	render->FramesDropped = 0;
-	render->TrickSpeed = 0;
+	VideoSetTrickSpeed(render, 0, 1);
 }
 
 ///
@@ -2380,20 +2380,15 @@ int VideoIsPaused(VideoRender * render)
 }
 
 ///
-///	Set trick play speed.
+///	Set trick play speed, start video if paused
 ///
 ///	@param hw_render	video hardware render
 ///	@param speed		trick speed (0 = normal)
+///	@param forward		1 if forward trick speed
 ///
-void VideoSetTrickSpeed(VideoRender * render, int speed, int forward)
+void VideoTrickSpeed(VideoRender * render, int speed, int forward)
 {
-	Debug("VideoSetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
-	pthread_mutex_lock(&TrickSpeedMutex);
-	render->TrickSpeed = speed;
-	render->TrickCounter = speed;
-	render->TrickForward = forward;
-	render->TrickSpeedChange = 1;
-	pthread_mutex_unlock(&TrickSpeedMutex);
+	VideoSetTrickSpeed(render, speed, forward);
 
 	if (speed) {
 		render->Closing = 0;	// ???
@@ -2405,13 +2400,89 @@ void VideoSetTrickSpeed(VideoRender * render, int speed, int forward)
 }
 
 ///
+///	Simply set trick play speed values
+///
+///	@param hw_render	video hardware render
+///	@param speed		trick speed (0 = normal)
+///	@param forward		1 if forward trick speed
+///
+void VideoSetTrickSpeed(VideoRender * render, int speed, int forward)
+{
+	Debug("VideoSetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
+	pthread_mutex_lock(&TrickSpeedMutex);
+	render->TrickSpeed = speed;
+	render->TrickCounter = speed;
+	render->TrickForward = forward;
+	pthread_mutex_unlock(&TrickSpeedMutex);
+}
+
+///
+///	Return the current trick speed mode
+///
+int VideoGetTrickSpeed(VideoRender * render)
+{
+	int speed;
+	pthread_mutex_lock(&TrickSpeedMutex);
+	speed = render->TrickSpeed;
+	pthread_mutex_unlock(&TrickSpeedMutex);
+	return speed;
+}
+
+///
+///	Return the trickspeed direction
+///
+int VideoGetTrickForward(VideoRender * render)
+{
+	int forward;
+	pthread_mutex_lock(&TrickSpeedMutex);
+	forward = render->TrickForward;
+	pthread_mutex_unlock(&TrickSpeedMutex);
+	return forward;
+}
+
+///
+///	Return the current trick counter
+///
+int VideoGetTrickCounter(VideoRender * render)
+{
+	int counter;
+	pthread_mutex_lock(&TrickSpeedMutex);
+	counter = render->TrickCounter;
+	pthread_mutex_unlock(&TrickSpeedMutex);
+	return counter;
+}
+
+///
+///	Set the trick counter
+///
+void VideoSetTrickCounter(VideoRender * render, int counter)
+{
+	pthread_mutex_lock(&TrickSpeedMutex);
+	render->TrickCounter = counter;
+	pthread_mutex_unlock(&TrickSpeedMutex);
+}
+
+///
+///	Decrease the trick counter
+///
+int VideoDecTrickCounter(VideoRender * render)
+{
+	int counter;
+	pthread_mutex_lock(&TrickSpeedMutex);
+	render->TrickCounter--;
+	counter = render->TrickCounter;
+	pthread_mutex_unlock(&TrickSpeedMutex);
+	return counter;
+}
+
+///
 //	Play video.
 //
 void VideoPlay(VideoRender * render)
 {
 	Debug("VideoPlay:");
-	if (render->TrickSpeed) {
-		render->TrickSpeed = 0;
+	if (VideoGetTrickSpeed(render)) {
+		VideoSetTrickSpeed(render, 0, 1);
 	}
 
 	StartVideo(render);
