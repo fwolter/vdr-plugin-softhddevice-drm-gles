@@ -1081,7 +1081,7 @@ void ClearVideo(VideoStream * stream)
 **
 **	@param stream	video stream
 **
-**	@retval 0	packet decoded
+**	@retval 0	packet decoded or more data needed
 **	@retval	1	stream paused
 **	@retval	-1	empty stream
 */
@@ -1117,17 +1117,29 @@ int VideoDecodeInput(VideoStream * stream)
 			return -1;
 		}
 		avpkt = &stream->PacketRb[stream->PacketRead];
-		if (!CodecVideoSendPacket(stream->Decoder, avpkt)) {
+
+		// try sending packet to decoder
+		if (CodecVideoSendPacket(stream->Decoder, avpkt) <= 0) { // packet was sent or something went wrong, advance packet
 			stream->PacketRead = (stream->PacketRead + 1) % VIDEO_PACKET_MAX;
 			atomic_dec(&stream->PacketsFilled);
 		}
 		pthread_mutex_unlock(&PktsLockMutex);
 
-		if (!stream->NewStream) {
-			if (!CodecVideoReceiveFrame(stream->Decoder, 0))
+// this is normal Playback
+		if (!VideoGetTrickSpeed(stream->Render)) {
+			if (!stream->NewStream) { // this is for mediaplayer ?
+				if (!CodecVideoReceiveFrame(stream->Decoder, 0))
+					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, stream->Decoder->Frame);
+			}
+// this is normal TrickSpeed
+		} else {
+			// try receiving frame from decoder
+			if (!CodecVideoReceiveFrame(stream->Decoder, 1)) {
+				if (!VideoGetTrickForward(stream->Render))
+					CodecVideoFlushBuffers(stream->Decoder);
 				VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, stream->Decoder->Frame);
+			}
 		}
-
 		return 0;
 	}
 
