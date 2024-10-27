@@ -1513,6 +1513,8 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 			return 1;
 		}
 	}
+	if (pframe->pts == AV_NOPTS_VALUE)
+		pframe->pts = VideoGetClock(render);
 
 	*frame = pframe;
 	*buf = pbuf;
@@ -2281,7 +2283,8 @@ fillframe:
 void VideoSetClock(VideoRender * render, int64_t pts)
 {
 	pthread_mutex_lock(&VideoClockMutex);
-	render->pts = pts;
+	if (pts != AV_NOPTS_VALUE)
+		render->pts = pts;
 	pthread_mutex_unlock(&VideoClockMutex);
 }
 
