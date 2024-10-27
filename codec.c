@@ -343,8 +343,6 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint)
 		Debug2(L_CODEC, "CodecVideoReceiveFrame: interlaced_frame = 0");
 	}
 
-	VideoRenderFrame(decoder->Render, decoder->VideoCtx, decoder->Frame);
-
 	return 0;
 }
 

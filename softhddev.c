@@ -1123,8 +1123,10 @@ int VideoDecodeInput(VideoStream * stream)
 		}
 		pthread_mutex_unlock(&PktsLockMutex);
 
-		if (!stream->NewStream)
-			CodecVideoReceiveFrame(stream->Decoder, 0);
+		if (!stream->NewStream) {
+			if (!CodecVideoReceiveFrame(stream->Decoder, 0))
+				VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, stream->Decoder->Frame);
+		}
 
 		return 0;
 	}
@@ -1369,6 +1371,7 @@ send:
 	if (CodecVideoReceiveFrame(MyVideoStream->Decoder, 1))
 		goto send;
 	else Debug2(L_STILL, "StillPicture: Received Frame");
+	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, MyVideoStream->Decoder->Frame);
 	if (context) {
 		CodecVideoClose(MyVideoStream->Decoder);
 		MyVideoStream->CodecID = AV_CODEC_ID_NONE;
