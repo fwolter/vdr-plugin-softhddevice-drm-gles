@@ -92,8 +92,7 @@ struct __video_stream__
 static VideoStream MyVideoStream[1];	///< normal video stream
 
 static pthread_mutex_t PktsLockMutex;	///< video packets lock mutex
-static pthread_mutex_t WaitReopenMutex;		///< mutex for codec reopen
-static pthread_cond_t WaitReopenCondition;	///< condition for codec reopen
+static pthread_mutex_t WaitReopenMutex = PTHREAD_MUTEX_INITIALIZER;		///< mutex for codec reopen
 
 //////////////////////////////////////////////////////////////////////////////
 //	Audio
@@ -541,16 +540,23 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 
 	AudioAvPkt->pts = AV_NOPTS_VALUE;
 
+	if (StreamFreezed) {	// stream is freezed, don't accept new audio data
+		Debug("PlayAudio: StreamFreezed");
+		return 0;
+	}
+
 	if (SkipAudio) {	// skip audio
 		Debug("PlayAudio: skip audio");
 		return size;
 	}
+
 	// hard limit buffer full: don't overrun audio buffers on replay
 	// stream freezed
-	if ((AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE) || (StreamFreezed)){
-		Debug("PlayAudio: StreamFreezed");
+	if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE){
+		Debug("PlayAudio: Buffer is Full!");
 		return 0;
 	}
+
 	if (NewAudioStream) {
 		// this clears the audio ringbuffer indirect, open and setup does it
 		Debug("PlayAudio: NewAudioStream");
@@ -1092,21 +1098,24 @@ int VideoDecodeInput(VideoStream * stream)
 	AVPacket *avpkt;
 	AVFrame *frame;
 
+	pthread_mutex_lock(&WaitReopenMutex);
 	if (StreamFreezed) {		// stream freezed
 //		Info("VideoDecodeInput: stream->Freezed");
 		// clear is called during freezed
+		pthread_mutex_unlock(&WaitReopenMutex);
 		return 1;
 	}
 
 	// re-open decoder for trickspeed
 	if (stream->NewTrickSpeed && stream->CodecID != AV_CODEC_ID_NONE) {
+		Debug2(L_TRICK, "VideoDecodeInput: Reopen Decoder for new trickspeed");
 		ClearVideo(stream);
 		CodecVideoClose(stream->Decoder);
 		CodecVideoOpen(stream->Decoder, stream->CodecID, NULL,
 			&stream->timebase);
 		stream->NewTrickSpeed = 0;
-		pthread_cond_signal(&WaitReopenCondition);
 	}
+	pthread_mutex_unlock(&WaitReopenMutex);
 
 	if (stream->ClosingStream && stream->CodecID != AV_CODEC_ID_NONE) {
 closing_stream:
@@ -1142,23 +1151,30 @@ closing_stream:
 // this is normal Playback
 		if (!VideoGetTrickSpeed(stream->Render)) {
 			if (!stream->NewStream) { // this is for mediaplayer ?
-				if (!CodecVideoReceiveFrame(stream->Decoder, 0, &frame))
+				if (!CodecVideoReceiveFrame(stream->Decoder, 0, &frame)) {
+					frame->opaque = stream->Decoder->is_no_trick_frame;
 					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame);
+				}
 			}
 // this is normal TrickSpeed
 		} else {
 			// try receiving frame from decoder
 			if (!CodecVideoReceiveFrame(stream->Decoder, 1, &frame)) {
-				if (!VideoGetTrickForward(stream->Render))
-					CodecVideoFlushBuffers(stream->Decoder);
+				CodecVideoSendPacket(stream->Decoder, NULL);
+				CodecVideoFlushBuffers(stream->Decoder);
 				while (VideoGetTrickSpeed(stream->Render) && VideoGetTrickCounter(stream->Render) > 0) {
+					if (stream->NewTrickSpeed) {
+						Debug2(L_TRICK, "VideoDecodeInput: Trickspeed change!");
+						break;
+					}
 					AVFrame *trickframe = av_frame_clone(frame);
 					if (!trickframe) {
 						Error("VideoDecodeInput: could not clone frame");
 						break;
 					}
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe);
 					Debug2(L_TRICK, "VideoDecodeInput: Trickspeed, send another cloned trick frame %d %p", VideoGetTrickCounter(stream->Render), trickframe);
+					trickframe->opaque = stream->Decoder->is_trick_frame;
+					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe);
 					VideoDecTrickCounter(stream->Render);
 					if (stream->ClosingStream) {
 						av_frame_free(&frame);
@@ -1287,20 +1303,6 @@ newstream:
 					stream->timebase.den = 90000;
 					stream->timebase.num = 1;
 					VideoEnqueue(stream, pts, data + i + n, size - i - n);
-				} else {
-				// Unknown Frame
-					Debug2(L_CODEC, "video: unknown startcode detected: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
-					       data[i + n],
-					       data[i + n + 1],
-					       data[i + n + 2],
-					       data[i + n + 3],
-					       data[i + n + 4],
-					       data[i + n + 5],
-					       data[i + n + 6],
-					       data[i + n + 7],
-					       data[i + n + 8],
-					       data[i + n + 9],
-					       data[i + n + 10]);
 				}
 			} else {
 				VideoEnqueue(stream, pts, data + i + n, size - i - n);
@@ -1415,6 +1417,7 @@ send:
 	if (CodecVideoReceiveFrame(MyVideoStream->Decoder, 1, &frame))
 		goto send;
 	else Debug2(L_STILL, "StillPicture: Received Frame");
+	frame->opaque = MyVideoStream->Decoder->is_trick_frame;
 	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame);
 	if (context) {
 		CodecVideoClose(MyVideoStream->Decoder);
@@ -1582,20 +1585,19 @@ void TrickSpeed(int speed, int forward)
 {
 	Debug("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
 
+	pthread_mutex_lock(&WaitReopenMutex);
+	VideoSetFlushing(MyVideoStream->Render);
 	if (StreamFreezed) {
 		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", StreamFreezed, SkipAudio);
+		StreamFreezed = 0;
 		ClearAudio();
 	}
-	StreamFreezed = 0;
 
 	// force decoder thread to reopen the codec
 	MyVideoStream->NewTrickSpeed = 1;
-	pthread_mutex_lock(&WaitReopenMutex);
-	pthread_cond_wait(&WaitReopenCondition, &WaitReopenMutex);
 	pthread_mutex_unlock(&WaitReopenMutex);
-	Debug("TrickSpeed: after wait condition");
 
-	VideoSetTrickSpeed(MyVideoStream->Render, speed, forward);
+	VideoTrickSpeed(MyVideoStream->Render, speed, forward);
 }
 
 /**
@@ -1605,7 +1607,7 @@ void Clear(void)
 {
 	Debug("Clear(void)");
 	ClearVideo(MyVideoStream);
-	VideoSetClosing(MyVideoStream->Render);		//This should more tested
+	VideoSetFlushing(MyVideoStream->Render);
 	ClearAudio();
 }
 
@@ -1615,7 +1617,9 @@ void Clear(void)
 void Play(void)
 {
 	Debug("Play(void)");
+	VideoSetFlushing(MyVideoStream->Render);
 	SkipAudio = 0;
+	ClearAudio();
 	StreamFreezed = 0;
 	AudioPlay();
 	VideoPlay(MyVideoStream->Render);
@@ -1629,6 +1633,12 @@ void Freeze(void)
 	Debug("Freeze(void)");
 	StreamFreezed = 1;
 	AudioPause();
+
+	// HACK: need to sync audio/video when pausing -> pause a synched state
+	// otherwise we have dupes when we play again
+	// if we wait here for some frames, the problem is about 1 dupe
+	usleep(100000);
+
 	VideoPause(MyVideoStream->Render);
 }
 
@@ -1733,16 +1743,15 @@ int SetPlayMode(int play_mode)
 	case 0:			// none audio/video
 		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
 			MyVideoStream->ClosingStream = 1;
-			// tell render we are closing stream
 			VideoSetClosing(MyVideoStream->Render);
 		}
+		SkipAudio = 0;
+		AudioPlay();
 		ClearAudio();	// flush all AUDIO buffers
 		if (MyAudioDecoder && AudioCodecID != AV_CODEC_ID_NONE) {
 			NewAudioStream = 1;
 		}
 		StreamFreezed = 0;
-		SkipAudio = 0;
-		AudioPlay();
 		break;
 	case 1:			// audio/video
 		VideoThreadWakeup(MyVideoStream->Render, 1, 1);

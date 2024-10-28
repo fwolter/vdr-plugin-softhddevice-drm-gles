@@ -1150,9 +1150,11 @@ static void *AudioPlayHandlerThread(void *dummy)
 			AlsaPlayer();
 
 			// FIXME: check AudioPaused ...Thread()
-			if (AudioPaused || AlsaPlayerStop) {
+			if (AudioPaused)
+				usleep(10000);
+
+			if (AlsaPlayerStop)
 				break;
-			}
 		} while (RingBufferUsedBytes(AudioRingBuffer));
 	}
 	return dummy;
@@ -1240,9 +1242,6 @@ void AudioEnqueue(AVFrame *frame)
 		skip = AudioSkip;
 		// FIXME: round to packet size
 
-		Debug2(L_SOUND, "audio: start? in Rb %4zdms to skip %dms",
-			n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
-			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample);
 		Debug2(L_AV_SYNC, "AudioEnqueue: start? in Rb %4zdms to skip %dms nb_samples %d",
 			n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,

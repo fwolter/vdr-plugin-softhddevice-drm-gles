@@ -135,7 +135,9 @@ struct _Drm_Render_
 	int TrickCounter;			///< current trick speed counter
 	int TrickForward;		///< true, if trickspeed plays forward
 	int VideoPaused;
-	int Closing;			///< flag about closing current stream
+	int Closing;			///< flag about closing render thread
+	int Flushing;			///< flag about clearing render ringbuffer
+	int FilterClosing;		///< flag about closing filter handler thread
 	int Filter_Bug;
 	int Filter_Frames;
 
@@ -163,7 +165,6 @@ struct _Drm_Render_
 		int height;
 		int is_scaled;
 	} video;
-	struct drm_buf *act_buf;
 	struct drm_buf bufs[36];
 	struct drm_buf trickbufs[TRICKBUFFERS];
 	struct drm_buf *buf_osd;
@@ -234,6 +235,8 @@ extern void VideoOsdDrawARGB(VideoRender *, int, int, int,
 
     /// Set closing flag.
 extern void VideoSetClosing(VideoRender *);
+    /// Set flushing flag.
+extern void VideoSetFlushing(VideoRender *);
 
     /// Deal with trick play mode
 extern void VideoTrickSpeed(VideoRender *, int, int);
@@ -246,8 +249,6 @@ extern int VideoDecTrickCounter(VideoRender *);
 
     /// Set video output position and size
 extern void VideoSetOutputPosition(VideoRender *, int, int, int, int);
-
-extern void VideoFlushBuffers(VideoRender *);
 
 extern void VideoPause(VideoRender *);
 extern void VideoResume(VideoRender *);

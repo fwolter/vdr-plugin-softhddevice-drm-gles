@@ -1179,7 +1179,7 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 {
 	struct drm_mode_destroy_dumb dreq;
 
-//	Debug("DestroyFB: destroy FB %d", buf->fb_id);
+	Debug2(L_DRM, "DestroyFB: destroy FB %d", buf->fb_id);
 
 	for (int i = 0; i < buf->num_planes; i++) {
 		if (buf->plane[i]) {
@@ -1215,7 +1215,7 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 
 	if (buf->handle[0]) {
 		if (drmIoctl(fd_drm, DRM_IOCTL_GEM_CLOSE, &buf->handle[0]) < 0)
-			Error("DestroyFB: cannot close GEM (%d): %m", errno);
+			Error("DestroyFB: cannot close %d GEM (%d): %m", buf->fb_id, errno);
 	}
 
 	buf->width = 0;
@@ -1232,6 +1232,17 @@ static void CleanDisplayThread(VideoRender * render)
 	AVFrame *frame;
 	int i;
 
+	pthread_mutex_lock(&WaitCleanMutex);
+	// first wait for FilterThread to be closed
+	while (FilterThread) {
+		int timeout = 20;
+		usleep(1000);
+		if (!timeout--) {
+			Error("CleanDisplayThread: Wait for filter thread ending -- TIMEOUT");
+			break;
+		}
+	}
+
 dequeue:
 	if (atomic_read(&render->FramesFilled)) {
 		frame = render->FramesRb[render->FramesRead];
@@ -1241,12 +1252,19 @@ dequeue:
 		goto dequeue;
 	}
 
-	if (render->lastframe->frame)
+	if (render->lastframe->frame) {
+		if (render->lastframe->trick) {
+			DestroyFB(render->fd_drm, render->lastframe->buf);
+			render->lastframe->trick = 0;
+		}
 		av_frame_free(&render->lastframe->frame);
+	}
 
-	VideoSetClock(render, AV_NOPTS_VALUE);
+	VideoSetClock(render, AV_NOPTS_VALUE);	// ?
 
 	// Destroy FBs
+	// We don't need to care about the actual onscreen-FB, because if we got here
+	// we should have sent a black FB before
 	if (render->buffers) {
 		for (i = 0; i < render->buffers; ++i) {
 			DestroyFB(render->fd_drm, &render->bufs[i]);
@@ -1263,8 +1281,60 @@ dequeue:
 	pthread_cond_signal(&WaitCleanCondition);
 
 	render->Closing = 0;
+	render->FilterClosing = 0;
+	pthread_mutex_unlock(&WaitCleanMutex);
 
 	Debug("CleanDisplayThread: DRM cleaned.");
+}
+
+
+///
+/// Flush DRM
+/// flush all frames in ringbuffers and the FBs if they aren't in use
+///
+static void FlushDisplayThread(VideoRender * render)
+{
+	AVFrame *frame;
+	int i;
+
+	pthread_mutex_lock(&WaitCleanMutex);
+	// wait for FilterThread to be closed
+	while (FilterThread) {
+		int timeout = 20;
+		usleep(1000);
+		if (!timeout--) {
+			Error("FlushDisplayThread: Wait for filter thread ending -- TIMEOUT");
+			break;
+		}
+	}
+
+dequeue:
+	if (atomic_read(&render->FramesFilled)) {
+		frame = render->FramesRb[render->FramesRead];
+		render->FramesRead = (render->FramesRead + 1) % VIDEO_SURFACES_MAX;
+		atomic_dec(&render->FramesFilled);
+		av_frame_free(&frame);
+		goto dequeue;
+	}
+
+	// Destroy FBs
+	// Take care about the actual onscreen-FB and don't destroy that one.
+	// This is done later in Frame2Display or CleanDisplayThread
+	if (render->buffers) {
+		for (i = 0; i < render->buffers; ++i) {
+			if (!render->lastframe || (render->lastframe && render->lastframe->buf != &render->bufs[i]))
+				DestroyFB(render->fd_drm, &render->bufs[i]);
+		}
+		render->buffers = 0;
+		render->enqueue_buffer = 0;
+	}
+
+	pthread_cond_signal(&WaitCleanCondition);
+	render->Flushing = 0;
+	render->FilterClosing = 0;
+	pthread_mutex_unlock(&WaitCleanMutex);
+
+	Debug("FlushDisplayThread: DRM cleaned.");
 }
 
 ///
@@ -1387,7 +1457,7 @@ skip_video:
 	// do the atomic commit
 	if (drmModeAtomicCommit(render->fd_drm, ModeReq, flags, NULL) != 0) {
 		DumpPlaneProperties(render->planes[OSD_PLANE]);
-		if (render->act_buf)
+		if (dirty > 1)
 			DumpPlaneProperties(render->planes[VIDEO_PLANE]);
 
 		drmModeAtomicFree(ModeReq);
@@ -1403,9 +1473,10 @@ skip_video:
 ///
 ///	Sync the frames
 ///
-//	retval 1	close video
+//	retval 1	close video - drop frame, set black fb
 //	retval 0	success
-//	retval -1	frame was dropped
+//	retval -1	drop frame, get next one
+//	retval -2	drop frame
 //
 ///
 static int VideoSync(VideoRender *render, AVFrame *frame)
@@ -1414,13 +1485,20 @@ static int VideoSync(VideoRender *render, AVFrame *frame)
 	int64_t video_pts;
 
 	video_pts = frame->pts * 1000 * av_q2d(*render->timebase);
+
 	if(!render->StartCounter && !render->Closing) {
-		Debug("Frame2Display: start PTS %s", Timestamp2String(video_pts));
+		Debug("VideoSync: start PTS %s", Timestamp2String(video_pts));
 avready:
 		if (AudioVideoReady(video_pts)) {
 			usleep(10000);
 			if (render->Closing)
 				return 1;
+
+			if (render->Flushing)
+				return -2;
+
+			if (VideoIsPaused(render))
+				return -1;
 
 			goto avready;
 		}
@@ -1429,6 +1507,12 @@ avready:
 audioclock:
 	if (render->Closing)
 		return 1;
+
+	if (render->Flushing)
+		return -2;
+
+	if (VideoIsPaused(render))
+		return -1;
 
 	audio_pts = AudioGetClock();
 
@@ -1489,7 +1573,7 @@ audioclock:
 //	retval 1	sth went wrong
 //
 ///
-static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm_buf **buf, int trick)
+static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm_buf **buf)
 {
 	AVDRMFrameDescriptor *primedata = NULL;
 	struct drm_buf *pbuf = NULL;
@@ -1501,7 +1585,13 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 	atomic_dec(&render->FramesFilled);
 	primedata = (AVDRMFrameDescriptor *)pframe->data[0];
 
-	if (trick) {
+	if (pframe->pts == AV_NOPTS_VALUE) {
+		av_frame_free(&pframe);
+		Debug2(L_DRM, "VideoGetFrameBuffer: frame has AV_NOPTS_VALUE, skip it");
+		return 1;
+	}
+
+	if (*(int *)pframe->opaque) {
 		for (i = 0; i < TRICKBUFFERS; i++) {
 			pbuf = &render->trickbufs[i];
 			if (pbuf->trick)
@@ -1540,8 +1630,6 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 			}
 		}
 	}
-	if (pframe->pts == AV_NOPTS_VALUE)
-		pframe->pts = VideoGetClock(render);
 
 	*frame = pframe;
 	*buf = pbuf;
@@ -1562,10 +1650,16 @@ static int Frame2Display(VideoRender * render)
 	AVFrame *frame = NULL;
 	int skip_video = 0;
 
+// as long as we have a filled ringbuffer and we don't close, display the frame!
 	if (render->Closing) {
 		// set a black FB
 		Debug2(L_DRM, "Frame2Display: closing, set a black FB");
 		buf = &render->buf_black;
+		goto page_flip;
+	}
+
+	if (render->Flushing) {
+		skip_video = 1;
 		goto page_flip;
 	}
 
@@ -1581,6 +1675,17 @@ dequeue:
 			// set a black FB
 			Debug2(L_DRM, "Frame2Display: closing, set a black FB");
 			buf = &render->buf_black;
+			goto page_flip;
+		}
+
+		if (render->Flushing) {
+			skip_video = 1;
+			goto page_flip;
+		}
+
+		if (VideoIsPaused(render)) {
+			usleep(10000);
+			skip_video = 1;
 			goto page_flip;
 		}
 
@@ -1607,16 +1712,21 @@ dequeue:
 		usleep(10000);
 	}
 
-	if (VideoGetFrameBuffer(render, &frame, &buf, VideoGetTrickSpeed(render)))
+	if (VideoGetFrameBuffer(render, &frame, &buf))
 		return 1;
 
-	VideoSetClock(render, frame->pts);
-
-	if (VideoGetTrickSpeed(render))
+	if (*(int *)frame->opaque)
 		goto skip_sync;
 
 	// sync audio/video
 	ret = VideoSync(render, frame);
+
+	if (ret < -1) {
+		// frame dropped, skip video
+		av_frame_free(&frame);
+		skip_video = 1;
+		goto page_flip;
+	}
 
 	if (ret < 0) {
 		// frame dropped, get a new one
@@ -1647,10 +1757,19 @@ page_flip:
 	if (ret == 0)
 		return 0;
 
+	// now, that we had a successful commit, set the STC if we have a frame
+	if (frame)
+		VideoSetClock(render, frame->pts);
+
 	// new video frame was sent, rotate the frames
 	if (render->lastframe->frame) {
-		if (render->lastframe->trick)
+		// if the lastframe was a trickframe or we have an old render buffer and a new trick frame
+		// follows, destroy the FB
+		if (render->lastframe->trick || buf->trick) {
 			DestroyFB(render->fd_drm, render->lastframe->buf);
+			render->lastframe->trick = 0;
+		}
+
 		av_frame_free(&render->lastframe->frame);
 	}
 
@@ -1684,10 +1803,11 @@ static void *DisplayHandlerThread(void * arg)
 				Error("DisplayHandlerThread: drmHandleEvent failed!");
 		}
 
-		if (render->Closing &&
-		    (!render->act_buf || (render->act_buf->fb_id == render->buf_black.fb_id))) {
+		if (render->Closing)
 			CleanDisplayThread(render);
-		}
+
+		if (render->Flushing)
+			FlushDisplayThread(render);
 	}
 	Debug("video: display thread stopped");
 	pthread_exit((void *)pthread_self());
@@ -1902,6 +2022,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	atomic_set(&render->FramesDeintFilled, 0);
 	render->Stream = stream;
 	render->Closing = 0;
+	render->FilterClosing = 0;
 	render->enqueue_buffer = 0;
 	render->lastframe = calloc(1, sizeof(struct lastFrame));
 	VideoResume(render);
@@ -2040,7 +2161,7 @@ static void *FilterHandlerThread(void * arg)
 	Debug("video: video filter thread started");
 
 	while (1) {
-		while (!atomic_read(&render->FramesDeintFilled) && !render->Closing) {
+		while (!atomic_read(&render->FramesDeintFilled) && !render->FilterClosing) {
 			usleep(10000);
 		}
 getinframe:
@@ -2054,7 +2175,7 @@ getinframe:
 				render->Filter_Frames++;
 			}
 		}
-		if (render->Closing) {
+		if (render->FilterClosing) {
 			if (frame) {
 				av_frame_free(&frame);
 			}
@@ -2090,7 +2211,7 @@ getinframe:
 				break;
 			}
 fillframe:
-			if (render->Closing) {
+			if (render->FilterClosing) {
 				av_frame_free(&filt_frame);
 				break;
 			}
@@ -2285,6 +2406,11 @@ fillframe:
 	if (frame->format == AV_PIX_FMT_YUV420P || (frame->interlaced_frame &&
 		frame->format == AV_PIX_FMT_DRM_PRIME && !render->NoHwDeint)) {
 
+		if (render->FilterClosing) {
+			av_frame_free(&frame);
+			return;
+		}
+
 		if (!FilterThread) {
 			Debug("VideoRenderFrame: wakeup filter thread");
 			if (VideoFilterInit(render, video_ctx, frame)) {
@@ -2308,7 +2434,6 @@ fillframe:
 		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
 			pthread_mutex_lock(&DisplayQueue);
 			if (atomic_read(&render->FramesFilled) < VIDEO_SURFACES_MAX && !render->Filter_Frames) {
-				Debug2(L_DRM, "VideoRenderFrame: add frame %p %s to rb", frame, Timestamp2String(frame->pts * 1000 * av_q2d(*render->timebase)));
 				render->FramesRb[render->FramesWrite] = frame;
 				render->FramesWrite = (render->FramesWrite + 1) % VIDEO_SURFACES_MAX;
 				atomic_inc(&render->FramesFilled);
@@ -2331,8 +2456,7 @@ fillframe:
 void VideoSetClock(VideoRender * render, int64_t pts)
 {
 	pthread_mutex_lock(&VideoClockMutex);
-	if (pts != AV_NOPTS_VALUE)
-		render->pts = pts;
+	render->pts = pts;
 	pthread_mutex_unlock(&VideoClockMutex);
 }
 
@@ -2348,8 +2472,6 @@ int64_t VideoGetClock(const VideoRender * render)
 {
 	int64_t pts;
 	pthread_mutex_lock(&VideoClockMutex);
-//	Debug("VideoGetClock: %s",
-//		Timestamp2String(render->pts * 1000 * av_q2d(*render->timebase)));
 	pts = render->pts;
 	pthread_mutex_unlock(&VideoClockMutex);
 	return pts;
@@ -2378,22 +2500,49 @@ void VideoSetClosing(VideoRender * render)
 	Debug("VideoSetClosing: buffers %d StartCounter %d",
 		render->buffers, render->StartCounter);
 
-	if (render->buffers){
-		render->Closing = 1;
+	pthread_mutex_lock(&WaitCleanMutex);
+	render->FilterClosing = 1;
+	render->Closing = 1;
 
-		if (VideoIsPaused(render))
-			StartVideo(render);
+	if (VideoIsPaused(render))
+		StartVideo(render);
 
-		pthread_mutex_lock(&WaitCleanMutex);
-		Debug("VideoSetClosing: pthread_cond_wait");
-		pthread_cond_wait(&WaitCleanCondition, &WaitCleanMutex);
-		pthread_mutex_unlock(&WaitCleanMutex);
-		Debug("VideoSetClosing: NACH pthread_cond_wait");
-	}
+	Debug("VideoSetClosing: pthread_cond_wait");
+	pthread_cond_wait(&WaitCleanCondition, &WaitCleanMutex);
+	pthread_mutex_unlock(&WaitCleanMutex);
+	Debug("VideoSetClosing: NACH pthread_cond_wait");
+
 	render->StartCounter = 0;
 	render->FramesDuped = 0;
 	render->FramesDropped = 0;
 	VideoSetTrickSpeed(render, 0, 1);
+}
+
+///
+///	Set flushing stream flag.
+///
+///	@param hw_render	video hardware render
+///
+void VideoSetFlushing(VideoRender * render)
+{
+	if (!DisplayThread)
+		return;
+
+	pthread_mutex_lock(&WaitCleanMutex);
+	render->FilterClosing = 1;
+	render->Flushing = 1;
+
+	if (VideoIsPaused(render))
+		VideoResume(render);
+
+	Debug("VideoSetFlushing: pthread_cond_wait");
+	pthread_cond_wait(&WaitCleanCondition, &WaitCleanMutex);
+	pthread_mutex_unlock(&WaitCleanMutex);
+	Debug("VideoSetFlushing: NACH pthread_cond_wait");
+
+	render->StartCounter = 0;
+	render->FramesDuped = 0;
+	render->FramesDropped = 0;
 }
 
 ///
@@ -2441,13 +2590,8 @@ void VideoTrickSpeed(VideoRender * render, int speed, int forward)
 {
 	VideoSetTrickSpeed(render, speed, forward);
 
-	if (speed) {
-		render->Closing = 0;	// ???
-	}
-
-	if (VideoIsPaused(render)) {
+	if (VideoIsPaused(render))
 		StartVideo(render);
-	}
 }
 
 ///
@@ -2459,7 +2603,7 @@ void VideoTrickSpeed(VideoRender * render, int speed, int forward)
 ///
 void VideoSetTrickSpeed(VideoRender * render, int speed, int forward)
 {
-	Debug("VideoSetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
+	Debug2(L_TRICK, "VideoSetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
 	pthread_mutex_lock(&TrickSpeedMutex);
 	render->TrickSpeed = speed;
 	render->TrickCounter = speed;
