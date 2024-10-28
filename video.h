@@ -87,6 +87,10 @@ struct drm_buf {
 #endif
 };
 
+struct lastFrame {
+	AVFrame *frame;
+};
+
 struct plane_properties {
 	uint64_t crtc_id;
 	uint64_t fb_id;
@@ -164,7 +168,7 @@ struct _Drm_Render_
 	uint64_t zpos_primary;
 	uint32_t connector_id, crtc_id, crtc_index;
 	struct plane *planes[MAX_PLANES];
-	AVFrame *lastframe;
+	struct lastFrame *lastframe;
 	int buffers;
 	int enqueue_buffer;
 	int OsdShown;

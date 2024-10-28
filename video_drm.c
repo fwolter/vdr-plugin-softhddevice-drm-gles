@@ -1239,9 +1239,8 @@ dequeue:
 		goto dequeue;
 	}
 
-	if (render->lastframe) {
-		av_frame_free(&render->lastframe);
-	}
+	if (render->lastframe->frame)
+		av_frame_free(&render->lastframe->frame);
 
 	VideoSetClock(render, AV_NOPTS_VALUE);
 
@@ -1609,11 +1608,11 @@ page_flip:
 		return 0;
 
 	// new video frame was sent, rotate the frames
-	if (render->lastframe)
-		av_frame_free(&render->lastframe);
+	if (render->lastframe->frame)
+		av_frame_free(&render->lastframe->frame);
 
 	if (buf && buf->fb_id != render->buf_black.fb_id)
-		render->lastframe = buf->frame;
+		render->lastframe->frame = buf->frame;
 
 	return 0;
 }
@@ -1858,6 +1857,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	render->Stream = stream;
 	render->Closing = 0;
 	render->enqueue_buffer = 0;
+	render->lastframe = calloc(1, sizeof(struct lastFrame));
 	VideoResume(render);
 
 	return render;
@@ -1876,6 +1876,7 @@ void VideoDelRender(VideoRender * render)
 			Debug("video: should only be called from inside the thread");
 		}
 #endif
+		free(render->lastframe);
 		free(render);
 		return;
     }
