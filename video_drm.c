@@ -1583,6 +1583,21 @@ dequeue:
 			buf = &render->buf_black;
 			goto page_flip;
 		}
+
+		// No frames in the ringbuffer, but we had draw activity on the osd and active trickspeed
+		if (render->buf_osd && render->buf_osd->dirty && VideoGetTrickSpeed(render)) {
+			Debug2(L_DRM, "Frame2Display: no frames in trickspeed, only do osd");
+			skip_video = 1;
+			goto page_flip;
+		}
+
+		// No frames in the ringbuffer, but we had draw activity on the osd and we just exited trickspeed
+		if (render->buf_osd && render->buf_osd->dirty && !VideoGetTrickSpeed(render) && render->lastframe->frame && render->lastframe->trick) {
+			Debug2(L_DRM, "Frame2Display: no frames after trickspeed exit, only do osd");
+			skip_video = 1;
+			goto page_flip;
+		}
+
 		// No frames in the ringbuffer, but we had draw activity on the osd
 		if (render->buf_osd && render->buf_osd->dirty) {
 			Debug2(L_DRM, "Frame2Display: no video, set a black FB");
