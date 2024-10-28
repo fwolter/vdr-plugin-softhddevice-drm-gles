@@ -47,7 +47,6 @@ struct _video_decoder_
     VideoRender *Render;		///< video hardware decoder
 
     AVCodecContext *VideoCtx;		///< video codec context
-    AVFrame *Frame;			///< decoded video frame
 };
 
 //----------------------------------------------------------------------------
@@ -87,7 +86,7 @@ extern void CodecVideoClose(VideoDecoder *);
     /// Decode a video packet.
 extern int CodecVideoSendPacket(VideoDecoder *, const AVPacket *);
 
-extern int CodecVideoReceiveFrame(VideoDecoder *, int);
+extern int CodecVideoReceiveFrame(VideoDecoder *, int, AVFrame **);
 
     /// Flush video buffers.
 extern void CodecVideoFlushBuffers(VideoDecoder *);

@@ -308,40 +308,43 @@ int CodecVideoSendPacket(VideoDecoder * decoder, const AVPacket * avpkt)
 **	@returns 0	received frame
 **	@returns -1	get no frame, something went wrong
 */
-int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint)
+int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame)
 {
 	int ret;
+	AVFrame *pFrame;
 
-	if (!(decoder->Frame = av_frame_alloc())) {
+	if (!(pFrame = av_frame_alloc())) {
 		Fatal("CodecVideoReceiveFrame: can't allocate decoder frame");
 	}
 
 	pthread_mutex_lock(&CodecLockMutex);
 	if (decoder->VideoCtx) {
-		ret = avcodec_receive_frame(decoder->VideoCtx, decoder->Frame);
+		ret = avcodec_receive_frame(decoder->VideoCtx, pFrame);
 	} else {
-		av_frame_free(&decoder->Frame);
+		av_frame_free(&pFrame);
 		pthread_mutex_unlock(&CodecLockMutex);
 		return -1;
 	}
 	pthread_mutex_unlock(&CodecLockMutex);
 
 	if (ret == AVERROR(EAGAIN)) {
-		av_frame_free(&decoder->Frame);
+		av_frame_free(&pFrame);
 		return 1;
 	} else if (ret) {
 		Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: %s", av_err2str(ret));
-		av_frame_free(&decoder->Frame);
+		av_frame_free(&pFrame);
 		return -1;
 	}
 
-	if (decoder->Frame->flags == AV_FRAME_FLAG_CORRUPT)
+	if (pFrame->flags == AV_FRAME_FLAG_CORRUPT)
 		Debug2(L_CODEC, "CodecVideoReceiveFrame: AV_FRAME_FLAG_CORRUPT");
 
 	if (no_deint) {
-		decoder->Frame->interlaced_frame = 0;
+		pFrame->interlaced_frame = 0;
 		Debug2(L_CODEC, "CodecVideoReceiveFrame: interlaced_frame = 0");
 	}
+
+	*frame = pFrame;
 
 	return 0;
 }

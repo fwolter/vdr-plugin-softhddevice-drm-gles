@@ -1619,9 +1619,6 @@ dequeue:
 	render->StartCounter++;
 
 skip_sync:
-	if (VideoGetTrickSpeed(render))
-		usleep(20000 * VideoGetTrickSpeed(render));
-
 	buf->frame = frame;
 
 page_flip:
