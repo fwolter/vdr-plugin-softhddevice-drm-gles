@@ -46,6 +46,7 @@
 //----------------------------------------------------------------------------
 
 #define VIDEO_SURFACES_MAX	3	///< video output surfaces for queue
+#define TRICKBUFFERS		3	///< trickspeed video buffers
 
 #define VIDEO_PLANE		0
 #define OSD_PLANE		1
@@ -82,6 +83,7 @@ struct drm_buf {
 	AVFrame *frame;
 	int dirty;
 	int num_planes;
+	int trick;
 #ifdef USE_GLES
 	struct gbm_bo *bo;
 #endif
@@ -89,6 +91,8 @@ struct drm_buf {
 
 struct lastFrame {
 	AVFrame *frame;
+	struct drm_buf *buf;
+	int trick;
 };
 
 struct plane_properties {
@@ -161,6 +165,7 @@ struct _Drm_Render_
 	} video;
 	struct drm_buf *act_buf;
 	struct drm_buf bufs[36];
+	struct drm_buf trickbufs[TRICKBUFFERS];
 	struct drm_buf *buf_osd;
 	struct drm_buf buf_black;
 	int use_zpos;

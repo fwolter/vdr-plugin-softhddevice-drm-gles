@@ -1062,6 +1062,7 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 			return 1;
 		}
 
+/*
 		if (!render->buffers) {
 			for (int object = 0; object < primedata->nb_objects; object++) {
 
@@ -1080,7 +1081,7 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 				}
 			}
 		}
-
+*/
 		buf->pix_fmt = primedata->layers[0].format;
 		buf->num_planes = primedata->layers[0].nb_planes;
 
@@ -1220,6 +1221,7 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 	buf->width = 0;
 	buf->height = 0;
 	buf->fb_id = 0;
+	buf->trick = 0;
 }
 
 ///
@@ -1251,6 +1253,11 @@ dequeue:
 		}
 		render->buffers = 0;
 		render->enqueue_buffer = 0;
+	}
+
+	for (i = 0; i < TRICKBUFFERS; ++i) {
+		if (render->trickbufs[i].trick)
+			DestroyFB(render->fd_drm, &render->trickbufs[i]);
 	}
 
 	pthread_cond_signal(&WaitCleanCondition);
@@ -1482,7 +1489,7 @@ audioclock:
 //	retval 1	sth went wrong
 //
 ///
-static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm_buf **buf)
+static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm_buf **buf, int trick)
 {
 	AVDRMFrameDescriptor *primedata = NULL;
 	struct drm_buf *pbuf = NULL;
@@ -1494,22 +1501,43 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 	atomic_dec(&render->FramesFilled);
 	primedata = (AVDRMFrameDescriptor *)pframe->data[0];
 
-	// search or made fd / FB combination
-	for (i = 0; i < render->buffers; i++) {
-		if (render->bufs[i].fd_prime == primedata->objects[0].fd) {
-			pbuf = &render->bufs[i];
-			break;
-		}
-	}
-	if (pbuf == 0) {
-		pbuf = &render->bufs[render->buffers];
-		pbuf->width = (uint32_t)pframe->width;
-		pbuf->height = (uint32_t)pframe->height;
-		pbuf->fd_prime = primedata->objects[0].fd;
+	if (trick) {
+		for (i = 0; i < TRICKBUFFERS; i++) {
+			pbuf = &render->trickbufs[i];
+			if (pbuf->trick)
+				continue;
+			pbuf->width = (uint32_t)pframe->width;
+			pbuf->height = (uint32_t)pframe->height;
+			pbuf->fd_prime = primedata->objects[0].fd;
+			pbuf->trick = 1;
 
-		if (SetupFB(render, pbuf, primedata, 1)) {
-			av_frame_free(&pframe);
-			return 1;
+			if (SetupFB(render, pbuf, primedata, 0)) {
+				av_frame_free(&pframe);
+				return 1;
+			} else {
+				Debug2(L_DRM, "VideoGetFrameBuffer: SetupFB %d %s", i, Timestamp2String(pframe->pts * 1000 * av_q2d(*render->timebase)));
+				break;
+			}
+		}
+	} else {
+		// search or made fd / FB combination
+		for (i = 0; i < render->buffers; i++) {
+			if (render->bufs[i].fd_prime == primedata->objects[0].fd) {
+				pbuf = &render->bufs[i];
+				break;
+			}
+		}
+		if (pbuf == 0) {
+			pbuf = &render->bufs[render->buffers];
+			pbuf->width = (uint32_t)pframe->width;
+			pbuf->height = (uint32_t)pframe->height;
+			pbuf->fd_prime = primedata->objects[0].fd;
+			pbuf->trick = 0;
+
+			if (SetupFB(render, pbuf, primedata, 1)) {
+				av_frame_free(&pframe);
+				return 1;
+			}
 		}
 	}
 	if (pframe->pts == AV_NOPTS_VALUE)
@@ -1564,7 +1592,7 @@ dequeue:
 		usleep(10000);
 	}
 
-	if (VideoGetFrameBuffer(render, &frame, &buf))
+	if (VideoGetFrameBuffer(render, &frame, &buf, VideoGetTrickSpeed(render)))
 		return 1;
 
 	VideoSetClock(render, frame->pts);
@@ -1608,11 +1636,17 @@ page_flip:
 		return 0;
 
 	// new video frame was sent, rotate the frames
-	if (render->lastframe->frame)
+	if (render->lastframe->frame) {
+		if (render->lastframe->trick)
+			DestroyFB(render->fd_drm, render->lastframe->buf);
 		av_frame_free(&render->lastframe->frame);
+	}
 
-	if (buf && buf->fb_id != render->buf_black.fb_id)
+	if (buf && buf->fb_id != render->buf_black.fb_id) {
 		render->lastframe->frame = buf->frame;
+		render->lastframe->buf = buf;
+		render->lastframe->trick = buf->trick;
+	}
 
 	return 0;
 }
@@ -2262,6 +2296,7 @@ fillframe:
 		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
 			pthread_mutex_lock(&DisplayQueue);
 			if (atomic_read(&render->FramesFilled) < VIDEO_SURFACES_MAX && !render->Filter_Frames) {
+				Debug2(L_DRM, "VideoRenderFrame: add frame %p %s to rb", frame, Timestamp2String(frame->pts * 1000 * av_q2d(*render->timebase)));
 				render->FramesRb[render->FramesWrite] = frame;
 				render->FramesWrite = (render->FramesWrite + 1) % VIDEO_SURFACES_MAX;
 				atomic_inc(&render->FramesFilled);
