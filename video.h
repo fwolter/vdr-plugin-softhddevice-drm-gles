@@ -242,7 +242,6 @@ extern void VideoSetFlushing(VideoRender *);
 extern void VideoTrickSpeed(VideoRender *, int, int);
 extern void VideoSetTrickSpeed(VideoRender *, int, int);
 extern int VideoGetTrickSpeed(VideoRender *);
-extern int VideoGetTrickForward(VideoRender *);
 extern int VideoGetTrickCounter(VideoRender *);
 extern void VideoSetTrickCounter(VideoRender *, int);
 extern int VideoDecTrickCounter(VideoRender *);

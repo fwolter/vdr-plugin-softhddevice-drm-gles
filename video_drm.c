@@ -2624,18 +2624,6 @@ int VideoGetTrickSpeed(VideoRender * render)
 }
 
 ///
-///	Return the trickspeed direction
-///
-int VideoGetTrickForward(VideoRender * render)
-{
-	int forward;
-	pthread_mutex_lock(&TrickSpeedMutex);
-	forward = render->TrickForward;
-	pthread_mutex_unlock(&TrickSpeedMutex);
-	return forward;
-}
-
-///
 ///	Return the current trick counter
 ///
 int VideoGetTrickCounter(VideoRender * render)
