@@ -1591,6 +1591,7 @@ void TrickSpeed(int speed, int forward)
 		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", StreamFreezed, SkipAudio);
 		StreamFreezed = 0;
 		ClearAudio();
+		SkipAudio = 0;
 	}
 
 	// force decoder thread to reopen the codec

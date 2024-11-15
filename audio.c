@@ -1402,6 +1402,65 @@ int AudioVideoReady(int64_t video_pts)
 }
 
 /**
+**	Skip Audio in trickspeed.
+**
+**	@param video_pts	real video presentation timestamp
+*/
+int AudioSkipInTrickSpeed(int64_t video_pts)
+{
+	int64_t audio_pts;
+	int64_t used;
+	int skip;
+
+	// no valid audio known, if we had a ClearAudio just before
+	if (PTS == AV_NOPTS_VALUE) {
+		Debug2(L_AV_SYNC, "AudioSkipInTrickSpeed: can't sync, no valid PTS");
+		return -1;
+	}
+
+	// no valid video pts
+	if (video_pts == AV_NOPTS_VALUE) {
+		Debug2(L_AV_SYNC, "AudioSkipInTrickSpeed: can't sync, no valid video PTS");
+		return -1;
+	}
+
+	while (1) {
+		used = RingBufferUsedBytes(AudioRingBuffer); // in bytes
+
+		if (used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample == 0)
+			break;
+
+		audio_pts = PTS * 1000 * av_q2d(*timebase) -
+					used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample;
+
+		skip = video_pts * 1000 * av_q2d(*timebase) - audio_pts - VideoAudioDelay; // in ms
+
+		if (skip <= 0) // audio >= video
+			break;
+
+		skip = (int64_t)skip * HwSampleRate * HwChannels * AudioBytesProSample / 1000;
+
+		//skip must be a multiple of HwChannels * AudioBytesProSample
+		int frames = skip / HwChannels / AudioBytesProSample;
+		skip = frames * HwChannels * AudioBytesProSample;
+
+		if ((unsigned)skip >= used)
+			skip = used - 1 * HwChannels * AudioBytesProSample;
+
+		Debug2(L_AV_SYNC, "AudioSkipInTrickSpeed: RB %" PRId64 "ms skip %dms audio %s -> %s video %s",
+			used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
+			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
+			Timestamp2String(audio_pts),
+			Timestamp2String(audio_pts + skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample),
+			Timestamp2String(video_pts * 1000 * av_q2d(*timebase)));
+
+		RingBufferReadAdvance(AudioRingBuffer, skip);
+	}
+
+	return 0;
+}
+
+/**
 **	Flush audio buffers.
 */
 void AudioFlushBuffers(void)

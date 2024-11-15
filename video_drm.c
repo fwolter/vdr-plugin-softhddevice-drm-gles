@@ -1715,8 +1715,10 @@ dequeue:
 	if (VideoGetFrameBuffer(render, &frame, &buf))
 		return 1;
 
-	if (*(int *)frame->opaque)
+	if (*(int *)frame->opaque) {
+		AudioSkipInTrickSpeed(frame->pts);
 		goto skip_sync;
+	}
 
 	// sync audio/video
 	ret = VideoSync(render, frame);
