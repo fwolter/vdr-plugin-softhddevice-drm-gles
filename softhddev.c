@@ -1607,6 +1607,7 @@ void TrickSpeed(int speed, int forward)
 void Clear(void)
 {
 	Debug("Clear(void)");
+	MyVideoStream->ClosingStream = 1;
 	ClearVideo(MyVideoStream);
 	VideoSetFlushing(MyVideoStream->Render);
 	ClearAudio();

@@ -1243,6 +1243,7 @@ static void CleanDisplayThread(VideoRender * render)
 		}
 	}
 
+	pthread_mutex_lock(&DisplayQueue);
 dequeue:
 	if (atomic_read(&render->FramesFilled)) {
 		frame = render->FramesRb[render->FramesRead];
@@ -1251,6 +1252,7 @@ dequeue:
 		av_frame_free(&frame);
 		goto dequeue;
 	}
+	pthread_mutex_unlock(&DisplayQueue);
 
 	if (render->lastframe->frame) {
 		if (render->lastframe->trick) {
@@ -1308,6 +1310,7 @@ static void FlushDisplayThread(VideoRender * render)
 		}
 	}
 
+	pthread_mutex_lock(&DisplayQueue);
 dequeue:
 	if (atomic_read(&render->FramesFilled)) {
 		frame = render->FramesRb[render->FramesRead];
@@ -1316,6 +1319,7 @@ dequeue:
 		av_frame_free(&frame);
 		goto dequeue;
 	}
+	pthread_mutex_unlock(&DisplayQueue);
 
 	// Destroy FBs
 	// Take care about the actual onscreen-FB and don't destroy that one.
@@ -2029,6 +2033,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	atomic_set(&render->FramesDeintFilled, 0);
 	render->Stream = stream;
 	render->Closing = 0;
+	render->Flushing = 0;
 	render->FilterClosing = 0;
 	render->enqueue_buffer = 0;
 	render->lastframe = calloc(1, sizeof(struct lastFrame));
@@ -2140,7 +2145,7 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 
 	av_frame_free(&inframe);
 
-	if (render->Closing) {
+	if (render->Closing || render->Flushing) {
 		av_frame_free(&frame);
 		return;
 	}
@@ -2405,7 +2410,7 @@ void VideoRenderFrame(VideoRender * render,
 		Warning("VideoRenderFrame: error_flag or FRAME_FLAG_CORRUPT");
 	}
 fillframe:
-	if (render->Closing) {
+	if (render->Closing || render->Flushing) {
 		av_frame_free(&frame);
 		return;
 	}
@@ -2440,14 +2445,18 @@ fillframe:
 	} else {
 		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
 			pthread_mutex_lock(&DisplayQueue);
+			if (render->Closing || render->Flushing) {
+				av_frame_free(&frame);
+				return;
+			}
 			if (atomic_read(&render->FramesFilled) < VIDEO_SURFACES_MAX && !render->Filter_Frames) {
 				render->FramesRb[render->FramesWrite] = frame;
 				render->FramesWrite = (render->FramesWrite + 1) % VIDEO_SURFACES_MAX;
 				atomic_inc(&render->FramesFilled);
 				pthread_mutex_unlock(&DisplayQueue);
 			} else {
+				usleep(1000);
 				pthread_mutex_unlock(&DisplayQueue);
-				usleep(10000);
 				goto fillframe;
 			}
 
