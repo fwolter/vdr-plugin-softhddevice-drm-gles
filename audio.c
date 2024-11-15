@@ -1406,7 +1406,7 @@ int AudioVideoReady(int64_t video_pts)
 **
 **	@param video_pts	real video presentation timestamp
 */
-int AudioSkipInTrickSpeed(int64_t video_pts)
+int AudioSkipInTrickSpeed(int64_t video_pts, int full)
 {
 	int64_t audio_pts;
 	int64_t used;
@@ -1445,7 +1445,7 @@ int AudioSkipInTrickSpeed(int64_t video_pts)
 		skip = frames * HwChannels * AudioBytesProSample;
 
 		if ((unsigned)skip >= used)
-			skip = used - 1 * HwChannels * AudioBytesProSample;
+			skip = used - (1 - full) * HwChannels * AudioBytesProSample;
 
 		Debug2(L_AV_SYNC, "AudioSkipInTrickSpeed: RB %" PRId64 "ms skip %dms audio %s -> %s video %s",
 			used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,

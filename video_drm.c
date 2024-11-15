@@ -1716,7 +1716,12 @@ dequeue:
 		return 1;
 
 	if (*(int *)frame->opaque) {
-		AudioSkipInTrickSpeed(frame->pts);
+		AudioSkipInTrickSpeed(frame->pts, 0);
+		goto skip_sync;
+	}
+
+	if (render->lastframe && render->lastframe->trick) {
+		AudioSkipInTrickSpeed(frame->pts, 1);
 		goto skip_sync;
 	}
 

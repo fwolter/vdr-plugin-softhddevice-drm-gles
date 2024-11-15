@@ -34,7 +34,7 @@ extern int AudioFreeBytes(void);	///< free bytes in audio output
 extern int AudioUsedBytes(void);	///< used bytes in audio output
 extern int64_t AudioGetClock();		///< get current audio clock
 extern int AudioVideoReady(int64_t);	///< tell audio video is ready
-extern int AudioSkipInTrickSpeed(int64_t);	///< skip old audio data in trickspeed
+extern int AudioSkipInTrickSpeed(int64_t, int);	///< skip old audio data in trickspeed
 
 extern void AudioSetVolume(int);	///< set volume
 //extern int AudioSetup(int *, int *, int);	///< setup audio output
