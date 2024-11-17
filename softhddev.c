@@ -81,6 +81,7 @@ struct __video_stream__
 
     volatile char NewStream;		///< flag new video stream
     volatile char ClosingStream;	///< flag closing video stream
+    volatile char TrickSpeed;		///< flag trickspeed stream
     volatile char NewTrickSpeed;	///< TrickSpeed was triggered
 
     AVPacket PacketRb[VIDEO_PACKET_MAX];	///< PES packet ring buffer
@@ -93,6 +94,7 @@ static VideoStream MyVideoStream[1];	///< normal video stream
 
 static pthread_mutex_t PktsLockMutex;	///< video packets lock mutex
 static pthread_mutex_t WaitReopenMutex = PTHREAD_MUTEX_INITIALIZER;		///< mutex for codec reopen
+static pthread_cond_t WaitReopenCondition;		///< condition for codec reopen
 
 //////////////////////////////////////////////////////////////////////////////
 //	Audio
@@ -553,7 +555,7 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 	// hard limit buffer full: don't overrun audio buffers on replay
 	// stream freezed
 	if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE){
-		Debug("PlayAudio: Buffer is Full!");
+//		Debug("PlayAudio: Buffer is Full (%d|%d)!", AudioFreeBytes(), AUDIO_MIN_BUFFER_FREE);
 		return 0;
 	}
 
@@ -1107,13 +1109,17 @@ int VideoDecodeInput(VideoStream * stream)
 	}
 
 	// re-open decoder for trickspeed
-	if (stream->NewTrickSpeed && stream->CodecID != AV_CODEC_ID_NONE) {
-		Debug2(L_TRICK, "VideoDecodeInput: Reopen Decoder for new trickspeed");
-		ClearVideo(stream);
-		CodecVideoClose(stream->Decoder);
-		CodecVideoOpen(stream->Decoder, stream->CodecID, NULL,
-			&stream->timebase);
-		stream->NewTrickSpeed = 0;
+	if (stream->NewTrickSpeed) {
+		if (stream->CodecID != AV_CODEC_ID_NONE) {
+			Debug2(L_TRICK, "VideoDecodeInput: Reopen Decoder for new trickspeed");
+			ClearVideo(stream);
+			CodecVideoClose(stream->Decoder);
+			stream->CodecID = AV_CODEC_ID_NONE;
+			stream->NewTrickSpeed = 0;
+		}
+		pthread_cond_signal(&WaitReopenCondition);
+		pthread_mutex_unlock(&WaitReopenMutex);
+		return -1;
 	}
 	pthread_mutex_unlock(&WaitReopenMutex);
 
@@ -1152,8 +1158,7 @@ closing_stream:
 		if (!VideoGetTrickSpeed(stream->Render)) {
 			if (!stream->NewStream) { // this is for mediaplayer ?
 				if (!CodecVideoReceiveFrame(stream->Decoder, 0, &frame)) {
-					frame->opaque = stream->Decoder->is_no_trick_frame;
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame);
+					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame, 0);
 				}
 			}
 // this is normal TrickSpeed
@@ -1173,8 +1178,7 @@ closing_stream:
 						break;
 					}
 					Debug2(L_TRICK, "VideoDecodeInput: Trickspeed, send another cloned trick frame %d %p", VideoGetTrickCounter(stream->Render), trickframe);
-					trickframe->opaque = stream->Decoder->is_trick_frame;
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe);
+					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe, VideoGetTrickSpeed(stream->Render));
 					VideoDecTrickCounter(stream->Render);
 					if (stream->ClosingStream) {
 						av_frame_free(&frame);
@@ -1250,7 +1254,7 @@ int PlayVideo(const uint8_t * data, int size)
 			if (stream->CodecID == AV_CODEC_ID_NONE) {
 				if (data[i + n + 3] == 0xb3) {
 				// MPEG2 I-Frame
-					Debug("video: mpeg2 detected");
+					Debug("PlayVideo: mpeg2 detected");
 					Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
 					       data[i + n],
 					       data[i + n + 1],
@@ -1267,7 +1271,7 @@ int PlayVideo(const uint8_t * data, int size)
 					goto newstream;
 				} else if (data[i + n + 3] == 0x09 && (data[i + n + 4] == 0x10 || data[i + n + 4] == 0xF0 || data[i + n + 10] == 0x64)) {
 				// H264 I-Frame
-					Debug("video: H264 detected");
+					Debug("PlayVideo: H264 detected");
 					Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
 					       data[i + n],
 					       data[i + n + 1],
@@ -1284,7 +1288,7 @@ int PlayVideo(const uint8_t * data, int size)
 					goto newstream;
 				} else if (data[i + n + 3] == 0x46 && (data[i + n + 5] == 0x10 || data[i + n + 5] == 0x50 || data[i + n + 10] == 0x40)) {
 				// HEVC I-Frame
-					Debug("video: hevc detected");
+					Debug("PlayVideo: hevc detected");
 					Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
 					       data[i + n],
 					       data[i + n + 1],
@@ -1417,8 +1421,7 @@ send:
 	if (CodecVideoReceiveFrame(MyVideoStream->Decoder, 1, &frame))
 		goto send;
 	else Debug2(L_STILL, "StillPicture: Received Frame");
-	frame->opaque = MyVideoStream->Decoder->is_trick_frame;
-	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame);
+	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, 1);
 	if (context) {
 		CodecVideoClose(MyVideoStream->Decoder);
 		MyVideoStream->CodecID = AV_CODEC_ID_NONE;
@@ -1586,7 +1589,7 @@ void TrickSpeed(int speed, int forward)
 	Debug("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
 
 	pthread_mutex_lock(&WaitReopenMutex);
-	VideoSetFlushing(MyVideoStream->Render);
+	VideoSetClosing(MyVideoStream->Render, 1);
 	if (StreamFreezed) {
 		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", StreamFreezed, SkipAudio);
 		StreamFreezed = 0;
@@ -1595,9 +1598,13 @@ void TrickSpeed(int speed, int forward)
 	}
 
 	// force decoder thread to reopen the codec
-	MyVideoStream->NewTrickSpeed = 1;
+	if (!VideoGetTrickSpeed(MyVideoStream->Render) && MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
+		MyVideoStream->NewTrickSpeed = 1;
+		pthread_cond_wait(&WaitReopenCondition, &WaitReopenMutex);
+	}
 	pthread_mutex_unlock(&WaitReopenMutex);
 
+	MyVideoStream->TrickSpeed = 1;
 	VideoTrickSpeed(MyVideoStream->Render, speed, forward);
 }
 
@@ -1609,7 +1616,7 @@ void Clear(void)
 	Debug("Clear(void)");
 	MyVideoStream->ClosingStream = 1;
 	ClearVideo(MyVideoStream);
-	VideoSetFlushing(MyVideoStream->Render);
+	VideoSetClosing(MyVideoStream->Render, 1);
 	ClearAudio();
 }
 
@@ -1619,7 +1626,9 @@ void Clear(void)
 void Play(void)
 {
 	Debug("Play(void)");
-	VideoSetFlushing(MyVideoStream->Render);
+	if (MyVideoStream->TrickSpeed)
+		VideoSetClosing(MyVideoStream->Render, 1);
+	MyVideoStream->TrickSpeed = 0;
 	SkipAudio = 0;
 	ClearAudio();
 	StreamFreezed = 0;
@@ -1651,7 +1660,6 @@ void Mute(void)
 {
 	Debug("Mute(void)");
 	SkipAudio = 1;
-	ClearAudio();
 }
 
 /**
@@ -1743,10 +1751,11 @@ int SetPlayMode(int play_mode)
 
 	switch (play_mode) {
 	case 0:			// none audio/video
-		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
+		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE)
 			MyVideoStream->ClosingStream = 1;
-			VideoSetClosing(MyVideoStream->Render);
-		}
+		ClearVideo(MyVideoStream);
+		VideoSetClosing(MyVideoStream->Render, 0);
+		MyVideoStream->TrickSpeed = 0;
 		SkipAudio = 0;
 		AudioPlay();
 		ClearAudio();	// flush all AUDIO buffers

@@ -288,9 +288,8 @@ void ReadHWPlatform(VideoRender * render)
 	while(read_size) {
 
 		if (strstr(read_ptr, "bcm2711")) {
-			Debug2(L_DRM, "ReadHWPlatform: bcm2711 found, disable HW deinterlacer");
+			Debug2(L_DRM, "ReadHWPlatform: bcm2711 found, disable Mpeg2 HW decoder");
 			render->CodecMode = CODEC_V4L2M2M_H264 | CODEC_NO_MPEG_HW;	// set _v4l2m2m for H264, disable mpeg hw decoder
-			render->NoHwDeint = 1;
 			break;
 		}
 		if (strstr(read_ptr, "amlogic")) {
@@ -1047,7 +1046,7 @@ static const struct format_info *find_format(uint32_t format)
 }
 
 static int SetupFB(VideoRender * render, struct drm_buf *buf,
-			AVDRMFrameDescriptor *primedata, int renderbuffer)
+			AVDRMFrameDescriptor *primedata)
 {
 	uint64_t modifier[4] = { 0, 0, 0, 0 };
 	uint32_t mod_flags = 0;
@@ -1063,22 +1062,20 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 		}
 
 /*
-		if (!render->buffers) {
-			for (int object = 0; object < primedata->nb_objects; object++) {
+		for (int object = 0; object < primedata->nb_objects; object++) {
 
-				Debug2(L_DRM, "SetupFB: PRIMEDATA %d x %d nb_objects %i Handle %i size %zu modifier %" PRIx64 "",
-					buf->width, buf->height, primedata->nb_objects, primedata->objects[object].fd,
-					primedata->objects[object].size, primedata->objects[object].format_modifier);
-			}
-			for (int layer = 0; layer < primedata->nb_layers; layer++) {
-				Debug2(L_DRM, "SetupFB: PRIMEDATA nb_layers %d nb_planes %d pix_fmt %4.4s",
-					primedata->nb_layers, primedata->layers[layer].nb_planes,
-					(char *)&primedata->layers[layer].format);
+			Debug2(L_DRM, "SetupFB: PRIMEDATA %d x %d nb_objects %i Handle %i size %zu modifier %" PRIx64 "",
+				buf->width, buf->height, primedata->nb_objects, primedata->objects[object].fd,
+				primedata->objects[object].size, primedata->objects[object].format_modifier);
+		}
+		for (int layer = 0; layer < primedata->nb_layers; layer++) {
+			Debug2(L_DRM, "SetupFB: PRIMEDATA nb_layers %d nb_planes %d pix_fmt %4.4s",
+				primedata->nb_layers, primedata->layers[layer].nb_planes,
+				(char *)&primedata->layers[layer].format);
 
-				for (int plane = 0; plane < primedata->layers[layer].nb_planes; plane++) {
-					Debug2(L_DRM, "SetupFB: PRIMEDATA nb_planes %d object_index %i",
-						primedata->layers[layer].nb_planes, primedata->layers[layer].planes[plane].object_index);
-				}
+			for (int plane = 0; plane < primedata->layers[layer].nb_planes; plane++) {
+				Debug2(L_DRM, "SetupFB: PRIMEDATA nb_planes %d object_index %i",
+					primedata->layers[layer].nb_planes, primedata->layers[layer].planes[plane].object_index);
 			}
 		}
 */
@@ -1168,10 +1165,10 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 	if (ret)
 		Fatal("SetupFB: cannot create framebuffer (%d): %m", errno);
 
-	render->buffers += renderbuffer;
-	Debug2(L_DRM, "SetupFB: Added %sFB fb_id %d width %d height %d pix_fmt %4.4s, render->buffers %d",
-		primedata ? "primedata " : "", buf->fb_id, buf->width, buf->height, (char *)&buf->pix_fmt, renderbuffer ? render->buffers : 0);
+	Debug2(L_DRM, "SetupFB: Added %sFB fb_id %d width %d height %d pix_fmt %4.4s handle %d prime %d",
+		primedata ? "primedata " : "", buf->fb_id, buf->width, buf->height, (char *)&buf->pix_fmt, buf->handle[0], buf->fd_prime);
 
+	buf->dirty = 1;
 	return 0;
 }
 
@@ -1215,13 +1212,15 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 
 	if (buf->handle[0]) {
 		if (drmIoctl(fd_drm, DRM_IOCTL_GEM_CLOSE, &buf->handle[0]) < 0)
-			Error("DestroyFB: cannot close %d GEM (%d): %m", buf->fb_id, errno);
+			Error("DestroyFB: cannot close handle %d FB %d PRIME %d GEM (%d): %m", buf->handle[0], buf->fb_id, buf->fd_prime, errno);
 	}
 
 	buf->width = 0;
 	buf->height = 0;
 	buf->fb_id = 0;
-	buf->trick = 0;
+	buf->trickspeed = 0;
+	buf->dirty = 0;
+	buf->enqueue = 0;
 }
 
 ///
@@ -1254,91 +1253,29 @@ dequeue:
 	}
 	pthread_mutex_unlock(&DisplayQueue);
 
-	if (render->lastframe->frame) {
-		if (render->lastframe->trick) {
-			DestroyFB(render->fd_drm, render->lastframe->buf);
-			render->lastframe->trick = 0;
-		}
+	if (render->lastframe->frame)
 		av_frame_free(&render->lastframe->frame);
-	}
 
-	VideoSetClock(render, AV_NOPTS_VALUE);	// ?
+	render->lastframe->trickspeed = 0;
 
 	// Destroy FBs
-	// We don't need to care about the actual onscreen-FB, because if we got here
-	// we should have sent a black FB before
-	if (render->buffers) {
-		for (i = 0; i < render->buffers; ++i) {
-			DestroyFB(render->fd_drm, &render->bufs[i]);
-		}
-		render->buffers = 0;
-		render->enqueue_buffer = 0;
+	for (i = 0; i < RENDERBUFFERS; ++i) {
+		if (render->bufs[i].dirty == 0)
+			continue;
+
+		DestroyFB(render->fd_drm, &render->bufs[i]);
 	}
 
-	for (i = 0; i < TRICKBUFFERS; ++i) {
-		if (render->trickbufs[i].trick)
-			DestroyFB(render->fd_drm, &render->trickbufs[i]);
-	}
+	render->buffers = 0;
+	render->enqueue_buffer = 0;
 
 	pthread_cond_signal(&WaitCleanCondition);
-
+	render->Flushing = 0;
 	render->Closing = 0;
 	render->FilterClosing = 0;
 	pthread_mutex_unlock(&WaitCleanMutex);
 
 	Debug("CleanDisplayThread: DRM cleaned.");
-}
-
-
-///
-/// Flush DRM
-/// flush all frames in ringbuffers and the FBs if they aren't in use
-///
-static void FlushDisplayThread(VideoRender * render)
-{
-	AVFrame *frame;
-	int i;
-
-	pthread_mutex_lock(&WaitCleanMutex);
-	// wait for FilterThread to be closed
-	while (FilterThread) {
-		int timeout = 20;
-		usleep(1000);
-		if (!timeout--) {
-			Error("FlushDisplayThread: Wait for filter thread ending -- TIMEOUT");
-			break;
-		}
-	}
-
-	pthread_mutex_lock(&DisplayQueue);
-dequeue:
-	if (atomic_read(&render->FramesFilled)) {
-		frame = render->FramesRb[render->FramesRead];
-		render->FramesRead = (render->FramesRead + 1) % VIDEO_SURFACES_MAX;
-		atomic_dec(&render->FramesFilled);
-		av_frame_free(&frame);
-		goto dequeue;
-	}
-	pthread_mutex_unlock(&DisplayQueue);
-
-	// Destroy FBs
-	// Take care about the actual onscreen-FB and don't destroy that one.
-	// This is done later in Frame2Display or CleanDisplayThread
-	if (render->buffers) {
-		for (i = 0; i < render->buffers; ++i) {
-			if (!render->lastframe || (render->lastframe && render->lastframe->buf != &render->bufs[i]))
-				DestroyFB(render->fd_drm, &render->bufs[i]);
-		}
-		render->buffers = 0;
-		render->enqueue_buffer = 0;
-	}
-
-	pthread_cond_signal(&WaitCleanCondition);
-	render->Flushing = 0;
-	render->FilterClosing = 0;
-	pthread_mutex_unlock(&WaitCleanMutex);
-
-	Debug("FlushDisplayThread: DRM cleaned.");
 }
 
 ///
@@ -1595,45 +1532,55 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 		return 1;
 	}
 
-	if (*(int *)pframe->opaque) {
-		for (i = 0; i < TRICKBUFFERS; i++) {
-			pbuf = &render->trickbufs[i];
-			if (pbuf->trick)
-				continue;
-			pbuf->width = (uint32_t)pframe->width;
-			pbuf->height = (uint32_t)pframe->height;
-			pbuf->fd_prime = primedata->objects[0].fd;
-			pbuf->trick = 1;
+	if (!pframe->opaque_ref) {
+		av_frame_free(&pframe);
+		Fatal("VideoGetFrameBuffer: SHOULD NOT HAPPEN! frame has no private data, skip it");
+	}
 
-			if (SetupFB(render, pbuf, primedata, 0)) {
-				av_frame_free(&pframe);
-				return 1;
-			} else {
-				Debug2(L_DRM, "VideoGetFrameBuffer: SetupFB %d %s", i, Timestamp2String(pframe->pts * 1000 * av_q2d(*render->timebase)));
-				break;
-			}
-		}
-	} else {
-		// search or made fd / FB combination
-		for (i = 0; i < render->buffers; i++) {
-			if (render->bufs[i].fd_prime == primedata->objects[0].fd) {
-				pbuf = &render->bufs[i];
-				break;
-			}
-		}
-		if (pbuf == 0) {
-			pbuf = &render->bufs[render->buffers];
-			pbuf->width = (uint32_t)pframe->width;
-			pbuf->height = (uint32_t)pframe->height;
-			pbuf->fd_prime = primedata->objects[0].fd;
-			pbuf->trick = 0;
+	FrameData *fd = (FrameData *)pframe->opaque_ref->data;
 
-			if (SetupFB(render, pbuf, primedata, 1)) {
-				av_frame_free(&pframe);
-				return 1;
-			}
+	// search for a made fd / FB combination
+	for (i = 0; i < RENDERBUFFERS; i++) {
+		if (render->bufs[i].trickspeed && !render->bufs[i].enqueue)
+			break;
+
+		if (render->bufs[i].dirty == 0)
+			continue;
+
+		if (render->bufs[i].fd_prime == primedata->objects[0].fd) {
+			pbuf = &render->bufs[i];
+			break;
 		}
 	}
+
+	// search for a "free" buffer
+	if (pbuf == 0) {
+		for (i = 0; i < RENDERBUFFERS; i++) {
+			if (render->bufs[i].dirty == 0)
+				break;
+		}
+		if (render->bufs[i].dirty)
+			Fatal("VideoGetFrameBuffer: SHOULD NOT HAPPEN! no free buffer available!");
+
+		pbuf = &render->bufs[i];;
+
+		pbuf->width = (uint32_t)pframe->width;
+		pbuf->height = (uint32_t)pframe->height;
+		pbuf->fd_prime = primedata->objects[0].fd;
+
+		if (SetupFB(render, pbuf, primedata)) {
+			av_frame_free(&pframe);
+			return 1;
+		}
+		render->bufs[i].enqueue = 0;
+	}
+
+	if (pbuf == 0) {
+		Debug2(L_DRM, "VideoGetFrameBuffer failed, no buffer found!");
+		return 1;
+	}
+
+	pbuf->trickspeed = fd->trickspeed;
 
 	*frame = pframe;
 	*buf = pbuf;
@@ -1663,11 +1610,13 @@ static int Frame2Display(VideoRender * render)
 	}
 
 	if (render->Flushing) {
+		Debug2(L_DRM, "Frame2Display: flushing, skip video");
 		skip_video = 1;
 		goto page_flip;
 	}
 
 	if (VideoIsPaused(render)) {
+//		Debug2(L_DRM, "Frame2Display: paused, skip video");
 		usleep(10000);
 		skip_video = 1;
 		goto page_flip;
@@ -1683,6 +1632,7 @@ dequeue:
 		}
 
 		if (render->Flushing) {
+			Debug2(L_DRM, "Frame2Display: flushing, skip video");
 			skip_video = 1;
 			goto page_flip;
 		}
@@ -1690,6 +1640,7 @@ dequeue:
 		if (VideoIsPaused(render)) {
 			usleep(10000);
 			skip_video = 1;
+//			Debug2(L_DRM, "Frame2Display: paused, skip video");
 			goto page_flip;
 		}
 
@@ -1701,7 +1652,7 @@ dequeue:
 		}
 
 		// No frames in the ringbuffer, but we had draw activity on the osd and we just exited trickspeed
-		if (render->buf_osd && render->buf_osd->dirty && !VideoGetTrickSpeed(render) && render->lastframe->frame && render->lastframe->trick) {
+		if (render->buf_osd && render->buf_osd->dirty && !VideoGetTrickSpeed(render) && render->lastframe->frame && render->lastframe->trickspeed) {
 			Debug2(L_DRM, "Frame2Display: no frames after trickspeed exit, only do osd");
 			skip_video = 1;
 			goto page_flip;
@@ -1716,15 +1667,23 @@ dequeue:
 		usleep(10000);
 	}
 
-	if (VideoGetFrameBuffer(render, &frame, &buf))
+	if (VideoGetFrameBuffer(render, &frame, &buf)) {
+		Debug2(L_DRM, "Frame2Display: VideoGetFrameBuffer failed, return");
+		av_frame_free(&frame);
 		return 1;
+	}
 
-	if (*(int *)frame->opaque) {
+	if (!frame->opaque_ref)
+		Fatal("Frame2Display: SHOULD NOT HAPPEN! frame has no private data, skip it");
+
+	FrameData *fd = (FrameData *)frame->opaque_ref->data;
+
+	if (fd->trickspeed) {
 		AudioSkipInTrickSpeed(frame->pts, 0);
 		goto skip_sync;
 	}
 
-	if (render->lastframe && render->lastframe->trick) {
+	if (render->lastframe->frame && render->lastframe->trickspeed) {
 		AudioSkipInTrickSpeed(frame->pts, 1);
 		goto skip_sync;
 	}
@@ -1748,6 +1707,7 @@ dequeue:
 	if (ret > 0) {
 		// closing
 		av_frame_free(&frame);
+		Debug2(L_DRM, "Frame2Display: closing while sync, set a black FB");
 		buf = &render->buf_black;
 		goto page_flip;
 	}
@@ -1774,20 +1734,18 @@ page_flip:
 
 	// new video frame was sent, rotate the frames
 	if (render->lastframe->frame) {
-		// if the lastframe was a trickframe or we have an old render buffer and a new trick frame
-		// follows, destroy the FB
-		if (render->lastframe->trick || buf->trick) {
+		// if the lastframe was a trickframe, destroy the FB
+		if (render->lastframe->trickspeed) {
 			DestroyFB(render->fd_drm, render->lastframe->buf);
-			render->lastframe->trick = 0;
+			render->lastframe->trickspeed = 0;
 		}
-
 		av_frame_free(&render->lastframe->frame);
 	}
 
 	if (buf && buf->fb_id != render->buf_black.fb_id) {
 		render->lastframe->frame = buf->frame;
 		render->lastframe->buf = buf;
-		render->lastframe->trick = buf->trick;
+		render->lastframe->trickspeed = buf->trickspeed;
 	}
 
 	return 0;
@@ -1814,11 +1772,8 @@ static void *DisplayHandlerThread(void * arg)
 				Error("DisplayHandlerThread: drmHandleEvent failed!");
 		}
 
-		if (render->Closing)
+		if (render->Closing || render->Flushing)
 			CleanDisplayThread(render);
-
-		if (render->Flushing)
-			FlushDisplayThread(render);
 	}
 	Debug("video: display thread stopped");
 	pthread_exit((void *)pthread_self());
@@ -2095,30 +2050,54 @@ enum AVPixelFormat Video_get_format(__attribute__ ((unused))VideoRender * render
 void EnqueueFB(VideoRender * render, AVFrame *inframe)
 {
 	struct drm_buf *buf = 0;
+
 	AVDRMFrameDescriptor * primedata;
 	AVFrame *frame;
 	int i;
+	FrameData *ifd = (FrameData *)inframe->opaque_ref->data;
+	int trickspeed = ifd->trickspeed;
 
-	if (!render->buffers) {
-		for (int i = 0; i < VIDEO_SURFACES_MAX + 2; i++) {
-			buf = &render->bufs[i];
-			buf->width = (uint32_t)inframe->width;
-			buf->height = (uint32_t)inframe->height;
-			buf->pix_fmt = DRM_FORMAT_NV12;
-
-			if (SetupFB(render, buf, NULL, 1)) {
-				Error("EnqueueFB: SetupFB FB %i x %i failed",
-					buf->width, buf->height);
-			}
-
-			if (drmPrimeHandleToFD(render->fd_drm, buf->handle[0],
-				DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime))
-				Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m",
-					errno);
+	if (ifd->trickspeed) {
+		// search for a "free" buffer
+		for (i = 0; i < RENDERBUFFERS; i++) {
+			if (render->bufs[i].dirty == 0)
+				break;
 		}
+		buf = &render->bufs[i];;
+		buf->width = (uint32_t)inframe->width;
+		buf->height = (uint32_t)inframe->height;
+		buf->pix_fmt = DRM_FORMAT_NV12;
+
+		if (SetupFB(render, buf, NULL)) {
+			Error("EnqueueFB: SetupFB FB %i x %i failed",
+				buf->width, buf->height);
+		}
+		if (drmPrimeHandleToFD(render->fd_drm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime))
+			Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+	} else {
+		// create some buffers
+		if (!render->buffers) {
+			for (i = 0; i < VIDEO_SURFACES_MAX + 2; i++) {
+				buf = &render->bufs[i];;
+				buf->width = (uint32_t)inframe->width;
+				buf->height = (uint32_t)inframe->height;
+				buf->pix_fmt = DRM_FORMAT_NV12;
+
+				if (SetupFB(render, buf, NULL)) {
+					Error("EnqueueFB: SetupFB FB %i x %i failed",
+						buf->width, buf->height);
+				}
+
+				render->buffers++;
+
+				if (drmPrimeHandleToFD(render->fd_drm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime))
+					Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+			}
+		}
+		buf = &render->bufs[render->enqueue_buffer];
 	}
 
-	buf = &render->bufs[render->enqueue_buffer];
+	buf->enqueue = 1;
 
 	for (i = 0; i < inframe->height; ++i) {
 		memcpy(buf->plane[0] + i * buf->pitch[0],
@@ -2136,6 +2115,16 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 	frame->format = AV_PIX_FMT_DRM_PRIME;
 	frame->sample_aspect_ratio.num = inframe->sample_aspect_ratio.num;
 	frame->sample_aspect_ratio.den = inframe->sample_aspect_ratio.den;
+
+	FrameData *fd;
+	if (!frame->opaque_ref) {
+		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
+		if (!frame->opaque_ref) {
+			Fatal("EnqueueFB: cannot allocate private frame data");
+		}
+	}
+	fd = (FrameData *)frame->opaque_ref->data;
+	fd->trickspeed = ifd->trickspeed;
 
 	primedata = av_mallocz(sizeof(AVDRMFrameDescriptor));
 	primedata->objects[0].fd = buf->fd_prime;
@@ -2156,9 +2145,11 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 	atomic_inc(&render->FramesFilled);
 	pthread_mutex_unlock(&DisplayQueue);
 
-	if (render->enqueue_buffer == VIDEO_SURFACES_MAX + 1)
-		render->enqueue_buffer = 0;
-	else render->enqueue_buffer++;
+	if (!trickspeed) {
+		if (render->enqueue_buffer == VIDEO_SURFACES_MAX + 1)
+			render->enqueue_buffer = 0;
+		else render->enqueue_buffer++;
+	}
 }
 
 ///
@@ -2228,14 +2219,25 @@ fillframe:
 				break;
 			}
 
+			FrameData *fd;
+			if (!filt_frame->opaque_ref) {
+				filt_frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
+				if (!filt_frame->opaque_ref)
+					Fatal("FilterHandlerThread: cannot allocate private frame data");
+			}
+			fd = (FrameData *)filt_frame->opaque_ref->data;
+			// set trickspeed flag of the filtered frame (scale filter and AV_PIX_FMT_YUV420P)
+			fd->trickspeed = render->Filter_Trick;
+
+			pthread_mutex_lock(&DisplayQueue);
 			if (atomic_read(&render->FramesFilled) < VIDEO_SURFACES_MAX) {
 				if (filt_frame->format == AV_PIX_FMT_NV12) {
 					if (render->Filter_Bug)
 						filt_frame->pts = filt_frame->pts / 2;	// ffmpeg bug
 					render->Filter_Frames--;
+					pthread_mutex_unlock(&DisplayQueue);
 					EnqueueFB(render, filt_frame);
 				} else {
-					pthread_mutex_lock(&DisplayQueue);
 					render->FramesRb[render->FramesWrite] = filt_frame;
 					render->FramesWrite = (render->FramesWrite + 1) % VIDEO_SURFACES_MAX;
 					atomic_inc(&render->FramesFilled);
@@ -2243,7 +2245,8 @@ fillframe:
 					render->Filter_Frames--;
 				}
 			} else {
-				usleep(10000);
+				pthread_mutex_unlock(&DisplayQueue);
+				usleep(5000);
 				goto fillframe;
 			}
 		}
@@ -2252,6 +2255,7 @@ fillframe:
 closing:
 	avfilter_graph_free(&render->filter_graph);
 	render->Filter_Frames = 0;
+	render->Filter_Trick = 0;
 	pthread_cleanup_push(ThreadExitHandler, render);
 	pthread_cleanup_pop(1);
 	Debug("video: video filter thread stopped");
@@ -2292,16 +2296,30 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	if (video_ctx->codec_id == AV_CODEC_ID_HEVC)
 		interlaced = 0;
 
-	if (interlaced) {
+	FrameData *fd;
+	if (!frame->opaque_ref) {
+		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
+		if (!frame->opaque_ref)
+			Fatal("FilterHandlreThread: cannot allocate private frame data");
+	}
+	fd = (FrameData *)frame->opaque_ref->data;
+
+	// interlaced and non-trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) -> hardware deinterlacer
+	// interlaced and non-trickspeed AV_PIX_FMT_YUV420P (software decoded) -> software deinterlacer
+	// progressive and trickspeed AV_PIX_FMT_YUV420P (software decoded) -> scale filter (for NV12 output)
+	// progressive and trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) doesn't get to the FilterHandlerThread
+	render->Filter_Trick = 0;
+	if (interlaced && !fd->trickspeed) {
 		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
 			filter_descr = "deinterlace_v4l2m2m";
 		} else if (frame->format == AV_PIX_FMT_YUV420P) {
 			filter_descr = "bwdif=1:-1:0";
 			render->Filter_Bug = 1;
 		}
-	} else if (frame->format == AV_PIX_FMT_YUV420P)
+	} else if (frame->format == AV_PIX_FMT_YUV420P) {
 		filter_descr = "scale";
-
+		render->Filter_Trick = 1;
+	}
 #if LIBAVFILTER_VERSION_INT < AV_VERSION_INT(7,16,100)
 	avfilter_register_all();
 #endif
@@ -2400,8 +2418,10 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 ///	@param frame		frame to display
 ///
 void VideoRenderFrame(VideoRender * render,
-    AVCodecContext * video_ctx, AVFrame * frame)
+    AVCodecContext * video_ctx, AVFrame * frame, int trickspeed)
 {
+	int interlaced;
+
 	if (!render->StartCounter) {
 		render->timebase = &video_ctx->pkt_timebase;
 	}
@@ -2409,14 +2429,38 @@ void VideoRenderFrame(VideoRender * render,
 	if (frame->decode_error_flags || frame->flags & AV_FRAME_FLAG_CORRUPT) {
 		Warning("VideoRenderFrame: error_flag or FRAME_FLAG_CORRUPT");
 	}
+
+	FrameData *fd;
+	if (!frame->opaque_ref) {
+		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
+		if (!frame->opaque_ref)
+			Fatal("VideoRenderFrame: cannot allocate private frame data");
+	}
+	fd = (FrameData *)frame->opaque_ref->data;
+	fd->trickspeed = trickspeed;
+
 fillframe:
 	if (render->Closing || render->Flushing) {
 		av_frame_free(&frame);
 		return;
 	}
 
-	if (frame->format == AV_PIX_FMT_YUV420P || (frame->interlaced_frame &&
-		frame->format == AV_PIX_FMT_DRM_PRIME && !render->NoHwDeint)) {
+	interlaced = frame->interlaced_frame;
+	// we can't trust frame->interlaced_frame ...
+	if (!trickspeed && video_ctx->framerate.num > 0) {
+		if (video_ctx->framerate.num / video_ctx->framerate.den > 30)
+			interlaced = 0;
+		else
+			interlaced = 1;
+	}
+	if (!trickspeed && (video_ctx->codec_id == AV_CODEC_ID_HEVC))
+		interlaced = 0;
+
+	// normal mode: AV_PIX_FMT_YUV420P, interlaced -> software deinterlacer (bwdif filter)
+	// normal mode: AV_PIX_FMT_DRM_PRIME, interlaced with hw decoder -> hw deinterlacer
+	// trickspeed mode: AV_PIX_FMT_YUV420P, (progressive) single frames -> scale filter to get NV12 frames
+	if (frame->format == AV_PIX_FMT_YUV420P ||
+	    (frame->format == AV_PIX_FMT_DRM_PRIME && interlaced && !render->NoHwDeint)) {
 
 		if (render->FilterClosing) {
 			av_frame_free(&frame);
@@ -2443,6 +2487,7 @@ fillframe:
 			goto fillframe;
 		}
 	} else {
+		// AV_PIX_FMT_DRM_PRIME, interlaced without hw decoder or progressive material
 		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
 			pthread_mutex_lock(&DisplayQueue);
 			if (render->Closing || render->Flushing) {
@@ -2459,9 +2504,17 @@ fillframe:
 				pthread_mutex_unlock(&DisplayQueue);
 				goto fillframe;
 			}
-
 		} else {
-			EnqueueFB(render, frame);
+			pthread_mutex_lock(&DisplayQueue);
+			if (atomic_read(&render->FramesFilled) < VIDEO_SURFACES_MAX) {
+				pthread_mutex_unlock(&DisplayQueue);
+				EnqueueFB(render, frame);
+			} else {
+				pthread_mutex_unlock(&DisplayQueue);
+				usleep(5000);
+				goto fillframe;
+			}
+
 		}
 	}
 }
@@ -2511,17 +2564,19 @@ void StartVideo(VideoRender * render)
 ///
 ///	@param hw_render	video hardware render
 ///
-void VideoSetClosing(VideoRender * render)
+void VideoSetClosing(VideoRender * render, int flushing)
 {
-	Debug("VideoSetClosing: buffers %d StartCounter %d",
-		render->buffers, render->StartCounter);
+	Debug("VideoSetClosing: StartCounter %d", render->StartCounter);
+	if (!DisplayThread)
+		return;
 
 	pthread_mutex_lock(&WaitCleanMutex);
 	render->FilterClosing = 1;
-	render->Closing = 1;
+	render->Flushing = flushing;
+	render->Closing = !flushing;
 
 	if (VideoIsPaused(render))
-		StartVideo(render);
+		VideoResume(render);
 
 	Debug("VideoSetClosing: pthread_cond_wait");
 	pthread_cond_wait(&WaitCleanCondition, &WaitCleanMutex);
@@ -2531,34 +2586,8 @@ void VideoSetClosing(VideoRender * render)
 	render->StartCounter = 0;
 	render->FramesDuped = 0;
 	render->FramesDropped = 0;
-	VideoSetTrickSpeed(render, 0, 1);
-}
-
-///
-///	Set flushing stream flag.
-///
-///	@param hw_render	video hardware render
-///
-void VideoSetFlushing(VideoRender * render)
-{
-	if (!DisplayThread)
-		return;
-
-	pthread_mutex_lock(&WaitCleanMutex);
-	render->FilterClosing = 1;
-	render->Flushing = 1;
-
-	if (VideoIsPaused(render))
-		VideoResume(render);
-
-	Debug("VideoSetFlushing: pthread_cond_wait");
-	pthread_cond_wait(&WaitCleanCondition, &WaitCleanMutex);
-	pthread_mutex_unlock(&WaitCleanMutex);
-	Debug("VideoSetFlushing: NACH pthread_cond_wait");
-
-	render->StartCounter = 0;
-	render->FramesDuped = 0;
-	render->FramesDropped = 0;
+	if (!flushing)
+		VideoSetTrickSpeed(render, 0, 1);
 }
 
 ///
@@ -2821,7 +2850,7 @@ void VideoInit(VideoRender * render)
 	render->buf_osd->pix_fmt = DRM_FORMAT_ARGB8888;
 	render->buf_osd->width = render->mode.hdisplay;
 	render->buf_osd->height = render->mode.vdisplay;
-	if (SetupFB(render, render->buf_osd, NULL, 0)){
+	if (SetupFB(render, render->buf_osd, NULL)){
 		Fatal("VideoOsdInit: SetupFB FB OSD failed!");
 	}
 #else
@@ -2831,7 +2860,7 @@ void VideoInit(VideoRender * render)
 		render->buf_osd->pix_fmt = DRM_FORMAT_ARGB8888;
 		render->buf_osd->width = render->mode.hdisplay;
 		render->buf_osd->height = render->mode.vdisplay;
-		if (SetupFB(render, render->buf_osd, NULL, 0)){
+		if (SetupFB(render, render->buf_osd, NULL)){
 			Fatal("VideoOsdInit: SetupFB FB OSD failed!");
 		}
 	}
@@ -2842,7 +2871,7 @@ void VideoInit(VideoRender * render)
 	render->buf_black.width = render->mode.hdisplay;
 	render->buf_black.height = render->mode.vdisplay;
 	Debug2(L_DRM, "Videoinit: Try to create a black FB");
-	if (SetupFB(render, &render->buf_black, NULL, 0))
+	if (SetupFB(render, &render->buf_black, NULL))
 		Error("VideoInit: SetupFB black FB %i x %i failed",
 			render->buf_black.width, render->buf_black.height);
 

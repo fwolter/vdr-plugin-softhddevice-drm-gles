@@ -46,7 +46,7 @@
 //----------------------------------------------------------------------------
 
 #define VIDEO_SURFACES_MAX	3	///< video output surfaces for queue
-#define TRICKBUFFERS		3	///< trickspeed video buffers
+#define RENDERBUFFERS		36	///< render video buffers
 
 #define VIDEO_PLANE		0
 #define OSD_PLANE		1
@@ -83,7 +83,8 @@ struct drm_buf {
 	AVFrame *frame;
 	int dirty;
 	int num_planes;
-	int trick;
+	int trickspeed;
+	int enqueue;
 #ifdef USE_GLES
 	struct gbm_bo *bo;
 #endif
@@ -92,8 +93,12 @@ struct drm_buf {
 struct lastFrame {
 	AVFrame *frame;
 	struct drm_buf *buf;
-	int trick;
+	int trickspeed;
 };
+
+typedef struct FrameData {
+	int trickspeed;
+} FrameData;
 
 struct plane_properties {
 	uint64_t crtc_id;
@@ -139,6 +144,7 @@ struct _Drm_Render_
 	int Flushing;			///< flag about clearing render ringbuffer
 	int FilterClosing;		///< flag about closing filter handler thread
 	int Filter_Bug;
+	int Filter_Trick;		///< FilterHandlerThread handles trickframes
 	int Filter_Frames;
 
 	int StartCounter;			///< counter for video start
@@ -165,8 +171,7 @@ struct _Drm_Render_
 		int height;
 		int is_scaled;
 	} video;
-	struct drm_buf bufs[36];
-	struct drm_buf trickbufs[TRICKBUFFERS];
+	struct drm_buf bufs[RENDERBUFFERS];
 	struct drm_buf *buf_osd;
 	struct drm_buf buf_black;
 	int use_zpos;
@@ -221,7 +226,7 @@ extern enum AVPixelFormat Video_get_format(VideoRender *, AVCodecContext *,
 
     /// Render a ffmpeg frame.
 extern void VideoRenderFrame(VideoRender *, AVCodecContext *,
-    AVFrame *);
+    AVFrame *, int trickspeed);
 
     /// Set audio delay.
 extern void VideoSetAudioDelay(int);
@@ -234,9 +239,7 @@ extern void VideoOsdDrawARGB(VideoRender *, int, int, int,
 		int, int, const uint8_t *, int, int);
 
     /// Set closing flag.
-extern void VideoSetClosing(VideoRender *);
-    /// Set flushing flag.
-extern void VideoSetFlushing(VideoRender *);
+extern void VideoSetClosing(VideoRender *, int);
 
     /// Deal with trick play mode
 extern void VideoTrickSpeed(VideoRender *, int, int);

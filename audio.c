@@ -1522,6 +1522,7 @@ int64_t AudioGetClock(void)
 	}
 	snd_pcm_sframes_t delay;
 	int64_t pts;
+	int64_t ret;
 
 	pthread_mutex_lock(&AudioRbMutex);
 	// delay in frames in alsa + kernel buffers
@@ -1539,9 +1540,11 @@ int64_t AudioGetClock(void)
 
 	pts += (int64_t)RingBufferUsedBytes(AudioRingBuffer) * 1000 /
 			HwSampleRate / HwChannels / AudioBytesProSample;
+
+	ret = PTS * 1000 * av_q2d(*timebase) - pts;
 	pthread_mutex_unlock(&AudioRbMutex);
 
-	return PTS * 1000 * av_q2d(*timebase) - pts;
+	return ret;
 }
 
 /**

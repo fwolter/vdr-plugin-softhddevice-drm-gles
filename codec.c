@@ -104,10 +104,6 @@ VideoDecoder *CodecVideoNewDecoder(VideoRender * render)
 		Fatal("codec: can't allocate vodeo decoder");
     }
     decoder->Render = render;
-    decoder->is_trick_frame = av_mallocz(sizeof(int));
-    decoder->is_no_trick_frame = av_mallocz(sizeof(int));
-    *(int *)decoder->is_trick_frame = 1;
-    *(int *)decoder->is_no_trick_frame = 0;
 
     return decoder;
 }
@@ -119,8 +115,6 @@ VideoDecoder *CodecVideoNewDecoder(VideoRender * render)
 */
 void CodecVideoDelDecoder(VideoDecoder * decoder)
 {
-    av_freep(&decoder->is_trick_frame);
-    av_freep(&decoder->is_no_trick_frame);
     free(decoder);
 }
 
