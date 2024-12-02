@@ -1253,17 +1253,18 @@ dequeue:
 	}
 	pthread_mutex_unlock(&DisplayQueue);
 
-	if (render->lastframe->frame)
+	if (render->Closing && render->lastframe->frame) {
 		av_frame_free(&render->lastframe->frame);
-
-	render->lastframe->trickspeed = 0;
+		render->lastframe->trickspeed = 0;
+	}
 
 	// Destroy FBs
 	for (i = 0; i < RENDERBUFFERS; ++i) {
 		if (render->bufs[i].dirty == 0)
 			continue;
 
-		DestroyFB(render->fd_drm, &render->bufs[i]);
+		if (render->Closing || (render->bufs[i].fb_id != render->lastframe->buf->fb_id))
+			DestroyFB(render->fd_drm, &render->bufs[i]);
 	}
 
 	render->buffers = 0;
