@@ -1429,6 +1429,7 @@ static int VideoSync(VideoRender *render, AVFrame *frame)
 
 	if(!render->StartCounter && !render->Closing) {
 		Debug("VideoSync: start PTS %s", Timestamp2String(video_pts));
+		AudioSkipInTrickSpeed(frame->pts, 0);
 avready:
 		if (AudioVideoReady(video_pts)) {
 			usleep(10000);
@@ -1439,7 +1440,7 @@ avready:
 				return -2;
 
 			if (VideoIsPaused(render))
-				return -1;
+				return 0;
 
 			goto avready;
 		}
@@ -1453,7 +1454,7 @@ audioclock:
 		return -2;
 
 	if (VideoIsPaused(render))
-		return -1;
+		return 0;
 
 	audio_pts = AudioGetClock();
 
@@ -1601,9 +1602,8 @@ static int Frame2Display(VideoRender * render)
 	AVFrame *frame = NULL;
 	int skip_video = 0;
 
-// as long as we have a filled ringbuffer and we don't close, display the frame!
+	// early skips
 	if (render->Closing) {
-		// set a black FB
 		Debug2(L_DRM, "Frame2Display: closing, set a black FB");
 		buf = &render->buf_black;
 		goto page_flip;
@@ -1615,17 +1615,9 @@ static int Frame2Display(VideoRender * render)
 		goto page_flip;
 	}
 
-	if (VideoIsPaused(render)) {
-//		Debug2(L_DRM, "Frame2Display: paused, skip video");
-		usleep(10000);
-		skip_video = 1;
-		goto page_flip;
-	}
-
 dequeue:
 	while (!atomic_read(&render->FramesFilled)) {
 		if (render->Closing) {
-			// set a black FB
 			Debug2(L_DRM, "Frame2Display: closing, set a black FB");
 			buf = &render->buf_black;
 			goto page_flip;
@@ -1644,31 +1636,34 @@ dequeue:
 			goto page_flip;
 		}
 
-		// No frames in the ringbuffer, but we had draw activity on the osd and active trickspeed
-		if (render->buf_osd && render->buf_osd->dirty && VideoGetTrickSpeed(render)) {
-			Debug2(L_DRM, "Frame2Display: no frames in trickspeed, only do osd");
-			skip_video = 1;
-			goto page_flip;
-		}
-
-		// No frames in the ringbuffer, but we had draw activity on the osd and we just exited trickspeed
-		if (render->buf_osd && render->buf_osd->dirty && !VideoGetTrickSpeed(render) && render->lastframe->frame && render->lastframe->trickspeed) {
-			Debug2(L_DRM, "Frame2Display: no frames after trickspeed exit, only do osd");
-			skip_video = 1;
-			goto page_flip;
-		}
-
 		// No frames in the ringbuffer, but we had draw activity on the osd
 		if (render->buf_osd && render->buf_osd->dirty) {
-			Debug2(L_DRM, "Frame2Display: no video, set a black FB");
-			buf = &render->buf_black;
+			Debug2(L_DRM, "Frame2Display: no video but osd, skip video");
+			skip_video = 1;
 			goto page_flip;
 		}
 		usleep(10000);
 	}
 
+	if (VideoIsPaused(render)) {
+		int64_t audio_pts = AudioGetClock();
+		int64_t video_pts = VideoGetClock(render) * 1000 * av_q2d(*render->timebase);
+		if (video_pts == AV_NOPTS_VALUE || audio_pts == AV_NOPTS_VALUE) {
+			usleep(10000);
+			skip_video = 1;
+			goto page_flip;
+		}
+
+		int diff = video_pts - audio_pts - VideoAudioDelay;
+		// audio is behind video, so pause - otherwise let video come up with audio before "real" pause
+		if (diff > 0) {
+			usleep(10000);
+			skip_video = 1;
+			goto page_flip;
+		}
+	}
+
 	if (VideoGetFrameBuffer(render, &frame, &buf)) {
-		Debug2(L_DRM, "Frame2Display: VideoGetFrameBuffer failed, return");
 		av_frame_free(&frame);
 		return 1;
 	}

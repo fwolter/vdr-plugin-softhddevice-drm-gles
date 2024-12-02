@@ -1614,7 +1614,6 @@ void TrickSpeed(int speed, int forward)
 void Clear(void)
 {
 	Debug("Clear(void)");
-	MyVideoStream->ClosingStream = 1;
 	ClearVideo(MyVideoStream);
 	VideoSetClosing(MyVideoStream->Render, 1);
 	ClearAudio();
@@ -1630,7 +1629,6 @@ void Play(void)
 		VideoSetClosing(MyVideoStream->Render, 1);
 	MyVideoStream->TrickSpeed = 0;
 	SkipAudio = 0;
-	ClearAudio();
 	StreamFreezed = 0;
 	AudioPlay();
 	VideoPlay(MyVideoStream->Render);
@@ -1644,12 +1642,6 @@ void Freeze(void)
 	Debug("Freeze(void)");
 	StreamFreezed = 1;
 	AudioPause();
-
-	// HACK: need to sync audio/video when pausing -> pause a synched state
-	// otherwise we have dupes when we play again
-	// if we wait here for some frames, the problem is about 1 dupe
-	usleep(100000);
-
 	VideoPause(MyVideoStream->Render);
 }
 
@@ -1753,7 +1745,6 @@ int SetPlayMode(int play_mode)
 	case 0:			// none audio/video
 		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE)
 			MyVideoStream->ClosingStream = 1;
-		ClearVideo(MyVideoStream);
 		VideoSetClosing(MyVideoStream->Render, 0);
 		MyVideoStream->TrickSpeed = 0;
 		SkipAudio = 0;
