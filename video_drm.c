@@ -1417,13 +1417,11 @@ skip_video:
 ///
 ///	Sync the frames
 ///
-//	retval 1	close video - drop frame, set black fb
+//	retval 1	close or skip video - drop frame
 //	retval 0	success
-//	retval -1	drop frame, get next one
-//	retval -2	drop frame
 //
 ///
-static int VideoSync(VideoRender *render, AVFrame *frame)
+static int VideoSync(VideoRender *render, AVFrame *frame, int *skip_video, struct drm_buf **buf)
 {
 	int64_t audio_pts;
 	int64_t video_pts;
@@ -1436,11 +1434,17 @@ static int VideoSync(VideoRender *render, AVFrame *frame)
 avready:
 		if (AudioVideoReady(video_pts)) {
 			usleep(10000);
-			if (render->Closing)
+			if (render->Closing) {
+				Debug2(L_DRM, "Frame2Display: closing while sync, set a black FB");
+				*buf = &render->buf_black;
 				return 1;
+			}
 
-			if (render->Flushing)
-				return -2;
+			if (render->Flushing) {
+				Debug2(L_DRM, "Frame2Display: flushing while sync, skip video");
+				*skip_video = 1;
+				return 1;
+			}
 
 			if (VideoIsPaused(render))
 				return 0;
@@ -1450,11 +1454,17 @@ avready:
 	}
 
 audioclock:
-	if (render->Closing)
+	if (render->Closing) {
+		Debug2(L_DRM, "Frame2Display: closing while sync, set a black FB");
+		*buf = &render->buf_black;
 		return 1;
+	}
 
-	if (render->Flushing)
-		return -2;
+	if (render->Flushing) {
+		Debug2(L_DRM, "Frame2Display: flushing while sync, skip video");
+		*skip_video = 1;
+		return 1;
+	}
 
 	if (VideoIsPaused(render))
 		return 0;
@@ -1479,7 +1489,8 @@ audioclock:
 		if (!render->StartCounter)
 			render->StartCounter++;
 
-		return -1;
+		*skip_video = 1;
+		return 1;
 	}
 
 	if (diff > 35 && !(abs(diff) > 5000)) {
@@ -1505,7 +1516,8 @@ audioclock:
 				atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
 				Timestamp2String(video_pts), VideoAudioDelay, diff);
 
-		return -1;
+		*skip_video = 1;
+		return 1;
 	}
 
 	return 0;
@@ -1595,6 +1607,90 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 }
 
 ///
+///	Check if we should close or flush
+///
+///	retval 0	nothing to do
+///	retval 1	needs closing/flushing: set black screen if closing, skip video if flushing
+///
+///
+static int check_closing_or_flushing(VideoRender *render, int *skip_video, struct drm_buf **buf) {
+	if (render->Closing) {
+		Debug2(L_DRM, "Frame2Display: closing, set a black FB");
+		*buf = &render->buf_black;
+		return 1;
+	}
+
+	if (render->Flushing) {
+		Debug2(L_DRM, "Frame2Display: flushing, skip video");
+		*skip_video = 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+///
+///	Check if video is paused
+///
+///	retval 0	not paused
+///	retval 1	paused, skip the video
+///
+///
+static int check_pausing(VideoRender *render, int *skip_video) {
+	if (VideoIsPaused(render)) {
+		*skip_video = 1;
+//		Debug2(L_DRM, "Frame2Display: paused, skip video");
+		return 1;
+	}
+
+	return 0;
+}
+
+///
+///	Check if video is paused and
+///
+///	retval 0	either not paused or waiting for video to sync with audio
+///	retval 1	paused, skip the video
+///
+///
+static int check_pausing_with_sync(VideoRender *render, int *skip_video) {
+	if (VideoIsPaused(render)) {
+		int64_t audio_pts = AudioGetClock();
+		int64_t video_pts = VideoGetClock(render) * 1000 * av_q2d(*render->timebase);
+		if (video_pts == AV_NOPTS_VALUE || audio_pts == AV_NOPTS_VALUE) {
+			*skip_video = 1;
+			return 1;
+		}
+
+		int diff = video_pts - audio_pts - VideoAudioDelay;
+		// audio is behind video, so pause - otherwise let video come up with audio before "real" pause
+		if (diff > 0) {
+			*skip_video = 1;
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+///
+///	Check if we have changes on the osd (if there is no video)
+///
+///	retval 0	no new osd to render
+///	retval 1	we have osd, render it, (skip the video)
+///
+///
+static int check_for_osd(VideoRender *render, int *skip_video) {
+	if (render->buf_osd && render->buf_osd->dirty) {
+		Debug2(L_DRM, "Frame2Display: no video but osd, skip video");
+		*skip_video = 1;
+		return 1;
+	}
+
+	return 0;
+}
+
+///
 ///	Draw a video frame.
 ///
 //	retval 0	modesetting and commit was done, need to process outstanding DRM events
@@ -1603,70 +1699,33 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 ///
 static int Frame2Display(VideoRender * render)
 {
-	int ret = 0;
 	struct drm_buf *buf = NULL;
 	AVFrame *frame = NULL;
 	int skip_video = 0;
 
 	// early skips
-	if (render->Closing) {
-		Debug2(L_DRM, "Frame2Display: closing, set a black FB");
-		buf = &render->buf_black;
+	if (check_closing_or_flushing(render, &skip_video, &buf))
 		goto page_flip;
-	}
 
-	if (render->Flushing) {
-		Debug2(L_DRM, "Frame2Display: flushing, skip video");
-		skip_video = 1;
-		goto page_flip;
-	}
-
-dequeue:
 	while (!atomic_read(&render->FramesFilled)) {
-		if (render->Closing) {
-			Debug2(L_DRM, "Frame2Display: closing, set a black FB");
-			buf = &render->buf_black;
+		if (check_closing_or_flushing(render, &skip_video, &buf))
 			goto page_flip;
-		}
 
-		if (render->Flushing) {
-			Debug2(L_DRM, "Frame2Display: flushing, skip video");
-			skip_video = 1;
-			goto page_flip;
-		}
-
-		if (VideoIsPaused(render)) {
+		if (check_pausing(render, &skip_video)) {
 			usleep(10000);
-			skip_video = 1;
-//			Debug2(L_DRM, "Frame2Display: paused, skip video");
 			goto page_flip;
 		}
+
+		if (check_for_osd(render, &skip_video))
+			goto page_flip;
 
 		// No frames in the ringbuffer, but we had draw activity on the osd
-		if (render->buf_osd && render->buf_osd->dirty) {
-			Debug2(L_DRM, "Frame2Display: no video but osd, skip video");
-			skip_video = 1;
-			goto page_flip;
-		}
 		usleep(10000);
 	}
 
-	if (VideoIsPaused(render)) {
-		int64_t audio_pts = AudioGetClock();
-		int64_t video_pts = VideoGetClock(render) * 1000 * av_q2d(*render->timebase);
-		if (video_pts == AV_NOPTS_VALUE || audio_pts == AV_NOPTS_VALUE) {
-			usleep(10000);
-			skip_video = 1;
-			goto page_flip;
-		}
-
-		int diff = video_pts - audio_pts - VideoAudioDelay;
-		// audio is behind video, so pause - otherwise let video come up with audio before "real" pause
-		if (diff > 0) {
-			usleep(10000);
-			skip_video = 1;
-			goto page_flip;
-		}
+	if (check_pausing_with_sync(render, &skip_video)) {
+		usleep(10000);
+		goto page_flip;
 	}
 
 	if (VideoGetFrameBuffer(render, &frame, &buf)) {
@@ -1679,37 +1738,21 @@ dequeue:
 
 	FrameData *fd = (FrameData *)frame->opaque_ref->data;
 
+	// skip old audio in trickspeed
 	if (fd->trickspeed) {
 		AudioSkipInTrickSpeed(frame->pts, 0);
 		goto skip_sync;
 	}
 
+	// skip old audio after trickspeed
 	if (render->lastframe->frame && render->lastframe->trickspeed) {
 		AudioSkipInTrickSpeed(frame->pts, 1);
 		goto skip_sync;
 	}
 
 	// sync audio/video
-	ret = VideoSync(render, frame);
-
-	if (ret < -1) {
-		// frame dropped, skip video
+	if (VideoSync(render, frame, &skip_video, &buf)) {
 		av_frame_free(&frame);
-		skip_video = 1;
-		goto page_flip;
-	}
-
-	if (ret < 0) {
-		// frame dropped, get a new one
-		av_frame_free(&frame);
-		goto dequeue;
-	}
-
-	if (ret > 0) {
-		// closing
-		av_frame_free(&frame);
-		Debug2(L_DRM, "Frame2Display: closing while sync, set a black FB");
-		buf = &render->buf_black;
 		goto page_flip;
 	}
 
@@ -1719,14 +1762,12 @@ skip_sync:
 	buf->frame = frame;
 
 page_flip:
-	ret = VideoDrmCommit(render, buf, skip_video);
-
 	// no modesetting was done
-	if (ret < 0)
+	if (VideoDrmCommit(render, buf, skip_video) < 0)
 		return 1;
 
 	// only osd was set
-	if (ret == 0)
+	if (skip_video)
 		return 0;
 
 	// now, that we had a successful commit, set the STC if we have a frame
