@@ -2563,11 +2563,13 @@ void StartVideo(VideoRender * render)
 }
 
 ///
-///	Set closing stream flag.
+///	Close the renderer and clear frames (and) framebuffers if needed
 ///
 ///	@param hw_render	video hardware render
+///	@param black		true, if should set a black fb and clear the last framebuffer,
+///				otherwise wait for the clear until the next frame arrives
 ///
-void VideoSetClosing(VideoRender * render, int flushing)
+void VideoSetClosing(VideoRender * render, int black)
 {
 	Debug("VideoSetClosing: StartCounter %d", render->StartCounter);
 	if (!DisplayThread)
@@ -2575,8 +2577,8 @@ void VideoSetClosing(VideoRender * render, int flushing)
 
 	pthread_mutex_lock(&WaitCleanMutex);
 	render->FilterClosing = 1;
-	render->Flushing = flushing;
-	render->Closing = !flushing;
+	render->Flushing = !black;
+	render->Closing = black;
 
 	if (VideoIsPaused(render))
 		VideoResume(render);
@@ -2589,7 +2591,7 @@ void VideoSetClosing(VideoRender * render, int flushing)
 	render->StartCounter = 0;
 	render->FramesDuped = 0;
 	render->FramesDropped = 0;
-	if (!flushing)
+	if (black)
 		VideoSetTrickSpeed(render, 0, 1);
 }
 

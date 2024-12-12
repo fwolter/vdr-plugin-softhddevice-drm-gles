@@ -1589,7 +1589,7 @@ void TrickSpeed(int speed, int forward)
 	Debug("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
 
 	pthread_mutex_lock(&WaitReopenMutex);
-	VideoSetClosing(MyVideoStream->Render, 1);
+	VideoSetClosing(MyVideoStream->Render, 0);
 	if (StreamFreezed) {
 		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", StreamFreezed, SkipAudio);
 		StreamFreezed = 0;
@@ -1615,7 +1615,7 @@ void Clear(void)
 {
 	Debug("Clear(void)");
 	ClearVideo(MyVideoStream);
-	VideoSetClosing(MyVideoStream->Render, 1);
+	VideoSetClosing(MyVideoStream->Render, 0);
 	ClearAudio();
 }
 
@@ -1626,7 +1626,7 @@ void Play(void)
 {
 	Debug("Play(void)");
 	if (MyVideoStream->TrickSpeed)
-		VideoSetClosing(MyVideoStream->Render, 1);
+		VideoSetClosing(MyVideoStream->Render, 0);
 	MyVideoStream->TrickSpeed = 0;
 	SkipAudio = 0;
 	StreamFreezed = 0;
@@ -1745,7 +1745,7 @@ int SetPlayMode(int play_mode)
 	case 0:			// none audio/video
 		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE)
 			MyVideoStream->ClosingStream = 1;
-		VideoSetClosing(MyVideoStream->Render, 0);
+		VideoSetClosing(MyVideoStream->Render, 1);
 		MyVideoStream->TrickSpeed = 0;
 		SkipAudio = 0;
 		AudioPlay();
