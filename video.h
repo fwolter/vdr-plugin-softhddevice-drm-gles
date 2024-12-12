@@ -141,7 +141,8 @@ struct _Drm_Render_
 	int TrickForward;		///< true, if trickspeed plays forward
 	int VideoPaused;
 	int Closing;			///< flag about closing render thread
-	int Flushing;			///< flag about clearing render ringbuffer
+	int Flushing;			///< flag about flushing render thread
+	int FlushLast;			///< flag about need to clear FB in next turn
 	int FilterClosing;		///< flag about closing filter handler thread
 	int Filter_Bug;
 	int Filter_Trick;		///< FilterHandlerThread handles trickframes

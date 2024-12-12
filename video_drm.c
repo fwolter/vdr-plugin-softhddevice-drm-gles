@@ -1271,6 +1271,8 @@ dequeue:
 	render->enqueue_buffer = 0;
 
 	pthread_cond_signal(&WaitCleanCondition);
+	if (render->Flushing)
+		render->FlushLast = 1;
 	render->Flushing = 0;
 	render->Closing = 0;
 	render->FilterClosing = 0;
@@ -1543,6 +1545,9 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 
 	// search for a made fd / FB combination
 	for (i = 0; i < RENDERBUFFERS; i++) {
+		if (render->FlushLast)
+			break;
+
 		if (render->bufs[i].trickspeed && !render->bufs[i].enqueue)
 			break;
 
@@ -1730,10 +1735,11 @@ page_flip:
 
 	// new video frame was sent, rotate the frames
 	if (render->lastframe->frame) {
-		// if the lastframe was a trickframe, destroy the FB
-		if (render->lastframe->trickspeed) {
+		// if the lastframe was a trickframe or a flush is forced, destroy the FB
+		if (render->FlushLast || render->lastframe->trickspeed) {
 			DestroyFB(render->fd_drm, render->lastframe->buf);
 			render->lastframe->trickspeed = 0;
+			render->FlushLast = 0;
 		}
 		av_frame_free(&render->lastframe->frame);
 	}
@@ -1985,6 +1991,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	render->Stream = stream;
 	render->Closing = 0;
 	render->Flushing = 0;
+	render->FlushLast = 0;
 	render->FilterClosing = 0;
 	render->enqueue_buffer = 0;
 	render->lastframe = calloc(1, sizeof(struct lastFrame));
