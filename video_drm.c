@@ -668,15 +668,17 @@ static int FindDevice(VideoRender * render)
 			Warning("FindDevice: User requested mode not found, try default modes");
 	}
 
-	// find preferred mode or the highest resolution mode
+	uint32_t preferred_hz[3] = {50, 60, 0};
+
+	// find the highest resolution mode with 50, 60 or any refresh rate
 	if (!mode) {
+		j = 0;
 		int area;
+find_mode:
 		for (i = 0, area = 0; i < connector->count_modes; i++) {
 			drmModeModeInfo *current_mode = &connector->modes[i];
-			if (current_mode->type & DRM_MODE_TYPE_PREFERRED) {
-				mode = current_mode;
-				break;
-			}
+			if (preferred_hz[j] && current_mode->vrefresh != preferred_hz[j])
+				continue;
 
 			int current_area = current_mode->hdisplay * current_mode->vdisplay;
 			if (current_area > area) {
@@ -684,9 +686,14 @@ static int FindDevice(VideoRender * render)
 				area = current_area;
 			}
 		}
+
+		if (!mode && preferred_hz[j]) {
+			j++;
+			goto find_mode;
+		}
+
 		if (mode)
-			Debug2(L_DRM, "FindDevice: Use %s: %dx%d@%d",
-				mode->type & DRM_MODE_TYPE_PREFERRED ? "preferred default mode" : "mode with the highest resolution",
+			Debug2(L_DRM, "FindDevice: Use mode with the highest resolution: %dx%d@%d",
 				mode->hdisplay, mode->vdisplay, mode->vrefresh);
 	}
 
