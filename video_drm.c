@@ -1434,40 +1434,37 @@ static int VideoSync(VideoRender *render, AVFrame *frame, int *skip_video, struc
 avready:
 		if (AudioVideoReady(video_pts)) {
 			usleep(10000);
+
+			// check for close/flush request or pause
 			if (render->Closing) {
 				Debug2(L_DRM, "Frame2Display: closing while sync, set a black FB");
 				*buf = &render->buf_black;
 				return 1;
-			}
-
-			if (render->Flushing) {
+			} else if (render->Flushing) {
 				Debug2(L_DRM, "Frame2Display: flushing while sync, skip video");
 				*skip_video = 1;
 				return 1;
-			}
-
-			if (VideoIsPaused(render))
+			} else if (VideoIsPaused(render)) {
 				return 0;
+			}
 
 			goto avready;
 		}
 	}
 
 audioclock:
+	// check for close/flush request or pause
 	if (render->Closing) {
 		Debug2(L_DRM, "Frame2Display: closing while sync, set a black FB");
 		*buf = &render->buf_black;
 		return 1;
-	}
-
-	if (render->Flushing) {
+	} else if (render->Flushing) {
 		Debug2(L_DRM, "Frame2Display: flushing while sync, skip video");
 		*skip_video = 1;
 		return 1;
-	}
-
-	if (VideoIsPaused(render))
+	} else if (VideoIsPaused(render)) {
 		return 0;
+	}
 
 	audio_pts = AudioGetClock();
 
@@ -1478,8 +1475,17 @@ audioclock:
 
 	int diff = video_pts - audio_pts - VideoAudioDelay;
 
-	if (diff < -5 && !(abs(diff) > 5000)) {
-		render->FramesDropped++;
+	if (abs(diff) > 5000) {	// more than 5s
+		Debug2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
+			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
+			Timestamp2String(video_pts), VideoAudioDelay, diff);
+
+		*skip_video = 1;
+		return 1;
+	}
+
+	if (diff < -5) {	// video is more than 5ms behind audio, drop video frame
 		Debug2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			render->FramesDropped, render->FramesDuped,
 			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
@@ -1489,35 +1495,21 @@ audioclock:
 		if (!render->StartCounter)
 			render->StartCounter++;
 
+		render->FramesDropped++;
 		*skip_video = 1;
 		return 1;
 	}
 
-	if (diff > 35 && !(abs(diff) > 5000)) {
-		render->FramesDuped++;
+	if (diff > 35) {	// audio is more than 35ms behind video, duplicate video frame
 		Debug2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			render->FramesDropped, render->FramesDuped,
 			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
 			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), VideoAudioDelay, diff);
+
+		render->FramesDuped++;
 		usleep(20000);
 		goto audioclock;
-	}
-
-	if (abs(diff) > 5000) {	// more than 5s
-		if (video_pts)
-			Debug2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-				VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
-				atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
-				Timestamp2String(video_pts), VideoAudioDelay, diff);
-		else
-			Debug2(L_AV_SYNC, "Video frame with AV_NOPTS_VALUE arrived ... Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-				VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
-				atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
-				Timestamp2String(video_pts), VideoAudioDelay, diff);
-
-		*skip_video = 1;
-		return 1;
 	}
 
 	return 0;
