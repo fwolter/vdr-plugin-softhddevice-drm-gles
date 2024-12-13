@@ -18,7 +18,6 @@
 ///	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 ///	GNU Affero General Public License for more details.
 ///
-///	$Id$
 //////////////////////////////////////////////////////////////////////////////
 
 #define __STDC_CONSTANT_MACROS		///< needed for ffmpeg UINT64_C
