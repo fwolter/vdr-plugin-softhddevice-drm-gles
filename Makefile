@@ -11,6 +11,10 @@ PLUGIN = softhddevice-drm-gles
 
 ### Configuration (edit this for your needs)
 
+# Source documentation:
+DOXYGEN  ?= /usr/bin/doxygen
+DOXYFILE  = Doxyfile
+
 # Use OpenGL/ES for OSD? Disable autodetection by setting GLES=1 or GLES=0 with make command
 GLES ?= $(shell pkg-config --exists glesv2 egl gbm && echo 1)
 # enable this to write the OSD as png into /tmp (only GLES mode)
@@ -205,6 +209,15 @@ dist: $(I18Npo) clean
 clean:
 	@-rm -f $(PODIR)/*.mo $(PODIR)/*.pot
 	@-rm -f $(DEPFILE) *.o *.so *.tgz core* *~
+	@-rm -rf srcdoc
+
+# Source documentation:
+srcdoc:
+	@cat $(DOXYFILE) > $(DOXYFILE).tmp
+	@echo PROJECT_NUMBER = $(VERSION) >> $(DOXYFILE).tmp
+	@chmod +x $(DOXYFILE).filter
+	$(DOXYGEN) $(DOXYFILE).tmp
+	@rm $(DOXYFILE).tmp
 
 ## Private Targets:
 
