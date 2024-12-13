@@ -2783,27 +2783,9 @@ void VideoPlay(VideoRender * render)
 ///
 uint8_t *VideoGrab(int *size, int *width, int *height, int write_header)
 {
-    Debug("no grab service");
+    Debug("VideoGrab: grab image not implemented!");
 
     (void)write_header;
-    (void)size;
-    (void)width;
-    (void)height;
-    return NULL;
-}
-
-///
-///	Grab image service.
-///
-///	@param size[out]	size of allocated image
-///	@param width[in,out]	width of image
-///	@param height[in,out]	height of image
-///
-uint8_t *VideoGrabService(int *size, int *width, int *height)
-{
-    Debug("no grab service");
-    Warning("grab unsupported");
-
     (void)size;
     (void)width;
     (void)height;

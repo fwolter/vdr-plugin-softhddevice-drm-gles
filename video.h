@@ -261,9 +261,6 @@ extern void VideoPlay(VideoRender *);
     /// Grab screen.
 extern uint8_t *VideoGrab(int *, int *, int *, int);
 
-    /// Grab screen raw.
-extern uint8_t *VideoGrabService(int *, int *, int *);
-
     /// Get decoder statistics.
 extern void VideoGetStats(VideoRender *, int *, int *, int *);
 

@@ -32,7 +32,6 @@ using std::ifstream;
 #include <vdr/dvbspu.h>
 
 #include "softhddevice-drm-gles.h"
-#include "softhddevice_service.h"
 #include "mediaplayer.h"
 #include "misc.h"
 
@@ -1525,51 +1524,8 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 bool cPluginSoftHdDevice::Service(const char *id, void *data)
 {
     //Debug("%s: id %s", __FUNCTION__, id);
-
-    if (strcmp(id, ATMO_GRAB_SERVICE) == 0) {
-	int width;
-	int height;
-
-	if (data == NULL) {
-	    return true;
-	}
-
-	SoftHDDevice_AtmoGrabService_v1_0_t *r =
-	    (SoftHDDevice_AtmoGrabService_v1_0_t *) data;
-	if (r->structSize != sizeof(SoftHDDevice_AtmoGrabService_v1_0_t)
-	    || r->analyseSize < 64 || r->analyseSize > 256
-	    || r->clippedOverscan < 0 || r->clippedOverscan > 200) {
-	    return false;
-	}
-
-	width = r->analyseSize * -1;	// Internal marker for Atmo grab service
-	height = r->clippedOverscan;
-
-	r->img = VideoGrabService(&r->imgSize, &width, &height);
-	if (r->img == NULL) {
-	    return false;
-	}
-	r->imgType = GRAB_IMG_RGBA_FORMAT_B8G8R8A8;
-	r->width = width;
-	r->height = height;
-	return true;
-    }
-
-    if (strcmp(id, ATMO1_GRAB_SERVICE) == 0) {
-	SoftHDDevice_AtmoGrabService_v1_1_t *r;
-
-	if (!data) {
-	    return true;
-	}
-
-	r = (SoftHDDevice_AtmoGrabService_v1_1_t *) data;
-	r->img = VideoGrabService(&r->size, &r->width, &r->height);
-	if (!r->img) {
-	    return false;
-	}
-
-	return true;
-    }
+    (void)id;
+    (void)data;
 
     return false;
 }
