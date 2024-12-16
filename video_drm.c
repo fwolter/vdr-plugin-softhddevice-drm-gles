@@ -1545,7 +1545,7 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 
 	// search for a made fd / FB combination
 	for (i = 0; i < RENDERBUFFERS; i++) {
-		if (render->FlushLast)
+		if (render->FlushLast && !render->bufs[i].enqueue)
 			break;
 
 		if (render->bufs[i].trickspeed && !render->bufs[i].enqueue)
