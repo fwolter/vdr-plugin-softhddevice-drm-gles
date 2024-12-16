@@ -2058,14 +2058,15 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 	AVFrame *frame;
 	int i;
 	FrameData *ifd = (FrameData *)inframe->opaque_ref->data;
-	int trickspeed = ifd->trickspeed;
 
-	if (ifd->trickspeed) {
-		// search for a "free" buffer
+	if (ifd->trickspeed) {	// if we have trickspeed, always use a free buffer, because its destroyed in Frame2Display after rendering
 		for (i = 0; i < RENDERBUFFERS; i++) {
 			if (render->bufs[i].dirty == 0)
 				break;
 		}
+		if (render->bufs[i].dirty)
+			Fatal("EnqueueFB: SHOULD NOT HAPPEN! no free buffer available!");
+
 		buf = &render->bufs[i];;
 		buf->width = (uint32_t)inframe->width;
 		buf->height = (uint32_t)inframe->height;
@@ -2078,28 +2079,43 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 		if (drmPrimeHandleToFD(render->fd_drm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime))
 			Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
 	} else {
-		// create some buffers
-		if (!render->buffers) {
-			for (i = 0; i < VIDEO_SURFACES_MAX + 2; i++) {
-				buf = &render->bufs[i];;
-				buf->width = (uint32_t)inframe->width;
-				buf->height = (uint32_t)inframe->height;
-				buf->pix_fmt = DRM_FORMAT_NV12;
-
-				if (SetupFB(render, buf, NULL)) {
-					Error("EnqueueFB: SetupFB FB %i x %i failed",
-						buf->width, buf->height);
-				}
-
-				render->buffers++;
-
-				if (drmPrimeHandleToFD(render->fd_drm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime))
-					Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
-			}
-		}
+		// create some buffers up to VIDEO_SURFACES_MAX + 2
+		int maxfb = 0;
+get_buffer:
 		buf = &render->bufs[render->enqueue_buffer];
+		if (render->buffers < VIDEO_SURFACES_MAX + 2) {
+			if (buf->dirty) {
+				// skip the buffer, because it is either referenced by lastframe or is already setup
+				// this should be safe, because we only have 1 lastframe, which should be destroyed as soon as
+				// a new buffer arrives in Frame2Display
+				// after that destroy, we should be able to setup 0, 1, 2, ..., VIDEO_SURFACES_MAX + 2 framebuffers
+				render->enqueue_buffer = (render->enqueue_buffer + 1) % (VIDEO_SURFACES_MAX + 2);
+
+				// if we want to run into an endless loop here, something is wrong!
+				maxfb++;
+				if (maxfb > VIDEO_SURFACES_MAX + 2)
+					Fatal("EnqueueFB: SHOULD NOT HAPPEN! could not get a free FB!");
+
+				goto get_buffer;
+			}
+
+			buf->width = (uint32_t)inframe->width;
+			buf->height = (uint32_t)inframe->height;
+			buf->pix_fmt = DRM_FORMAT_NV12;
+
+			if (SetupFB(render, buf, NULL)) {
+				Error("EnqueueFB: SetupFB FB %i x %i failed",
+					buf->width, buf->height);
+			}
+
+			render->buffers++;
+
+			if (drmPrimeHandleToFD(render->fd_drm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime))
+				Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+		}
 	}
 
+	// mark this buffer as a software decoded buffer
 	buf->enqueue = 1;
 
 	for (i = 0; i < inframe->height; ++i) {
@@ -2135,9 +2151,8 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 	frame->buf[0] = av_buffer_create((uint8_t *)primedata, sizeof(*primedata),
 				ReleaseFrame, NULL, AV_BUFFER_FLAG_READONLY);
 
-	av_frame_free(&inframe);
-
 	if (render->Closing || render->Flushing) {
+		av_frame_free(&inframe);
 		av_frame_free(&frame);
 		return;
 	}
@@ -2148,11 +2163,10 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 	atomic_inc(&render->FramesFilled);
 	pthread_mutex_unlock(&DisplayQueue);
 
-	if (!trickspeed) {
-		if (render->enqueue_buffer == VIDEO_SURFACES_MAX + 1)
-			render->enqueue_buffer = 0;
-		else render->enqueue_buffer++;
-	}
+	if (!ifd->trickspeed)
+		render->enqueue_buffer = (render->enqueue_buffer + 1) % (VIDEO_SURFACES_MAX + 2);
+
+	av_frame_free(&inframe);
 }
 
 ///
