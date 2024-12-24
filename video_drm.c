@@ -1423,8 +1423,9 @@ skip_video:
 ///
 ///	Sync the frames
 ///
-//	retval 1	close or skip video - drop frame
-//	retval 0	success
+//	retval 1	close or flush requested, skip video or show black frame
+//	retval 0	nothing to sync or paused
+//	retval -1	drop frame
 //
 ///
 static int VideoSync(VideoRender *render, AVFrame *frame, int *skip_video, struct drm_buf **buf)
@@ -1487,11 +1488,9 @@ audioclock:
 			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), VideoAudioDelay, diff);
 
-		*skip_video = 1;
-		return 1;
 	}
 
-	if (diff < -5) {	// video is more than 5ms behind audio, drop video frame
+	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
 		Debug2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			render->FramesDropped, render->FramesDuped,
 			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
@@ -1502,11 +1501,10 @@ audioclock:
 			render->StartCounter++;
 
 		render->FramesDropped++;
-		*skip_video = 1;
-		return 1;
+		return -1;
 	}
 
-	if (diff > 35) {	// audio is more than 35ms behind video, duplicate video frame
+	if (diff > 35 && !(abs(diff) > 5000)) {	// audio is more than 35ms behind video, duplicate video frame
 		Debug2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			render->FramesDropped, render->FramesDuped,
 			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
@@ -1705,6 +1703,7 @@ static int Frame2Display(VideoRender * render)
 	if (check_closing_or_flushing(render, &skip_video, &buf))
 		goto page_flip;
 
+dequeue:
 	while (!atomic_read(&render->FramesFilled)) {
 		if (check_closing_or_flushing(render, &skip_video, &buf))
 			goto page_flip;
@@ -1749,7 +1748,12 @@ static int Frame2Display(VideoRender * render)
 	}
 
 	// sync audio/video
-	if (VideoSync(render, frame, &skip_video, &buf)) {
+	int ret = VideoSync(render, frame, &skip_video, &buf);
+
+	if (ret < 0) { // drop frame (dup is handled within VideoSync())
+		av_frame_free(&frame);
+		goto dequeue;
+	} else if (ret) { // close or flush
 		av_frame_free(&frame);
 		goto page_flip;
 	}
