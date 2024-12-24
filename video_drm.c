@@ -2232,7 +2232,13 @@ getinframe:
 			frame = render->FramesDeintRb[render->FramesDeintRead];
 			render->FramesDeintRead = (render->FramesDeintRead + 1) % VIDEO_SURFACES_MAX;
 			atomic_dec(&render->FramesDeintFilled);
-			if (frame->interlaced_frame) {
+			int interlaced;
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
+			interlaced = frame->interlaced_frame;
+#else
+			interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
+#endif
+			if (interlaced) {
 				render->Filter_Frames += 2;
 			} else {
 				render->Filter_Frames++;
@@ -2344,7 +2350,12 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	const AVFilter *buffersink = avfilter_get_by_name("buffersink");
 	render->Filter_Bug = 0;
 
-	int interlaced = frame->interlaced_frame;
+	int interlaced;
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
+	interlaced = frame->interlaced_frame;
+#else
+	interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
+#endif
 
 	if (video_ctx->framerate.num > 0) {
 		if (video_ctx->framerate.num / video_ctx->framerate.den > 30)
@@ -2505,7 +2516,11 @@ fillframe:
 		return;
 	}
 
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
 	interlaced = frame->interlaced_frame;
+#else
+	interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
+#endif
 	// we can't trust frame->interlaced_frame ...
 	if (!trickspeed && video_ctx->framerate.num > 0) {
 		if (video_ctx->framerate.num / video_ctx->framerate.den > 30)

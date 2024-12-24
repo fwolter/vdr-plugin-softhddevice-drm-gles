@@ -339,7 +339,11 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 		Debug2(L_CODEC, "CodecVideoReceiveFrame: AV_FRAME_FLAG_CORRUPT");
 
 	if (no_deint) {
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
 		pFrame->interlaced_frame = 0;
+#else
+		pFrame->flags &= ~AV_FRAME_FLAG_INTERLACED;
+#endif
 		Debug2(L_CODEC, "CodecVideoReceiveFrame: interlaced_frame = 0");
 	}
 
