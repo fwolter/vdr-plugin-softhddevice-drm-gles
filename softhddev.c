@@ -1132,8 +1132,8 @@ closing_stream:
 	}
 
 	if (stream->NewStream && stream->CodecID != AV_CODEC_ID_NONE) {
-		CodecVideoOpen(stream->Decoder, stream->CodecID, stream->Par,
-			&stream->timebase);
+		if (CodecVideoOpen(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
+			Fatal("VideoDecodeInput: Could not open the decoder!");
 		stream->NewStream = 0;
 		stream->Par = NULL;
 	}
@@ -1409,7 +1409,8 @@ void StillPicture(const uint8_t * data, int size)
 		}
 	}
 	if (!Codec_get_VideoContext(MyVideoStream->Decoder)) {
-		CodecVideoOpen(MyVideoStream->Decoder, codec, NULL, NULL);
+		if (CodecVideoOpen(MyVideoStream->Decoder, codec, NULL, NULL, 0))
+			Fatal("StillPicture: Could not open the decoder!");
 		context = 1;
 	}
 	VideoSetTrickSpeed(MyVideoStream->Render, 1, 1);

@@ -52,9 +52,9 @@
 #define MAX_PLANES		2
 
 // CodecMode
-#define CODEC_BY_ID		1 << 0	///< find codec by id
-#define CODEC_NO_MPEG_HW	1 << 1	///< no mpeg hw
-#define CODEC_V4L2M2M_H264	1 << 2	///< set _v4l2m2m for H264
+// currently never set
+#define CODEC_DISABLE_MPEG_HW	1 << 0	///< disable mpeg hardware decoder
+#define CODEC_DISABLE_H264_HW	1 << 1	///< disable h264 hardware decoder
 
 //----------------------------------------------------------------------------
 //	Typedefs
@@ -287,8 +287,6 @@ extern void VideoInit(VideoRender *);	///< Setup video module.
 extern void VideoExit(VideoRender *);		///< Cleanup and exit video module.
 
 extern int VideoCodecMode(VideoRender *);
-
-extern const char * VideoGetDecoderName(const char *);
 
 #ifdef USE_GLES
 extern int DisableOglOsd;

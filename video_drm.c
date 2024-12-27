@@ -273,7 +273,6 @@ void ReadHWPlatform(VideoRender * render)
 	size_t read_size;
 
 	txt_buf = (char *) calloc(bufsize, sizeof(char));
-	render->CodecMode = CODEC_BY_ID;
 	render->NoHwDeint = 0;
 
 	read_size = ReadLineFromFile(txt_buf, bufsize, "/sys/firmware/devicetree/base/compatible");
@@ -287,13 +286,11 @@ void ReadHWPlatform(VideoRender * render)
 	while(read_size) {
 
 		if (strstr(read_ptr, "bcm2711")) {
-			Debug2(L_DRM, "ReadHWPlatform: bcm2711 found, disable Mpeg2 HW decoder");
-			render->CodecMode = CODEC_V4L2M2M_H264 | CODEC_NO_MPEG_HW;	// set _v4l2m2m for H264, disable mpeg hw decoder
+			Debug2(L_DRM, "ReadHWPlatform: bcm2711 found");
 			break;
 		}
 		if (strstr(read_ptr, "amlogic")) {
 			Debug2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
-			render->CodecMode = CODEC_V4L2M2M_H264;	// set _v4l2m2m for H264
 			render->NoHwDeint = 1;
 			break;
 		}
@@ -3101,14 +3098,6 @@ void VideoSetOutputPosition(VideoRender *render, int x, int y, int width, int he
 		render->video.is_scaled = 1;
 
 	Debug("VideoSetOutputPosition %d %d %d %d%s", x, y, width, height, render->video.is_scaled ? ", video is scaled" : "");
-}
-
-const char *VideoGetDecoderName(const char *codec_name)
-{
-	if (!(strcmp("h264", codec_name)))
-		return "h264_v4l2m2m";
-
-	return codec_name;
 }
 
 int VideoCodecMode(VideoRender * render)

@@ -77,7 +77,7 @@ extern void CodecVideoDelDecoder(VideoDecoder *);
 extern  AVCodecContext *Codec_get_VideoContext(VideoDecoder *);
 
     /// Open video codec.
-extern void CodecVideoOpen(VideoDecoder *, int, AVCodecParameters *, AVRational *);
+extern int CodecVideoOpen(VideoDecoder *, int, AVCodecParameters *, AVRational *, int);
 
     /// Close video codec.
 extern void CodecVideoClose(VideoDecoder *);

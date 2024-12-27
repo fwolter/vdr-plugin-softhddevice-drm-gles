@@ -117,55 +117,98 @@ void CodecVideoDelDecoder(VideoDecoder * decoder)
     free(decoder);
 }
 
+static const AVCodecHWConfig *FindHWConfig(const AVCodec *codec)
+{
+	const AVCodecHWConfig *config = NULL;
+	for (int n = 0; (config = avcodec_get_hw_config(codec, n)); n++)
+	{
+		if (!(config->pix_fmt == AV_PIX_FMT_DRM_PRIME))
+			continue;
+
+		if ((config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX) ||
+		    (config->methods & AV_CODEC_HW_CONFIG_METHOD_INTERNAL))
+			return config;
+	}
+
+	Debug2(L_CODEC, "CodecVideoOpen: no HW config found for %s", codec->long_name ? codec->long_name : codec->name);
+	return NULL;
+}
+
+static const AVCodec* FindDecoder(enum AVCodecID codec_id, int force_software)
+{
+	const AVCodec *codec;
+	void *i = 0;
+
+	if (!force_software) {
+		while ((codec = av_codec_iterate(&i))) {
+			if (!av_codec_is_decoder(codec))
+				continue;
+			if (codec->id != codec_id)
+				continue;
+
+			const AVCodecHWConfig *config = FindHWConfig(codec);
+			if (config)
+				return codec;
+		}
+	}
+
+	codec = avcodec_find_decoder(codec_id);
+	if (codec)
+		return codec;
+
+	Warning("CodecVideoOpen: no decoder found");
+	return NULL;
+}
+
 /**
 **	Open video decoder.
 **
 **	@param decoder	private video decoder
 **	@param codec_id	video codec id
 */
-void CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par,
-		AVRational * timebase)
+int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par,
+		AVRational * timebase, int force_software)
 {
-	const AVCodec * codec;
-	enum AVHWDeviceType type = 0;
-	static AVBufferRef *hw_device_ctx = NULL;
-	int err;
+	int swcodec = force_software;
 
-	Debug2(L_CODEC, "CodecVideoOpen: try to open codec %s", avcodec_get_name(codec_id));
-	if (VideoCodecMode(decoder->Render) & CODEC_V4L2M2M_H264 && codec_id == AV_CODEC_ID_H264) {
-		if (!(codec = avcodec_find_decoder_by_name(VideoGetDecoderName(
-			avcodec_get_name(codec_id)))))
+	if ((VideoCodecMode(decoder->Render) & CODEC_DISABLE_MPEG_HW &&
+	     codec_id == AV_CODEC_ID_MPEG2VIDEO))
+		swcodec = 1;
+	if ((VideoCodecMode(decoder->Render) & CODEC_DISABLE_H264_HW &&
+	     codec_id == AV_CODEC_ID_H264))
+		swcodec = 1;
 
-			Error("CodecVideoOpen: The video codec %s is not present in libavcodec",
-				VideoGetDecoderName(avcodec_get_name(codec_id)));
-	} else {
+	Debug2(L_CODEC, "CodecVideoOpen: Try to open decoder for CodecID %s%s", avcodec_get_name(codec_id), swcodec ? " (sw decoding forced)" : "");
 
-		if (!(codec = avcodec_find_decoder(codec_id)))
-			Error("CodecVideoOpen: The video codec %s is not present in libavcodec",
-				avcodec_get_name(codec_id));
-
-		if (!(VideoCodecMode(decoder->Render) & CODEC_NO_MPEG_HW && codec_id == AV_CODEC_ID_MPEG2VIDEO)) {
-			for (int n = 0; ; n++) {
-				const AVCodecHWConfig *cfg = avcodec_get_hw_config(codec, n);
-				if (!cfg) {
-					Warning("CodecVideoOpen: no HW config found");
-					break;
-				}
-				if (cfg->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX &&
-					cfg->device_type == AV_HWDEVICE_TYPE_DRM) {
-
-					Debug2(L_CODEC, "CodecVideoOpen: HW codec %s found",
-						av_hwdevice_get_type_name(cfg->device_type));
-					type = cfg->device_type;
-					break;
-				}
-			}
-		}
+	const AVCodec *codec = FindDecoder(codec_id, swcodec);
+	if (!codec) {
+		Error("CodecVideoOpen: Could not find any decoder for codec %s!", avcodec_get_name(codec_id));
+		return -1;
 	}
-	Debug2(L_CODEC, "CodecVideoOpen: Codec %s found", codec->long_name);
+
+	Debug2(L_CODEC, "CodecVideoOpen: Codec %s for CodecID %s found%s",
+	       codec->long_name ? codec->long_name : codec->name, avcodec_get_name(codec_id), swcodec ? " (sw decoding forced)" : "");
+
 	decoder->VideoCtx = avcodec_alloc_context3(codec);
 	if (!decoder->VideoCtx) {
-		Error("CodecVideoOpen: can't open video codec!");
+		Error("CodecVideoOpen: can't alloc codec context!");
+		return -1;
+	}
+
+	const AVCodecHWConfig *config = !swcodec ? FindHWConfig(codec) : NULL;
+	static AVBufferRef *hw_device_ctx = NULL;
+
+	if (config && (config->methods & AV_CODEC_HW_CONFIG_METHOD_HW_DEVICE_CTX)) {
+		const char *type_name = av_hwdevice_get_type_name(config->device_type);
+		if (av_hwdevice_ctx_create(&hw_device_ctx, config->device_type, NULL, NULL, 0) < 0) {
+			avcodec_free_context(&decoder->VideoCtx);
+			Error("CodecVideoOpen: Error creating HW context %s",
+			      type_name ? type_name : "unknown");
+			return -1;
+		}
+		Debug2(L_CODEC, "CodecVideoOpen: Using %s HW codec",
+		       type_name ? type_name : "unknown");
+		decoder->VideoCtx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
 	}
 
 	decoder->VideoCtx->codec_id = codec_id;
@@ -173,7 +216,7 @@ void CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Pa
 	decoder->VideoCtx->opaque = decoder;
 	decoder->VideoCtx->workaround_bugs = FF_BUG_AUTODETECT;
 
-	if (strstr(codec->name, "_v4l2")) {
+	if (strstr(codec->name, "_v4l2") && codec_id == AV_CODEC_ID_H264) {
 		int width;
 		int height;
 
@@ -188,27 +231,12 @@ void CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Pa
 		}
 	}
 
-//	decoder->VideoCtx->flags |= AV_CODEC_FLAG_BITEXACT;
-//	decoder->VideoCtx->flags2 |= AV_CODEC_FLAG2_FAST;
-//	decoder->VideoCtx->flags |= AV_CODEC_FLAG_TRUNCATED;
-//	if (codec->capabilities & AV_CODEC_CAP_DR1)
-//		Debug2(L_CODEC, "[CodecVideoOpen] AV_CODEC_CAP_DR1 => get_buffer()");
 	if (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS ||
 		AV_CODEC_CAP_SLICE_THREADS) {
 		decoder->VideoCtx->thread_count = 4;
-		Debug2(L_CODEC, "CodecVideoOpen: decoder use %d threads",
-			decoder->VideoCtx->thread_count);
 	}
 	if (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS){
 		decoder->VideoCtx->thread_type = FF_THREAD_SLICE;
-		Debug2(L_CODEC, "CodecVideoOpen: decoder use THREAD_SLICE threads");
-	}
-
-	if (type) {
-		if (av_hwdevice_ctx_create(&hw_device_ctx, type, NULL, NULL, 0) < 0)
-			Error("CodecVideoOpen: Error init the HW decoder");
-		else
-			decoder->VideoCtx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
 	}
 
 	if (Par) {
@@ -222,22 +250,35 @@ void CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Pa
 
 	if (strstr(codec->name, "_v4l2")) {
 		if (av_opt_set_int(decoder->VideoCtx->priv_data, "num_capture_buffers", NUM_CAPTURE_BUFFERS, 0) < 0) {
-			Fatal("CodecVideoOpen: can't set %d num_capture_buffers", NUM_CAPTURE_BUFFERS);
+			Error("CodecVideoOpen: can't set %d num_capture_buffers", NUM_CAPTURE_BUFFERS);
 		}
 		Debug2(L_CODEC, "CodecVideoOpen: set num_capture_buffers %d", NUM_CAPTURE_BUFFERS);
 		if (av_opt_set_int(decoder->VideoCtx->priv_data, "num_output_buffers", NUM_OUTPUT_BUFFERS, 0) < 0) {
-			Fatal("CodecVideoOpen: can't set %d num_output_buffers", NUM_OUTPUT_BUFFERS);
+			Error("CodecVideoOpen: can't set %d num_output_buffers", NUM_OUTPUT_BUFFERS);
 		}
 		Debug2(L_CODEC, "CodecVideoOpen: set num_output_buffers %d", NUM_OUTPUT_BUFFERS);
 	}
 
-	err = avcodec_open2(decoder->VideoCtx, decoder->VideoCtx->codec, NULL);
+	int err = avcodec_open2(decoder->VideoCtx, decoder->VideoCtx->codec, NULL);
 	if (err < 0) {
-		Fatal("CodecVideoOpen: Error opening the decoder: %s",
-			av_err2str(err));
+		avcodec_free_context(&decoder->VideoCtx);
+		if (force_software) {
+			Error("CodecVideoOpen: Error opening the decoder: %s",
+				av_err2str(err));
+			return -1;
+		}
+		Debug2(L_CODEC, "CodecVideoOpen: Could not open %s decoder, try opening software decoder",
+		       codec->long_name ? codec->long_name : codec->name);
+
+		return CodecVideoOpen(decoder, codec_id, Par, timebase, 1);
 	}
 
-	Debug2(L_CODEC, "CodecVideoOpen: decoder opened");
+	Debug2(L_CODEC, "CodecVideoOpen: Codec %s for CodecID %s opened%s, using %d threads",
+	       codec->long_name ? codec->long_name : codec->name,
+	       avcodec_get_name(codec_id),
+	       swcodec ? " (sw decoding forced)" : "",
+	       decoder->VideoCtx->thread_count);
+	return 0;
 }
 
 /**
