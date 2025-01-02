@@ -60,6 +60,9 @@ Supported Hardware:
 
 Known Bugs/ TODO:
 -----------------
+	- RPI: trickspeed on RPI skips too many frames
+	  this is a decoder issue and needs more investigation
+	  (Rockchip is fine)
 	- attach/detach isn't implemented
 	- grabbing is not implemented yet
 	- amlogic: few artifacts and brightness issues,
