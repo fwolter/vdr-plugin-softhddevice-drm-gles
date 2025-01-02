@@ -1157,7 +1157,7 @@ closing_stream:
 		if (!VideoGetTrickSpeed(stream->Render)) {
 			if (!stream->NewStream) { // this is for mediaplayer ?
 				if (!CodecVideoReceiveFrame(stream->Decoder, 0, &frame)) {
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame, 0);
+					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame, 0, 0);
 				}
 			}
 // this is normal TrickSpeed
@@ -1177,7 +1177,7 @@ closing_stream:
 						break;
 					}
 					Debug2(L_TRICK, "VideoDecodeInput: Trickspeed, send another cloned trick frame %d %p", VideoGetTrickCounter(stream->Render), trickframe);
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe, VideoGetTrickSpeed(stream->Render));
+					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe, VideoGetTrickSpeed(stream->Render), 0);
 					VideoDecTrickCounter(stream->Render);
 					if (stream->ClosingStream) {
 						av_frame_free(&frame);
@@ -1333,6 +1333,7 @@ newstream:
 */
 void StillPicture(const uint8_t * data, int size)
 {
+	Debug2(L_STILL, "StillPicture");
 	AVPacket *avpkt;
 	AVFrame *frame;
 
@@ -1413,24 +1414,23 @@ void StillPicture(const uint8_t * data, int size)
 			Fatal("StillPicture: Could not open the decoder!");
 		context = 1;
 	}
-	VideoSetTrickSpeed(MyVideoStream->Render, 1, 1);
+	AudioPause();
 
 send:
 	CodecVideoSendPacket(MyVideoStream->Decoder, avpkt);
-	usleep(20000);
+	usleep(10000);
 	if (CodecVideoReceiveFrame(MyVideoStream->Decoder, 1, &frame))
 		goto send;
 	else Debug2(L_STILL, "StillPicture: Received Frame");
-	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, 1);
+	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, 0, 1);
 	if (context) {
 		CodecVideoClose(MyVideoStream->Decoder);
 		MyVideoStream->CodecID = AV_CODEC_ID_NONE;
 	}
+	ClearAudio();
 	ClearVideo(MyVideoStream);
 	StreamFreezed = 0;
-
-	usleep(100000);
-	VideoSetTrickSpeed(MyVideoStream->Render, 0, 1);
+	AudioPlay();
 }
 
 

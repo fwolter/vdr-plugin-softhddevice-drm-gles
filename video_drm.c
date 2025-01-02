@@ -1521,8 +1521,8 @@ audioclock:
 ///
 ///	Get next video frame
 ///
-//	retval 0	got a frame
-//	retval 1	sth went wrong
+//	retval 0	received frame with PTS value
+//	retval 1	received frame without PTS value
 //
 ///
 static int VideoGetFrame(VideoRender * render, AVFrame **frame)
@@ -1533,19 +1533,10 @@ static int VideoGetFrame(VideoRender * render, AVFrame **frame)
 	render->FramesRead = (render->FramesRead + 1) % VIDEO_SURFACES_MAX;
 	atomic_dec(&render->FramesFilled);
 
-	// should AV_NOPTS_VALUE be sorted out?
-	if (pframe->pts == AV_NOPTS_VALUE) {
-		av_frame_free(&pframe);
-		Debug2(L_DRM, "VideoGetFrame: frame has AV_NOPTS_VALUE, skip it");
-		return 1;
-	}
-
-	if (!pframe->opaque_ref) {
-		av_frame_free(&pframe);
-		Fatal("VideoGetFrame: SHOULD NOT HAPPEN! frame has no private data, skip it");
-	}
-
 	*frame = pframe;
+
+	if (pframe->pts == AV_NOPTS_VALUE)
+		return 1;
 
 	return 0;
 }
@@ -1735,8 +1726,18 @@ dequeue:
 		goto page_flip;
 
 	// advance frame
-	if (VideoGetFrame(render, &frame))
-		return 1;	// frame PTS is AV_NOPTS_VALUE, goto skip_sync?
+	if (VideoGetFrame(render, &frame)) {
+		FrameData *fd = (FrameData *)frame->opaque_ref->data;
+		if (fd->stillpicture) {
+			Debug2(L_STILL, "Frame2Display: Stillpicture has AV_NOPTS_VALUE, skip sync ...");
+			goto skip_sync;
+		} else {
+			// TODO: fast/soft sync
+			Debug2(L_DRM, "Frame2Display: no AV_NOPTS_VALUE, use next frame ...");
+			av_frame_free(&frame);
+			return 1;
+		}
+	}
 
 	FrameData *fd = (FrameData *)frame->opaque_ref->data;
 
@@ -2503,7 +2504,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 ///	@param frame		frame to display
 ///
 void VideoRenderFrame(VideoRender * render,
-    AVCodecContext * video_ctx, AVFrame * frame, int trickspeed)
+    AVCodecContext * video_ctx, AVFrame * frame, int trickspeed, int stillpicture)
 {
 	int interlaced;
 
@@ -2523,6 +2524,7 @@ void VideoRenderFrame(VideoRender * render,
 	}
 	fd = (FrameData *)frame->opaque_ref->data;
 	fd->trickspeed = trickspeed;
+	fd->stillpicture = stillpicture;
 
 fillframe:
 	if (render->Closing || render->Flushing) {
