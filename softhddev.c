@@ -1157,7 +1157,7 @@ closing_stream:
 		if (!VideoGetTrickSpeed(stream->Render)) {
 			if (!stream->NewStream) { // this is for mediaplayer ?
 				if (!CodecVideoReceiveFrame(stream->Decoder, 0, &frame)) {
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame, 0, 0);
+					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame, 0);
 				}
 			}
 // this is normal TrickSpeed
@@ -1177,7 +1177,7 @@ closing_stream:
 						break;
 					}
 					Debug2(L_TRICK, "VideoDecodeInput: Trickspeed, send another cloned trick frame %d %p", VideoGetTrickCounter(stream->Render), trickframe);
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe, VideoGetTrickSpeed(stream->Render), 0);
+					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe, FRAME_FLAG_TRICKSPEED);
 					VideoDecTrickCounter(stream->Render);
 					if (stream->ClosingStream) {
 						av_frame_free(&frame);
@@ -1422,7 +1422,7 @@ send:
 	if (CodecVideoReceiveFrame(MyVideoStream->Decoder, 1, &frame))
 		goto send;
 	else Debug2(L_STILL, "StillPicture: Received Frame");
-	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, 0, 1);
+	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, FRAME_FLAG_STILLPICTURE);
 	if (context) {
 		CodecVideoClose(MyVideoStream->Decoder);
 		MyVideoStream->CodecID = AV_CODEC_ID_NONE;

@@ -1601,7 +1601,7 @@ static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf *
 		return 1;
 	}
 
-	pbuf->trickspeed = fd->trickspeed;
+	pbuf->trickspeed = fd->flags & FRAME_FLAG_TRICKSPEED;
 
 	*buf = pbuf;
 	return 0;
@@ -1728,7 +1728,7 @@ dequeue:
 	// advance frame
 	if (VideoGetFrame(render, &frame)) {
 		FrameData *fd = (FrameData *)frame->opaque_ref->data;
-		if (fd->stillpicture) {
+		if (fd->flags & FRAME_FLAG_STILLPICTURE) {
 			Debug2(L_STILL, "Frame2Display: Stillpicture has AV_NOPTS_VALUE, skip sync ...");
 			goto skip_sync;
 		} else {
@@ -1742,7 +1742,7 @@ dequeue:
 	FrameData *fd = (FrameData *)frame->opaque_ref->data;
 
 	// skip old audio in trickspeed
-	if (fd->trickspeed) {
+	if (fd->flags & FRAME_FLAG_TRICKSPEED) {
 		AudioSkipInTrickSpeed(frame->pts, 0);
 		goto skip_sync;
 	}
@@ -2117,7 +2117,7 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 	int i;
 	FrameData *ifd = (FrameData *)inframe->opaque_ref->data;
 
-	if (ifd->trickspeed) {	// if we have trickspeed, always use a free buffer, because its destroyed in Frame2Display after rendering
+	if (ifd->flags & FRAME_FLAG_TRICKSPEED) {	// if we have trickspeed, always use a free buffer, because its destroyed in Frame2Display after rendering
 		for (i = 0; i < RENDERBUFFERS; i++) {
 			if (render->bufs[i].dirty == 0)
 				break;
@@ -2201,7 +2201,7 @@ get_buffer:
 		}
 	}
 	fd = (FrameData *)frame->opaque_ref->data;
-	fd->trickspeed = ifd->trickspeed;
+	fd->flags = ifd->flags;
 
 	primedata = av_mallocz(sizeof(AVDRMFrameDescriptor));
 	primedata->objects[0].fd = buf->fd_prime;
@@ -2221,7 +2221,7 @@ get_buffer:
 	atomic_inc(&render->FramesFilled);
 	pthread_mutex_unlock(&DisplayQueue);
 
-	if (!ifd->trickspeed)
+	if (!(ifd->flags & FRAME_FLAG_TRICKSPEED))
 		render->enqueue_buffer = (render->enqueue_buffer + 1) % (VIDEO_SURFACES_MAX + 2);
 
 	av_frame_free(&inframe);
@@ -2308,7 +2308,8 @@ fillframe:
 			}
 			fd = (FrameData *)filt_frame->opaque_ref->data;
 			// set trickspeed flag of the filtered frame (scale filter and AV_PIX_FMT_YUV420P)
-			fd->trickspeed = render->Filter_Trick;
+			if (render->Filter_Trick)
+				fd->flags |= FRAME_FLAG_TRICKSPEED;
 
 			pthread_mutex_lock(&DisplayQueue);
 			if (atomic_read(&render->FramesFilled) < VIDEO_SURFACES_MAX) {
@@ -2395,7 +2396,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	// progressive and trickspeed AV_PIX_FMT_YUV420P (software decoded) -> scale filter (for NV12 output)
 	// progressive and trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) doesn't get to the FilterHandlerThread
 	render->Filter_Trick = 0;
-	if (interlaced && !fd->trickspeed) {
+	if (interlaced && !(fd->flags & FRAME_FLAG_TRICKSPEED)) {
 		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
 			filter_descr = "deinterlace_v4l2m2m";
 		} else if (frame->format == AV_PIX_FMT_YUV420P) {
@@ -2504,7 +2505,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 ///	@param frame		frame to display
 ///
 void VideoRenderFrame(VideoRender * render,
-    AVCodecContext * video_ctx, AVFrame * frame, int trickspeed, int stillpicture)
+    AVCodecContext * video_ctx, AVFrame * frame, int flags)
 {
 	int interlaced;
 
@@ -2523,8 +2524,7 @@ void VideoRenderFrame(VideoRender * render,
 			Fatal("VideoRenderFrame: cannot allocate private frame data");
 	}
 	fd = (FrameData *)frame->opaque_ref->data;
-	fd->trickspeed = trickspeed;
-	fd->stillpicture = stillpicture;
+	fd->flags = flags;
 
 fillframe:
 	if (render->Closing || render->Flushing) {
@@ -2538,13 +2538,13 @@ fillframe:
 	interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
 #endif
 	// we can't trust frame->interlaced_frame ...
-	if (!trickspeed && video_ctx->framerate.num > 0) {
+	if (!(fd->flags & FRAME_FLAG_TRICKSPEED) && video_ctx->framerate.num > 0) {
 		if (video_ctx->framerate.num / video_ctx->framerate.den > 30)
 			interlaced = 0;
 		else
 			interlaced = 1;
 	}
-	if (!trickspeed && (video_ctx->codec_id == AV_CODEC_ID_HEVC))
+	if (!(fd->flags & FRAME_FLAG_TRICKSPEED) && (video_ctx->codec_id == AV_CODEC_ID_HEVC))
 		interlaced = 0;
 
 	// normal mode: AV_PIX_FMT_YUV420P, interlaced -> software deinterlacer (bwdif filter)

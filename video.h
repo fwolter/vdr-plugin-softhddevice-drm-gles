@@ -95,9 +95,11 @@ struct lastFrame {
 	int trickspeed;
 };
 
+#define FRAME_FLAG_TRICKSPEED		1 << 0
+#define FRAME_FLAG_STILLPICTURE		1 << 1
+
 typedef struct FrameData {
-	int trickspeed;
-	int stillpicture;
+	int flags;
 } FrameData;
 
 struct plane_properties {
@@ -227,7 +229,7 @@ extern enum AVPixelFormat Video_get_format(VideoRender *, AVCodecContext *,
 
     /// Render a ffmpeg frame.
 extern void VideoRenderFrame(VideoRender *, AVCodecContext *,
-    AVFrame *, int trickspeed, int stillpicture);
+    AVFrame *, int flags);
 
     /// Set audio delay.
 extern void VideoSetAudioDelay(int);
