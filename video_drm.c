@@ -1517,36 +1517,51 @@ audioclock:
 }
 
 ///
-///	Get video frame and buffer
+///	Get next video frame
 ///
-//	retval 0	got a frame and buffer
+//	retval 0	got a frame
 //	retval 1	sth went wrong
 //
 ///
-static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm_buf **buf)
+static int VideoGetFrame(VideoRender * render, AVFrame **frame)
 {
-	AVDRMFrameDescriptor *primedata = NULL;
-	struct drm_buf *pbuf = NULL;
 	AVFrame *pframe = NULL;
-	int i;
 
 	pframe = render->FramesRb[render->FramesRead];
 	render->FramesRead = (render->FramesRead + 1) % VIDEO_SURFACES_MAX;
 	atomic_dec(&render->FramesFilled);
-	primedata = (AVDRMFrameDescriptor *)pframe->data[0];
 
+	// should AV_NOPTS_VALUE be sorted out?
 	if (pframe->pts == AV_NOPTS_VALUE) {
 		av_frame_free(&pframe);
-		Debug2(L_DRM, "VideoGetFrameBuffer: frame has AV_NOPTS_VALUE, skip it");
+		Debug2(L_DRM, "VideoGetFrame: frame has AV_NOPTS_VALUE, skip it");
 		return 1;
 	}
 
 	if (!pframe->opaque_ref) {
 		av_frame_free(&pframe);
-		Fatal("VideoGetFrameBuffer: SHOULD NOT HAPPEN! frame has no private data, skip it");
+		Fatal("VideoGetFrame: SHOULD NOT HAPPEN! frame has no private data, skip it");
 	}
 
-	FrameData *fd = (FrameData *)pframe->opaque_ref->data;
+	*frame = pframe;
+
+	return 0;
+}
+
+///
+///	Get suitable framebuffer for frame
+///
+//	retval 0	got a buffer
+//	retval 1	sth went wrong
+//
+///
+static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf **buf)
+{
+	struct drm_buf *pbuf = NULL;
+	int i;
+
+	AVDRMFrameDescriptor *primedata = (AVDRMFrameDescriptor *)frame->data[0];
+	FrameData *fd = (FrameData *)frame->opaque_ref->data;
 
 	// search for a made fd / FB combination
 	for (i = 0; i < RENDERBUFFERS; i++) {
@@ -1571,30 +1586,30 @@ static int VideoGetFrameBuffer(VideoRender * render, AVFrame **frame, struct drm
 			if (render->bufs[i].dirty == 0)
 				break;
 		}
-		if (render->bufs[i].dirty)
-			Fatal("VideoGetFrameBuffer: SHOULD NOT HAPPEN! no free buffer available!");
+		if (render->bufs[i].dirty) {
+			Debug("VideoGetBuffer: SHOULD NOT HAPPEN! no free buffer available!");
+			return 1;
+		}
 
 		pbuf = &render->bufs[i];;
 
-		pbuf->width = (uint32_t)pframe->width;
-		pbuf->height = (uint32_t)pframe->height;
+		pbuf->width = (uint32_t)frame->width;
+		pbuf->height = (uint32_t)frame->height;
 		pbuf->fd_prime = primedata->objects[0].fd;
 
-		if (SetupFB(render, pbuf, primedata)) {
-			av_frame_free(&pframe);
+		if (SetupFB(render, pbuf, primedata))
 			return 1;
-		}
+
 		render->bufs[i].enqueue = 0;
 	}
 
 	if (pbuf == 0) {
-		Debug2(L_DRM, "VideoGetFrameBuffer failed, no buffer found!");
+		Debug("VideoGetBuffer: SHOULD NOT HAPPEN! failed, no buffer found!");
 		return 1;
 	}
 
 	pbuf->trickspeed = fd->trickspeed;
 
-	*frame = pframe;
 	*buf = pbuf;
 	return 0;
 }
@@ -1701,6 +1716,7 @@ static int Frame2Display(VideoRender * render)
 		goto page_flip;
 
 dequeue:
+	// wait for a frame in the ringbuffer
 	while (!atomic_read(&render->FramesFilled)) {
 		if (check_closing_or_flushing(render, &skip_video, &buf))
 			goto page_flip;
@@ -1710,10 +1726,10 @@ dequeue:
 			goto page_flip;
 		}
 
+		// no frames in the ringbuffer, but we had draw activity on the osd
 		if (check_for_osd(render, &skip_video))
 			goto page_flip;
 
-		// No frames in the ringbuffer, but we had draw activity on the osd
 		usleep(10000);
 	}
 
@@ -1722,13 +1738,9 @@ dequeue:
 		goto page_flip;
 	}
 
-	if (VideoGetFrameBuffer(render, &frame, &buf)) {
-		av_frame_free(&frame);
-		return 1;
-	}
-
-	if (!frame->opaque_ref)
-		Fatal("Frame2Display: SHOULD NOT HAPPEN! frame has no private data, skip it");
+	// advance frame
+	if (VideoGetFrame(render, &frame))
+		return 1;	// frame PTS is AV_NOPTS_VALUE, goto skip_sync?
 
 	FrameData *fd = (FrameData *)frame->opaque_ref->data;
 
@@ -1750,7 +1762,7 @@ dequeue:
 	if (ret < 0) { // drop frame (dup is handled within VideoSync())
 		av_frame_free(&frame);
 		goto dequeue;
-	} else if (ret) { // close or flush
+	} else if (ret) { // close or flush (black buffer or skip video)
 		av_frame_free(&frame);
 		goto page_flip;
 	}
@@ -1758,12 +1770,21 @@ dequeue:
 	render->StartCounter++;
 
 skip_sync:
+	// get suitable framebuffer
+	if (VideoGetBuffer(render, frame, &buf)) {
+		av_frame_free(&frame);
+		return 1;
+	}
+
 	buf->frame = frame;
 
 page_flip:
 	// no modesetting was done
-	if (VideoDrmCommit(render, buf, skip_video) < 0)
+	if (VideoDrmCommit(render, buf, skip_video) < 0) {
+		if (frame)
+			av_frame_free(&frame);
 		return 1;
+	}
 
 	// only osd was set
 	if (skip_video)
