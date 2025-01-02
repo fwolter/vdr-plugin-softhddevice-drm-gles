@@ -1621,7 +1621,7 @@ static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf *
 ///	retval 1	needs closing/flushing: set black screen if closing, skip video if flushing
 ///
 ///
-static int check_closing_or_flushing(VideoRender *render, int *skip_video, struct drm_buf **buf) {
+static int check_closing(VideoRender *render, int *skip_video, struct drm_buf **buf) {
 	if (render->Closing) {
 		Debug2(L_DRM, "Frame2Display: closing, set a black FB");
 		*buf = &render->buf_black;
@@ -1645,37 +1645,40 @@ static int check_closing_or_flushing(VideoRender *render, int *skip_video, struc
 ///
 ///
 static int check_pausing(VideoRender *render, int *skip_video) {
-	if (VideoIsPaused(render)) {
-		*skip_video = 1;
-//		Debug2(L_DRM, "Frame2Display: paused, skip video");
-		return 1;
-	}
+	if (!VideoIsPaused(render))
+		return 0;
 
-	return 0;
+	*skip_video = 1;
+	usleep(10000);
+//	Debug2(L_DRM, "Frame2Display: paused, skip video");
+	return 1;
 }
 
 ///
-///	Check if video is paused and
+///	Check if video is paused and wait for video to come up with audio before pausing
 ///
 ///	retval 0	either not paused or waiting for video to sync with audio
 ///	retval 1	paused, skip the video
 ///
 ///
 static int check_pausing_with_sync(VideoRender *render, int *skip_video) {
-	if (VideoIsPaused(render)) {
-		int64_t audio_pts = AudioGetClock();
-		int64_t video_pts = VideoGetClock(render) * 1000 * av_q2d(*render->timebase);
-		if (video_pts == AV_NOPTS_VALUE || audio_pts == AV_NOPTS_VALUE) {
-			*skip_video = 1;
-			return 1;
-		}
+	if (!VideoIsPaused(render))
+		return 0;
 
-		int diff = video_pts - audio_pts - VideoAudioDelay;
-		// audio is behind video, so pause - otherwise let video come up with audio before "real" pause
-		if (diff > 0) {
-			*skip_video = 1;
-			return 1;
-		}
+	int64_t audio_pts = AudioGetClock();
+	int64_t video_pts = VideoGetClock(render) * 1000 * av_q2d(*render->timebase);
+	if (video_pts == AV_NOPTS_VALUE || audio_pts == AV_NOPTS_VALUE) {
+		usleep(10000);
+		*skip_video = 1;
+		return 1;
+	}
+
+	int diff = video_pts - audio_pts - VideoAudioDelay;
+	// audio is behind video, so pause - otherwise let video come up with audio before "real" pause
+	if (diff > 0) {
+		usleep(10000);
+		*skip_video = 1;
+		return 1;
 	}
 
 	return 0;
@@ -1688,7 +1691,7 @@ static int check_pausing_with_sync(VideoRender *render, int *skip_video) {
 ///	retval 1	we have osd, render it, (skip the video)
 ///
 ///
-static int check_for_osd(VideoRender *render, int *skip_video) {
+static int check_osd(VideoRender *render, int *skip_video) {
 	if (render->buf_osd && render->buf_osd->dirty) {
 		Debug2(L_DRM, "Frame2Display: no video but osd, skip video");
 		*skip_video = 1;
@@ -1712,31 +1715,22 @@ static int Frame2Display(VideoRender * render)
 	int skip_video = 0;
 
 	// early skips
-	if (check_closing_or_flushing(render, &skip_video, &buf))
+	if (check_closing(render, &skip_video, &buf))
 		goto page_flip;
 
 dequeue:
 	// wait for a frame in the ringbuffer
 	while (!atomic_read(&render->FramesFilled)) {
-		if (check_closing_or_flushing(render, &skip_video, &buf))
-			goto page_flip;
-
-		if (check_pausing(render, &skip_video)) {
-			usleep(10000);
-			goto page_flip;
-		}
-
-		// no frames in the ringbuffer, but we had draw activity on the osd
-		if (check_for_osd(render, &skip_video))
+		if (check_closing(render, &skip_video, &buf) ||
+		    check_pausing(render, &skip_video) ||
+		    check_osd(render, &skip_video))
 			goto page_flip;
 
 		usleep(10000);
 	}
 
-	if (check_pausing_with_sync(render, &skip_video)) {
-		usleep(10000);
+	if (check_pausing_with_sync(render, &skip_video))
 		goto page_flip;
-	}
 
 	// advance frame
 	if (VideoGetFrame(render, &frame))
