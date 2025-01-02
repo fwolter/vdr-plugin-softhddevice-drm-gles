@@ -2396,7 +2396,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	// progressive and trickspeed AV_PIX_FMT_YUV420P (software decoded) -> scale filter (for NV12 output)
 	// progressive and trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) doesn't get to the FilterHandlerThread
 	render->Filter_Trick = 0;
-	if (interlaced && !(fd->flags & FRAME_FLAG_TRICKSPEED)) {
+	if (interlaced && !(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE)) {
 		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
 			filter_descr = "deinterlace_v4l2m2m";
 		} else if (frame->format == AV_PIX_FMT_YUV420P) {
