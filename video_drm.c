@@ -1214,6 +1214,8 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 	}
 
 	if (buf->handle[0]) {
+		// this can happen, when we SetPlayMode 0 while in trickspeed
+		// does not show negative effects, but its not nice though -> TODO
 		if (drmIoctl(fd_drm, DRM_IOCTL_GEM_CLOSE, &buf->handle[0]) < 0)
 			Error("DestroyFB: cannot close handle %d FB %d PRIME %d GEM (%d): %m", buf->handle[0], buf->fb_id, buf->fd_prime, errno);
 	}
