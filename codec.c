@@ -278,6 +278,8 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 	       avcodec_get_name(codec_id),
 	       swcodec ? " (sw decoding forced)" : "",
 	       decoder->VideoCtx->thread_count);
+
+	decoder->sent = decoder->received = 0;
 	return 0;
 }
 
@@ -294,6 +296,7 @@ void CodecVideoClose(VideoDecoder * decoder)
 		avcodec_free_context(&decoder->VideoCtx);
 	}
 	pthread_mutex_unlock(&CodecLockMutex);
+	decoder->sent = decoder->received = 0;
 }
 
 /**
@@ -335,6 +338,9 @@ int CodecVideoSendPacket(VideoDecoder * decoder, const AVPacket * avpkt)
 			av_err2str(ret));
 		return -1;
 	}
+
+	decoder->sent++;
+	Debug2(L_PACKET, "CodecVideoSendPacket:   %6d PTS %s <<---", decoder->sent, Timestamp2String(avpkt->pts / 90));
 	return 0;
 }
 
@@ -390,6 +396,8 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 
 	*frame = pFrame;
 
+	decoder->received++;
+	Debug2(L_PACKET, "CodecVideoReceiveFrame: %6d PTS %s --->> (%2d)", decoder->received, Timestamp2String(pFrame->pts / 90), decoder->sent - decoder->received);
 	return 0;
 }
 
@@ -406,6 +414,7 @@ void CodecVideoFlushBuffers(VideoDecoder * decoder)
 		avcodec_flush_buffers(decoder->VideoCtx);
 	}
 	pthread_mutex_unlock(&CodecLockMutex);
+	decoder->sent = decoder->received = 0;
 }
 
 //----------------------------------------------------------------------------

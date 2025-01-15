@@ -46,6 +46,8 @@ struct _video_decoder_
     VideoRender *Render;		///< video hardware decoder
 
     AVCodecContext *VideoCtx;		///< video codec context
+    int sent;
+    int received;
 };
 
 //----------------------------------------------------------------------------

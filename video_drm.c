@@ -1791,6 +1791,9 @@ page_flip:
 	if (frame)
 		VideoSetClock(render, frame->pts);
 
+	if (frame)
+		Debug2(L_PACKET, "Frame2Display:                 PTS %s", Timestamp2String(frame->pts / 90));
+
 	// new video frame was sent, rotate the frames
 	if (render->lastframe->frame) {
 		// if the lastframe was a trickframe or a flush is forced, destroy the FB
