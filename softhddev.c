@@ -77,11 +77,12 @@ struct __video_stream__
     enum AVCodecID CodecID;		///< current codec id
     AVCodecParameters * Par;
     struct AVRational timebase;
+    int trickpkts;			///< how many avpkt does the decoder need in trickspeed mode?
 
     volatile char NewStream;		///< flag new video stream
     volatile char ClosingStream;	///< flag closing video stream
     volatile char TrickSpeed;		///< flag trickspeed stream
-    volatile char NewTrickSpeed;	///< TrickSpeed was triggered
+    int interlaced;			///< is this an interlaced stream?
 
     AVPacket PacketRb[VIDEO_PACKET_MAX];	///< PES packet ring buffer
     int PacketWrite;			///< ring buffer write pointer
@@ -92,8 +93,8 @@ struct __video_stream__
 static VideoStream MyVideoStream[1];	///< normal video stream
 
 static pthread_mutex_t PktsLockMutex;	///< video packets lock mutex
-static pthread_mutex_t WaitReopenMutex = PTHREAD_MUTEX_INITIALIZER;		///< mutex for codec reopen
-static pthread_cond_t WaitReopenCondition;		///< condition for codec reopen
+static pthread_mutex_t WaitCloseMutex = PTHREAD_MUTEX_INITIALIZER;	///< mutex for closing stream
+static pthread_cond_t WaitCloseCondition;	///< condition for closing stream
 
 //////////////////////////////////////////////////////////////////////////////
 //	Audio
@@ -1072,7 +1073,7 @@ static void VideoStreamClose(VideoStream * stream)
 void ClearVideo(VideoStream * stream)
 {
 	AVPacket *avpkt;
-	Debug("ClearVideo()");
+	Debug("ClearVideo() packets %d", atomic_read(&stream->PacketsFilled));
 	pthread_mutex_lock(&PktsLockMutex);
 	atomic_set(&stream->PacketsFilled, 0);
 	stream->PacketRead = stream->PacketWrite = 0;
@@ -1083,6 +1084,24 @@ void ClearVideo(VideoStream * stream)
 
 	CodecVideoFlushBuffers(stream->Decoder);
 	pthread_mutex_unlock(&PktsLockMutex);
+}
+
+int closing_stream_requested(VideoStream *stream)
+{
+	if (stream->ClosingStream && stream->CodecID != AV_CODEC_ID_NONE) {
+		pthread_mutex_lock(&WaitCloseMutex);
+		if (!MyVideoStream->TrickSpeed || !VideoGetTrickForward(stream->Render)) {
+			ClearVideo(stream);
+			stream->CodecID = AV_CODEC_ID_NONE;
+			CodecVideoClose(stream->Decoder);
+			stream->Par = NULL;
+		}
+		stream->ClosingStream = 0;
+		pthread_cond_signal(&WaitCloseCondition);
+		pthread_mutex_unlock(&WaitCloseMutex);
+		return -1;
+	}
+	return 0;
 }
 
 /**
@@ -1098,95 +1117,103 @@ int VideoDecodeInput(VideoStream * stream)
 {
 	AVPacket *avpkt;
 	AVFrame *frame;
+	int ret = 0;
+	static int sent = 0;
 
-	pthread_mutex_lock(&WaitReopenMutex);
+	if (closing_stream_requested(stream))
+		return -1;
+
 	if (StreamFreezed) {		// stream freezed
 //		Info("VideoDecodeInput: stream->Freezed");
 		// clear is called during freezed
-		pthread_mutex_unlock(&WaitReopenMutex);
 		return 1;
-	}
-
-	// re-open decoder for trickspeed
-	if (stream->NewTrickSpeed) {
-		if (stream->CodecID != AV_CODEC_ID_NONE) {
-			Debug2(L_TRICK, "VideoDecodeInput: Reopen Decoder for new trickspeed");
-			ClearVideo(stream);
-			CodecVideoClose(stream->Decoder);
-			stream->CodecID = AV_CODEC_ID_NONE;
-			stream->NewTrickSpeed = 0;
-		}
-		pthread_cond_signal(&WaitReopenCondition);
-		pthread_mutex_unlock(&WaitReopenMutex);
-		return -1;
-	}
-	pthread_mutex_unlock(&WaitReopenMutex);
-
-	if (stream->ClosingStream && stream->CodecID != AV_CODEC_ID_NONE) {
-closing_stream:
-		ClearVideo(stream);
-		CodecVideoClose(stream->Decoder);
-		stream->CodecID = AV_CODEC_ID_NONE;
-		stream->ClosingStream = 0;
-		return -1;
 	}
 
 	if (stream->NewStream && stream->CodecID != AV_CODEC_ID_NONE) {
 		if (CodecVideoOpen(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
 			Fatal("VideoDecodeInput: Could not open the decoder!");
 		stream->NewStream = 0;
-		stream->Par = NULL;
 	}
 
 	if (stream->CodecID != AV_CODEC_ID_NONE) {
 		pthread_mutex_lock(&PktsLockMutex);
-		if (!atomic_read(&stream->PacketsFilled)) {
+		// in trickspeed wait for minimum pkts needed to decode a frame
+		int minpkts = (VideoGetTrickSpeed(stream->Render) && stream->interlaced) ? stream->trickpkts : 1;
+		if (atomic_read(&stream->PacketsFilled) < minpkts) {
 			pthread_mutex_unlock(&PktsLockMutex);
 			return -1;
 		}
 		avpkt = &stream->PacketRb[stream->PacketRead];
 
 		// try sending packet to decoder
-		if (CodecVideoSendPacket(stream->Decoder, avpkt) <= 0) { // packet was sent or something went wrong, advance packet
+		ret = CodecVideoSendPacket(stream->Decoder, avpkt);
+		if (ret <= 0) { // something went wrong or packet was sent, advance packet
 			stream->PacketRead = (stream->PacketRead + 1) % VIDEO_PACKET_MAX;
 			atomic_dec(&stream->PacketsFilled);
+			// in backward trickspeed force the decoder to decode the frame
+			if (ret == 0 && VideoGetTrickSpeed(stream->Render) && !VideoGetTrickForward(stream->Render)) {
+				sent++;
+				if (sent >= minpkts) {
+					CodecVideoSendPacket(stream->Decoder, NULL);
+					sent = 0;
+				}
+			}
 		}
+
 		pthread_mutex_unlock(&PktsLockMutex);
 
 // this is normal Playback
 		if (!VideoGetTrickSpeed(stream->Render)) {
 			if (!stream->NewStream) { // this is for mediaplayer ?
 				if (!CodecVideoReceiveFrame(stream->Decoder, 0, &frame)) {
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame, 0);
+					while (VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame, 0)) {
+						if (closing_stream_requested(stream)) {
+							av_frame_free(&frame);
+							return -1;
+						}
+					}
 				}
 			}
 // this is normal TrickSpeed
 		} else {
+receive_trickspeed:
 			// try receiving frame from decoder
-			if (!CodecVideoReceiveFrame(stream->Decoder, 1, &frame)) {
-				CodecVideoSendPacket(stream->Decoder, NULL);
-				CodecVideoFlushBuffers(stream->Decoder);
+			ret = CodecVideoReceiveFrame(stream->Decoder, 1, &frame);
+			if (ret == 0) {
 				while (VideoGetTrickSpeed(stream->Render) && VideoGetTrickCounter(stream->Render) > 0) {
-					if (stream->NewTrickSpeed) {
-						Debug2(L_TRICK, "VideoDecodeInput: Trickspeed change!");
-						break;
-					}
 					AVFrame *trickframe = av_frame_clone(frame);
 					if (!trickframe) {
 						Error("VideoDecodeInput: could not clone frame");
 						break;
 					}
 					Debug2(L_TRICK, "VideoDecodeInput: Trickspeed, send another cloned trick frame %d %p", VideoGetTrickCounter(stream->Render), trickframe);
-					VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe, FRAME_FLAG_TRICKSPEED);
+					while (VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe, FRAME_FLAG_TRICKSPEED)) {
+						if (closing_stream_requested(stream)) {
+							av_frame_free(&trickframe);
+							av_frame_free(&frame);
+							sent = 0;
+							return -1;
+						}
+					}
 					VideoDecTrickCounter(stream->Render);
-					if (stream->ClosingStream) {
+					if (closing_stream_requested(stream)) {
 						av_frame_free(&frame);
-						goto closing_stream;
+						sent = 0;
+						return -1;
 					}
 				}
 				av_frame_free(&frame);
+				sent = 0;
+
 				int TrickSpeed = VideoGetTrickSpeed(stream->Render);
 				VideoSetTrickCounter(stream->Render, TrickSpeed);
+
+				goto receive_trickspeed; // try to get another frame
+			} else if (ret == -2) { // needs flush / reopen
+				if (CodecVideoReopenCodec(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
+					Fatal("VideoDecodeInput: Could not reopen the decoder (flush buffers)!");
+				sent = 0;
+//				CodecVideoFlushBuffers(stream->Decoder);
 			}
 		}
 		return 0;
@@ -1267,6 +1294,7 @@ int PlayVideo(const uint8_t * data, int size)
 					       data[i + n + 9],
 					       data[i + n + 10]);
 					stream->CodecID = AV_CODEC_ID_MPEG2VIDEO;
+					stream->trickpkts = 1;
 					goto newstream;
 				} else if (data[i + n + 3] == 0x09 && (data[i + n + 4] == 0x10 || data[i + n + 4] == 0xF0 || data[i + n + 10] == 0x64)) {
 				// H264 I-Frame
@@ -1284,6 +1312,7 @@ int PlayVideo(const uint8_t * data, int size)
 					       data[i + n + 9],
 					       data[i + n + 10]);
 					stream->CodecID = AV_CODEC_ID_H264;
+					stream->trickpkts = 2;
 					goto newstream;
 				} else if (data[i + n + 3] == 0x46 && (data[i + n + 5] == 0x10 || data[i + n + 5] == 0x50 || data[i + n + 10] == 0x40)) {
 				// HEVC I-Frame
@@ -1301,6 +1330,7 @@ int PlayVideo(const uint8_t * data, int size)
 					       data[i + n + 9],
 					       data[i + n + 10]);
 					stream->CodecID = AV_CODEC_ID_HEVC;
+					stream->trickpkts = 2;
 newstream:
 					stream->NewStream = 1;
 					stream->timebase.den = 90000;
@@ -1404,7 +1434,7 @@ void StillPicture(const uint8_t * data, int size)
 	atomic_inc(&MyVideoStream->PacketsFilled);
 
 	StreamFreezed = 1;
-	if (Codec_get_VideoContext(MyVideoStream->Decoder)) { 
+	if (Codec_get_VideoContext(MyVideoStream->Decoder)) {
 		if ((int)(Codec_get_VideoContext(MyVideoStream->Decoder)->codec_id) != codec) {
 			CodecVideoClose(MyVideoStream->Decoder);
 		}
@@ -1422,7 +1452,12 @@ send:
 	if (CodecVideoReceiveFrame(MyVideoStream->Decoder, 1, &frame))
 		goto send;
 	else Debug2(L_STILL, "StillPicture: Received Frame");
-	VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, FRAME_FLAG_STILLPICTURE);
+	while (VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, FRAME_FLAG_STILLPICTURE)) {
+		if (MyVideoStream->ClosingStream) {
+			av_frame_free(&frame);
+			break;
+		}
+	}
 	if (context) {
 		CodecVideoClose(MyVideoStream->Decoder);
 		MyVideoStream->CodecID = AV_CODEC_ID_NONE;
@@ -1588,7 +1623,6 @@ void TrickSpeed(int speed, int forward)
 {
 	Debug("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
 
-	pthread_mutex_lock(&WaitReopenMutex);
 	VideoSetClosing(MyVideoStream->Render, 0);
 	if (StreamFreezed) {
 		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", StreamFreezed, SkipAudio);
@@ -1596,13 +1630,6 @@ void TrickSpeed(int speed, int forward)
 		ClearAudio();
 		SkipAudio = 0;
 	}
-
-	// force decoder thread to reopen the codec
-	if (!VideoGetTrickSpeed(MyVideoStream->Render) && MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
-		MyVideoStream->NewTrickSpeed = 1;
-		pthread_cond_wait(&WaitReopenCondition, &WaitReopenMutex);
-	}
-	pthread_mutex_unlock(&WaitReopenMutex);
 
 	MyVideoStream->TrickSpeed = 1;
 	VideoTrickSpeed(MyVideoStream->Render, speed, forward);
@@ -1625,8 +1652,14 @@ void Clear(void)
 void Play(void)
 {
 	Debug("Play(void)");
-	if (MyVideoStream->TrickSpeed)
+	if (MyVideoStream->TrickSpeed && MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
+		pthread_mutex_lock(&WaitCloseMutex);
+		MyVideoStream->ClosingStream = 1;
+		while (MyVideoStream->ClosingStream)
+			pthread_cond_wait(&WaitCloseCondition, &WaitCloseMutex);
+		pthread_mutex_unlock(&WaitCloseMutex);
 		VideoSetClosing(MyVideoStream->Render, 0);
+	}
 	MyVideoStream->TrickSpeed = 0;
 	SkipAudio = 0;
 	StreamFreezed = 0;
@@ -1732,6 +1765,12 @@ void *GetVideoRender()
 	return (void *)(MyVideoStream->Render);
 }
 
+void SetInterlacedStream(int interlaced)
+{
+	Debug("SetInterlacedStream %d", interlaced);
+	MyVideoStream->interlaced = interlaced;
+}
+
 /**
 **	Set play mode, called on channel switch.
 **
@@ -1743,16 +1782,22 @@ int SetPlayMode(int play_mode)
 
 	switch (play_mode) {
 	case 0:			// none audio/video
-		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE)
-			MyVideoStream->ClosingStream = 1;
-		VideoSetClosing(MyVideoStream->Render, 1);
 		MyVideoStream->TrickSpeed = 0;
+		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
+			pthread_mutex_lock(&WaitCloseMutex);
+			MyVideoStream->ClosingStream = 1;
+			while (MyVideoStream->ClosingStream)
+				pthread_cond_wait(&WaitCloseCondition, &WaitCloseMutex);
+			pthread_mutex_unlock(&WaitCloseMutex);
+		}
+		VideoSetClosing(MyVideoStream->Render, 1);
 		SkipAudio = 0;
 		AudioPlay();
 		ClearAudio();	// flush all AUDIO buffers
 		if (MyAudioDecoder && AudioCodecID != AV_CODEC_ID_NONE) {
 			NewAudioStream = 1;
 		}
+		MyVideoStream->interlaced = 0; // probably not necessary
 		StreamFreezed = 0;
 		break;
 	case 1:			// audio/video

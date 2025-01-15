@@ -163,8 +163,14 @@ static const AVCodec* FindDecoder(enum AVCodecID codec_id, int force_software)
 /**
 **	Open video decoder.
 **
-**	@param decoder	private video decoder
-**	@param codec_id	video codec id
+**	@param decoder		private video decoder
+**	@param codec_id		video codec id
+**	@param Par		codec parameters
+**	@param timebase		timebase
+**	@param force_software	force software decoding
+**
+**	@returns 0		success
+**	@returns -1		open decoder failed
 */
 int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par,
 		AVRational * timebase, int force_software)
@@ -217,17 +223,19 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 	decoder->VideoCtx->workaround_bugs = FF_BUG_AUTODETECT;
 
 	if (strstr(codec->name, "_v4l2") && codec_id == AV_CODEC_ID_H264) {
-		int width;
-		int height;
+		if (Par) {
+			decoder->VideoCtx->coded_width = Par->width;
+			decoder->VideoCtx->coded_height = Par->height;
+/* not needed anymore!?
+		} else {
+			int width;
+			int height;
 
-		if (!Par) {
 			ParseResolutionH264(&width, &height);
 			Debug2(L_CODEC, "CodecVideoOpen: Parsed width %d height %d", width, height);
 			decoder->VideoCtx->coded_width = width;
 			decoder->VideoCtx->coded_height = height;
-		} else {
-			decoder->VideoCtx->coded_width = Par->width;
-			decoder->VideoCtx->coded_height = Par->height;
+*/
 		}
 	}
 
@@ -353,6 +361,7 @@ int CodecVideoSendPacket(VideoDecoder * decoder, const AVPacket * avpkt)
 **	@returns 1	get no frame, send avpkt again
 **	@returns 0	received frame
 **	@returns -1	get no frame, something went wrong
+**	@returns -2	EOF, needs flushing
 */
 int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame)
 {
@@ -375,10 +384,15 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 
 	if (ret == AVERROR(EAGAIN)) {
 		av_frame_free(&pFrame);
+		Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: AVERROR(EAGAIN)");
 		return 1;
 	} else if (ret) {
-		Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: %s", av_err2str(ret));
 		av_frame_free(&pFrame);
+		if (ret == AVERROR_EOF) {
+			Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: AVERROR_EOF");
+			return -2;
+		}
+		Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: %s", av_err2str(ret));
 		return -1;
 	}
 
@@ -398,6 +412,36 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 
 	decoder->received++;
 	Debug2(L_PACKET, "CodecVideoReceiveFrame: %6d PTS %s --->> (%2d)", decoder->received, Timestamp2String(pFrame->pts / 90), decoder->sent - decoder->received);
+	return 0;
+}
+
+/**
+**	Reopen the video decoder.
+**
+**	Temporary implemented as close and open
+**
+**	@param decoder		private video decoder
+**	@param codec_id		video codec id
+**	@param Par		codec parameters
+**	@param timebase		timebase
+**	@param force_software	force software decoding
+**
+**	@returns 0		success
+**	@returns -1		reopen decoder failed
+**
+**	TODO: only flush
+*/
+int CodecVideoReopenCodec(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par,
+		AVRational * timebase, int force_software)
+{
+	Debug2(L_CODEC, "CodecVideoReopenCodec: VideoCtx %p", decoder->VideoCtx);
+	if (decoder->VideoCtx) {
+		CodecVideoClose(decoder);
+		if (CodecVideoOpen(decoder, codec_id, Par, timebase, force_software))
+			return -1;
+	}
+	decoder->sent = decoder->received = 0;
+
 	return 0;
 }
 
@@ -626,11 +670,15 @@ void CodecAudioFlushBuffers(AudioDecoder * decoder)
 **	log callbacks
 */
 #ifdef FFMPEG_DEBUG
+#define AV_LOGLEVEL AV_LOG_TRACE
 static void CodecLogCallback( __attribute__ ((unused))
     void *ptr, __attribute__ ((unused))
     int level, __attribute__ ((unused))
     const char *fmt, va_list vl)
 {
+	if (level > AV_LOGLEVEL)
+		return;
+
 	char format[256];
 	char prefix[20] = "";
 	pid_t threadId = syscall(__NR_gettid);

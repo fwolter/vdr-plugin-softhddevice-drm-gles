@@ -2406,6 +2406,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 			filter_descr = "bwdif=1:-1:0";
 			render->Filter_Bug = 1;
 		}
+		SetInterlacedStream(1);
 	} else if (frame->format == AV_PIX_FMT_YUV420P) {
 		filter_descr = "scale";
 		render->Filter_Trick = 1;
@@ -2506,8 +2507,10 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 ///	@param render	video render
 ///	@param video_ctx	ffmpeg video codec context
 ///	@param frame		frame to display
+///	@retval 0	success or error, return (frame is freed or moved to the render ringbuffer)
+///	@retval	-1	ringbuffer full, try again
 ///
-void VideoRenderFrame(VideoRender * render,
+int VideoRenderFrame(VideoRender * render,
     AVCodecContext * video_ctx, AVFrame * frame, int flags)
 {
 	int interlaced;
@@ -2529,10 +2532,9 @@ void VideoRenderFrame(VideoRender * render,
 	fd = (FrameData *)frame->opaque_ref->data;
 	fd->flags = flags;
 
-fillframe:
 	if (render->Closing || render->Flushing) {
 		av_frame_free(&frame);
-		return;
+		return 0;
 	}
 
 #if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
@@ -2541,13 +2543,13 @@ fillframe:
 	interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
 #endif
 	// we can't trust frame->interlaced_frame ...
-	if (!(fd->flags & FRAME_FLAG_TRICKSPEED) && video_ctx->framerate.num > 0) {
+	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE) && video_ctx->framerate.num > 0) {
 		if (video_ctx->framerate.num / video_ctx->framerate.den > 30)
 			interlaced = 0;
 		else
 			interlaced = 1;
 	}
-	if (!(fd->flags & FRAME_FLAG_TRICKSPEED) && (video_ctx->codec_id == AV_CODEC_ID_HEVC))
+	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE) && (video_ctx->codec_id == AV_CODEC_ID_HEVC))
 		interlaced = 0;
 
 	// normal mode: AV_PIX_FMT_YUV420P, interlaced -> software deinterlacer (bwdif filter)
@@ -2558,14 +2560,15 @@ fillframe:
 
 		if (render->FilterClosing) {
 			av_frame_free(&frame);
-			return;
+			return 0;
 		}
 
 		if (!FilterThread) {
 			Debug("VideoRenderFrame: wakeup filter thread");
 			if (VideoFilterInit(render, video_ctx, frame)) {
+				SetInterlacedStream(0);
 				av_frame_free(&frame);
-				return;
+				return 0;
 			} else {
 				pthread_create(&FilterThread, NULL, FilterHandlerThread, render);
 				pthread_setname_np(FilterThread, "filter thread");
@@ -2578,7 +2581,7 @@ fillframe:
 			atomic_inc(&render->FramesDeintFilled);
 		} else {
 			usleep(10000);
-			goto fillframe;
+			return -1;
 		}
 	} else {
 		// AV_PIX_FMT_DRM_PRIME, interlaced without hw decoder or progressive material
@@ -2586,7 +2589,7 @@ fillframe:
 			pthread_mutex_lock(&DisplayQueue);
 			if (render->Closing || render->Flushing) {
 				av_frame_free(&frame);
-				return;
+				return 0;
 			}
 			if (atomic_read(&render->FramesFilled) < VIDEO_SURFACES_MAX && !render->Filter_Frames) {
 				render->FramesRb[render->FramesWrite] = frame;
@@ -2594,9 +2597,9 @@ fillframe:
 				atomic_inc(&render->FramesFilled);
 				pthread_mutex_unlock(&DisplayQueue);
 			} else {
-				usleep(1000);
 				pthread_mutex_unlock(&DisplayQueue);
-				goto fillframe;
+				usleep(1000);
+				return -1;
 			}
 		} else {
 			pthread_mutex_lock(&DisplayQueue);
@@ -2606,11 +2609,11 @@ fillframe:
 			} else {
 				pthread_mutex_unlock(&DisplayQueue);
 				usleep(5000);
-				goto fillframe;
+				return -1;
 			}
-
 		}
 	}
+	return 0;
 }
 
 ///
@@ -2762,6 +2765,18 @@ int VideoGetTrickSpeed(VideoRender * render)
 	speed = render->TrickSpeed;
 	pthread_mutex_unlock(&TrickSpeedMutex);
 	return speed;
+}
+
+///
+///	Return the current trick speed direction
+///
+int VideoGetTrickForward(VideoRender * render)
+{
+	int dir;
+	pthread_mutex_lock(&TrickSpeedMutex);
+	dir = render->TrickForward;
+	pthread_mutex_unlock(&TrickSpeedMutex);
+	return dir;
 }
 
 ///

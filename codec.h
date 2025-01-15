@@ -92,6 +92,8 @@ extern int CodecVideoReceiveFrame(VideoDecoder *, int, AVFrame **);
     /// Flush video buffers.
 extern void CodecVideoFlushBuffers(VideoDecoder *);
 
+    /// Close and reopen video codec.
+extern int CodecVideoReopenCodec(VideoDecoder *, int, AVCodecParameters *, AVRational *, int);
 
     /// Allocate a new audio decoder context.
 extern AudioDecoder *CodecAudioNewDecoder(void);

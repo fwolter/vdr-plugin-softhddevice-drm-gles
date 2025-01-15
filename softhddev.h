@@ -110,6 +110,8 @@ extern "C"
 
     /// C plugin get video render
     extern void *GetVideoRender(void);
+    /// Set interlaced stream flag
+    extern void SetInterlacedStream(int);
 
 #ifdef __cplusplus
 }

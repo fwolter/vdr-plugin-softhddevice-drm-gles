@@ -228,7 +228,7 @@ extern enum AVPixelFormat Video_get_format(VideoRender *, AVCodecContext *,
     const enum AVPixelFormat *);
 
     /// Render a ffmpeg frame.
-extern void VideoRenderFrame(VideoRender *, AVCodecContext *,
+extern int VideoRenderFrame(VideoRender *, AVCodecContext *,
     AVFrame *, int flags);
 
     /// Set audio delay.
@@ -249,6 +249,7 @@ extern void VideoTrickSpeed(VideoRender *, int, int);
 extern void VideoSetTrickSpeed(VideoRender *, int, int);
 extern int VideoGetTrickSpeed(VideoRender *);
 extern int VideoGetTrickCounter(VideoRender *);
+extern int VideoGetTrickForward(VideoRender *);
 extern void VideoSetTrickCounter(VideoRender *, int);
 extern int VideoDecTrickCounter(VideoRender *);
 
