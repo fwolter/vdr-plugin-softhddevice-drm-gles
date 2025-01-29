@@ -22,6 +22,9 @@
 
 /// @addtogroup misc
 /// @{
+#ifndef __MISC_H
+#define __MISC_H
+
 extern int SysLogLevel;			///< how much information wanted
 
 #ifdef __cplusplus
@@ -32,7 +35,9 @@ extern "C"
 #include <syslog.h>
 #include <stdarg.h>
 #include <time.h>			// clock_gettime
+#include <unistd.h>
 #include <sys/syscall.h>
+#include <string.h>
 
 //////////////////////////////////////////////////////////////////////////////
 //	Defines
@@ -51,6 +56,7 @@ extern "C"
 #define L_OPENGL_TIME      (1 << 10)
 #define L_OPENGL_TIME_ALL  (1 << 11)
 #define L_PACKET           (1 << 12)
+#define L_GRAB             (1 << 13)
 
 typedef unsigned char uchar;
 
@@ -144,6 +150,9 @@ static inline void Syslog(const int level, const int cat, const char *format, ..
 #ifdef PACKET_DEBUG
 	DebugLogLevel |= L_PACKET;
 #endif
+#ifdef GRAB_DEBUG
+	DebugLogLevel |= L_GRAB;
+#endif
 	va_list ap;
 	char fmt[256];
 	char prefix[20] = "";
@@ -183,6 +192,9 @@ static inline void Syslog(const int level, const int cat, const char *format, ..
 			break;
 		case L_PACKET:
 			strcpy(prefix, "[Packet]");
+			break;
+		case L_GRAB:
+			strcpy(prefix, "[Grab]");
 			break;
 		default:
 			return;
@@ -250,6 +262,8 @@ static inline int PesHeadLength(const uint8_t *p)
 
 #ifdef __cplusplus
 }
+#endif
+
 #endif
 
 /// @}

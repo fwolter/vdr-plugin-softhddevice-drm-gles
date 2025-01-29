@@ -35,6 +35,7 @@ CONFIG :=
 #CONFIG += -DGL_DEBUG_TIME #-DGL_DEBUG_TIME_ALL # enable time measurement debug messages OpenGL/ES OSD
 #CONFIG += -DFFMPEG_DEBUG # enable ffmpeg debug messages
 #CONFIG += -DPACKET_DEBUG # enable AVPacket/AVFrame PTS logging
+#CONFIG += -DGRAB_DEBUG # enable grab debug
 
 ifeq ($(GLES),1)
 CONFIG += -DUSE_GLES			# build with OpenGL/ES support
@@ -137,7 +138,7 @@ override CFLAGS	  += $(_CFLAGS) $(DEFINES) $(INCLUDES) \
 
 ### The object files (add further files here):
 
-OBJS = $(PLUGIN).o mediaplayer.o softhddev.o video_drm.o audio.o codec.o ringbuffer.o
+OBJS = $(PLUGIN).o mediaplayer.o softhddev.o video_drm.o audio.o codec.o ringbuffer.o buf2rgb.o
 
 ifeq ($(GLES),1)
 OBJS += openglosd.o

@@ -125,6 +125,16 @@ struct plane {
 	struct plane_properties properties;
 };
 
+struct grabimage {
+	uint8_t *result;		///< pointer to grabbed image
+	struct drm_buf *buf;		///< pointer to original buffer
+	int size;			///< returned grabbed data size
+	int width;			///< returned grab width
+	int height;			///< returned grab height
+	int x;				///< x coord in screenshot
+	int y;				///< y coord in screenshot
+};
+
 struct _Drm_Render_
 {
 	AVFrame  *FramesDeintRb[VIDEO_SURFACES_MAX];
@@ -149,6 +159,11 @@ struct _Drm_Render_
 	int Filter_Bug;
 	int Filter_Trick;		///< FilterHandlerThread handles trickframes
 	int Filter_Frames;
+	int startgrab;			///< flag for triggering grabbing
+	int grabvideoready;		///< flag for finished video grabbing
+	int grabosdready;		///< flag for finished osd grabbing
+	struct grabimage *grabvideo;	///< struct with grabbed video image
+	struct grabimage *grabosd;	///< struct with grabbed osd image
 
 	int StartCounter;			///< counter for video start
 	int FramesDuped;			///< number of frames duplicated
@@ -262,8 +277,12 @@ extern int VideoIsPaused(VideoRender *);
 
 extern void VideoPlay(VideoRender *);
 
-    /// Grab screen.
-extern uint8_t *VideoGrab(int *, int *, int *, int);
+    /// Grab screen
+void VideoGrab(struct grabimage *, struct drm_buf *, int *, int);
+extern void VideoTriggerGrab(VideoRender *);
+extern void VideoClearGrab(VideoRender *);
+extern int VideoGrabReady(VideoRender *);
+extern uint8_t *VideoGetGrab(VideoRender *, int *, int *, int *, int *, int *, int);
 
     /// Get decoder statistics.
 extern void VideoGetStats(VideoRender *, int *, int *, int *);

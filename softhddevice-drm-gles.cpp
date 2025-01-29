@@ -1156,6 +1156,11 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     Debug("%s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg,
 	quality, width, height);
 
+    if (!width || !height) {
+	Error("%s: Width or height must be not 0!", __FUNCTION__);
+	return NULL;
+    }
+
     if (quality < 0) {			// caller should care, but fix it
 	quality = 95;
     }

@@ -65,6 +65,7 @@
 #include "audio.h"
 #include "codec.h"
 #include "drm.h"
+#include "buf2rgb.h"
 
 //----------------------------------------------------------------------------
 //	Variables
@@ -84,6 +85,7 @@ static pthread_mutex_t VideoClockMutex;
 static pthread_t DecodeThread;		///< video decode thread
 
 static pthread_t FilterThread;
+static pthread_t GrabbingThread;
 
 static pthread_t DisplayThread;
 static pthread_mutex_t DisplayQueue;
@@ -955,6 +957,9 @@ static void drm_fb_destroy_callback(struct gbm_bo *bo, void *data)
 __attribute__ ((weak)) union gbm_bo_handle
 gbm_bo_get_handle_for_plane(struct gbm_bo *bo, int plane);
 
+__attribute__ ((weak)) int
+gbm_bo_get_fd(struct gbm_bo *bo);
+
 __attribute__ ((weak)) uint64_t
 gbm_bo_get_modifier(struct gbm_bo *bo);
 
@@ -990,12 +995,16 @@ struct drm_buf *drm_get_buf_from_bo(VideoRender *render, struct gbm_bo *bo)
 		uint64_t modifiers[4] = {0};
 		modifiers[0] = gbm_bo_get_modifier(bo);
 		const int num_planes = gbm_bo_get_plane_count(bo);
+		buf->num_planes = num_planes;
 		for (int i = 0; i < num_planes; i++) {
 			buf->handle[i] = gbm_bo_get_handle_for_plane(bo, i).u32;
 			buf->pitch[i] = gbm_bo_get_stride_for_plane(bo, i);
 			buf->offset[i] = gbm_bo_get_offset(bo, i);
 			modifiers[i] = modifiers[0];
+			buf->size[i] = buf->height * buf->pitch[i];
+			Debug2(L_DRM, "drm_get_buf_from_bo: %d: handle %d pitch %d, offset %d, size %d", i, buf->handle[i], buf->pitch[i], buf->offset[i], buf->size[i]);
 		}
+		buf->fd_prime = gbm_bo_get_fd(bo);
 
 		if (modifiers[0]) {
 			mod_flags = DRM_MODE_FB_MODIFIERS;
@@ -1011,9 +1020,12 @@ struct drm_buf *drm_get_buf_from_bo(VideoRender *render, struct gbm_bo *bo)
 		if (mod_flags)
 			Debug2(L_DRM, "drm_get_buf_from_bo: Modifiers failed!");
 
+		buf->num_planes = 1;
 		memcpy(buf->handle, (uint32_t [4]){ gbm_bo_get_handle(bo).u32, 0, 0, 0}, 16);
 		memcpy(buf->pitch, (uint32_t [4]){ gbm_bo_get_stride(bo), 0, 0, 0}, 16);
 		memset(buf->offset, 0, 16);
+		memcpy(buf->size, (uint32_t [4]){ buf->height * buf->width * buf->pitch[0], 0, 0, 0}, 16);
+		buf->fd_prime = gbm_bo_get_fd(bo);
 		ret = drmModeAddFB2(render->fd_drm, buf->width, buf->height, buf->pix_fmt,
 			buf->handle, buf->pitch, buf->offset, &buf->fb_id, 0);
 	}
@@ -1229,6 +1241,105 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 }
 
 ///
+///	Grabbing thread.
+///
+///	TODO: different threads for video and osd
+///
+static void *GrabHandlerThread(void *arg)
+{
+	VideoRender * render = (VideoRender *)arg;
+
+	Debug("video: grabbing thread started");
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
+
+	struct drm_buf *videobuf = render->grabvideo->buf;
+	struct drm_buf *osdbuf = render->grabosd->buf;
+
+	VideoGrab(render->grabvideo, videobuf, &render->grabvideoready, 0);
+	VideoGrab(render->grabosd, osdbuf, &render->grabosdready, 1);
+
+	if (videobuf) {
+		for (int plane = 0; plane < videobuf->num_planes; plane++) {
+			if (videobuf->size[plane])
+				free(videobuf->plane[plane]);
+		}
+		free(videobuf);
+	}
+
+	if (osdbuf) {
+		for (int plane = 0; plane < osdbuf->num_planes; plane++) {
+			if (osdbuf->size[plane])
+				free(osdbuf->plane[plane]);
+		}
+		free(osdbuf);
+	}
+
+	Debug("video: grabbing thread ended");
+	pthread_exit((void *)pthread_self());
+}
+
+///
+///	Clone drm buffer
+///
+///	@param dst[out]		dst video buffer
+///	@param src[in]		src video buffer
+///
+void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
+{
+	struct drm_buf *buf = malloc(sizeof(struct drm_buf));
+
+	buf->width = src->width;
+	buf->height = src->height;
+	buf->fb_id = src->fb_id;
+	buf->pix_fmt = src->pix_fmt;
+	buf->fd_prime = src->fd_prime;
+	buf->num_planes = src->num_planes;
+	buf->trickspeed = src->trickspeed;
+	buf->enqueue = src->enqueue;
+
+	for (int i = 0; i < src->num_planes; i++) {
+		buf->size[i] = src->size[i];
+		buf->pitch[i] = src->pitch[i];
+		buf->handle[i] = src->handle[i];
+		buf->offset[i] = src->offset[i];
+	}
+
+	void *src_buffer = NULL;
+	void *dst_buffer = NULL;
+
+	// planes aren't mmapped, do it (PRIME)
+	if (!src->plane[0]) {
+		// memcpy mmapped data
+		dst_buffer = malloc(src->size[0]);
+		src_buffer = mmap(NULL, src->size[0], PROT_READ, MAP_PRIVATE, src->fd_prime, 0);
+		if (src_buffer == MAP_FAILED) {
+			Error("VideoCloneBufB: cannot map buffer (%d): %m", errno);
+			return;
+		}
+
+		memcpy(dst_buffer, src_buffer, src->size[0]);
+		munmap(src_buffer, src->size[0]);
+
+		for (int plane = 0; plane < buf->num_planes; plane++) {
+			buf->plane[plane] = dst_buffer;
+		}
+	} else {
+		for (int plane = 0; plane < buf->num_planes; plane++) {
+			buf->plane[plane] = malloc(buf->size[plane]);
+			memcpy(buf->plane[plane], src->plane[plane], src->size[plane]);
+		}
+	}
+
+	for (int plane = 0; plane < buf->num_planes; plane++) {
+		Debug2(L_DRM, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d fd_prime %d",
+		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane], buf->fd_prime);
+	}
+
+	*dst = buf;
+}
+
+///
 /// Clean DRM
 ///
 static void CleanDisplayThread(VideoRender * render)
@@ -1365,6 +1476,16 @@ static int VideoDrmCommit(VideoRender *render, struct drm_buf *buf, int skip_vid
 	SetPlane(ModeReq, render->planes[VIDEO_PLANE]);
 	dirty += 2;
 
+	if (render->startgrab) {
+		Debug2(L_DRM, "Frame2Display: Trigger video grab arrived");
+		VideoCloneBuf(&render->grabvideo->buf, buf);
+		// should be the size on screen
+		render->grabvideo->x = DispX + (DispWidth - PicWidth) / 2;
+		render->grabvideo->y = DispY + (DispHeight - PicHeight) / 2;
+		render->grabvideo->width = PicWidth;
+		render->grabvideo->height = PicHeight;
+	}
+
 skip_video:
 	// handle the osd plane
 	// We had draw activity on the osd buffer
@@ -1395,6 +1516,21 @@ skip_video:
 		dirty += 1;
 		Debug2(L_DRM, "Frame2Display: SetPlane OSD (fb = %"PRIu64")", render->planes[OSD_PLANE]->properties.fb_id);
 		render->buf_osd->dirty = 0;
+	}
+
+	if (render->startgrab) {
+		if (render->buf_osd && render->OsdShown) {
+			Debug2(L_DRM, "Frame2Display: Trigger osd grab arrived");
+			VideoCloneBuf(&render->grabosd->buf, render->buf_osd);
+			// should be the size on screen
+			render->grabosd->x = 0;
+			render->grabosd->y = 0;
+			render->grabosd->width = render->buf_osd->width;
+			render->grabosd->height = render->buf_osd->height;
+		}
+		pthread_create(&GrabbingThread, NULL, GrabHandlerThread, render);
+		pthread_setname_np(GrabbingThread, "grabbing thread");
+		render->startgrab = 0;
 	}
 
 	// return without an atomic commit (no video frame and osd activity)
@@ -1589,6 +1725,7 @@ static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf *
 		pbuf->width = (uint32_t)frame->width;
 		pbuf->height = (uint32_t)frame->height;
 		pbuf->fd_prime = primedata->objects[0].fd;
+		pbuf->size[0] = primedata->objects[0].size;
 
 		if (SetupFB(render, pbuf, primedata))
 			return 1;
@@ -1973,6 +2110,7 @@ static void *DecodeHandlerThread(void *arg)
 	Debug("video: decoding thread stopped");
 	pthread_exit((void *)pthread_self());
 }
+
 
 ///
 ///	Exit and cleanup video threads.
@@ -2828,21 +2966,108 @@ void VideoPlay(VideoRender * render)
 }
 
 ///
-///	Grab full screen image.
+///	Grab full screen image
 ///
-///	@param size[out]	size of allocated image
-///	@param width[in,out]	width of image
-///	@param height[in,out]	height of image
+///	@param grabimage[out]	the struct to grab in
+///	@param buf[in]		current video buffer
+///	@param ready[out]	ready is set true if we finished
+///	@param is_osd		is this an osd grab? (just for logs)
 ///
-uint8_t *VideoGrab(int *size, int *width, int *height, int write_header)
+void VideoGrab(struct grabimage *grabimage, struct drm_buf *buf, int *ready, int is_osd)
 {
-    Debug("VideoGrab: grab image not implemented!");
+	// early return if buf = NULL
+	if (!buf) {
+		grabimage->result = NULL;
+		grabimage->size = 0;
+		*ready = 1;
+		return;
+	}
 
-    (void)write_header;
-    (void)size;
-    (void)width;
-    (void)height;
-    return NULL;
+	int size;
+	for (int plane = 0; plane < buf->num_planes; plane++) {
+		Debug2(L_GRAB, "VideoGrab: %s plane %d address %p pitch %d offset %d handle %d size %d fd_prime %d", is_osd ? "OSD" : "VIDEO",
+		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane], buf->fd_prime);
+	}
+	// result's width and height are original dimensions how buffer is presented on the screen
+	grabimage->result = buf2rgb(buf, &size, grabimage->width, grabimage->height, is_osd ? AV_PIX_FMT_BGRA : AV_PIX_FMT_RGB24);
+	grabimage->size = size;
+	*ready = 1;
+}
+
+///
+///	Trigger grabbing in render thread
+///
+///	@param hw_render	video hardware render
+///
+void VideoTriggerGrab(VideoRender *render)
+{
+	render->grabvideo = malloc(sizeof(struct grabimage));
+	render->grabosd = malloc(sizeof(struct grabimage));
+
+	render->grabvideoready = 0;
+	render->grabosdready = 0;
+	render->startgrab = 1;
+}
+
+///
+///	Clear grabbing struct
+///
+///	@param hw_render	video hardware render
+///
+void VideoClearGrab(VideoRender *render)
+{
+	free(render->grabvideo);
+	free(render->grabosd);
+}
+
+///
+///	Check, if the grabbed image is ready
+///
+///	@param hw_render	video hardware render
+///
+///	@retval 0		grab is not ready
+///	@retval 1		grab is ready
+///
+int VideoGrabReady(VideoRender *render)
+{
+	return (render->grabvideoready && render->grabosdready);
+}
+
+///
+///	Get the grabbed image
+///
+///	@param hw_render	video hardware render
+///	@param[out] size	returns output size (memory)
+///	@param[out] width	returns output width
+///	@param[out] height	returns output height
+///	@param[in] is_osd	is this an osd grab?
+///
+///	@returns the pointer to the image data
+///
+uint8_t *VideoGetGrab(VideoRender *render, int *size, int *width, int *height, int *x, int *y, int is_osd)
+{
+	struct grabimage *grab;
+	if (is_osd)
+		grab = render->grabosd;
+	else
+		grab = render->grabvideo;
+
+	Debug2(L_GRAB, "VideoGetGrab: %s size %d %dx%d at %d|%x %p", is_osd ? "OSD" : "VIDEO", grab->size, grab->width, grab->height, grab->x, grab->y, grab->result);
+	if (!grab->size)
+		return NULL;
+
+	if (size)
+		*size = grab->size;
+	if (width)
+		*width = grab->width;
+	if (height)
+		*height = grab->height;
+	if (x)
+		*x = grab->x;
+	if (y)
+		*y = grab->y;
+
+	return grab->result;
 }
 
 ///

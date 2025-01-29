@@ -47,6 +47,7 @@
 #include "audio.h"
 #include "video.h"
 #include "codec.h"
+#include "buf2rgb.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //	Variables
@@ -1473,7 +1474,6 @@ send:
 extern uint8_t *CreateJpeg(uint8_t *, int *, int, int, int);
 
 #if defined(USE_JPEG) && JPEG_LIB_VERSION >= 80
-
 /**
 **	Create a jpeg image in memory.
 **
@@ -1523,7 +1523,6 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
 
     return outbuf;
 }
-
 #endif
 
 /**
@@ -1537,23 +1536,92 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
 */
 uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
 {
-    if (jpeg) {
-	uint8_t *image;
-	int raw_size;
+    Debug2(L_GRAB, "GrabImage: Start grabbing");
+    VideoTriggerGrab(MyVideoStream->Render);
 
-	raw_size = 0;
-	image = VideoGrab(&raw_size, &width, &height, 0);
-	if (image) {			// can fail, suspended, ...
-	    uint8_t *jpg_image;
-
-	    jpg_image = CreateJpeg(image, size, quality, width, height);
-
-	    free(image);
-	    return jpg_image;
-	}
-	return NULL;
+    int timeout = 100;
+    while(!VideoGrabReady(MyVideoStream->Render)) {
+        usleep(10000);
+        if (timeout-- <= 0) {
+            Debug2(L_GRAB, "GrabImage: Timeout!");
+            return NULL;
+        }
     }
-    return VideoGrab(size, &width, &height, 1);
+
+    // get screen dimensions
+    int screenwidth;
+    int screenheight;
+    double pixel_aspect;
+    VideoGetScreenSize(MyVideoStream->Render, &screenwidth, &screenheight, &pixel_aspect);
+    int screensize = screenwidth * screenheight * 3; // we want a RGB24
+
+    // set grab dimensions
+    int grabwidth = width > 0 ? width : screenwidth;
+    int grabheight = height > 0 ? height : screenheight;
+
+    int video_size = 0;			// data size of the grabbed video
+    int video_width = screenwidth;	// width of the grabbed video
+    int video_height = screenwidth;	// height of the grabbed video
+    int video_x = 0, video_y = 0;	// x, y of the grabbed video
+
+    // Video comes as RGB, width and height is original screen dimension (video is maybe scaled)
+    uint8_t *video = VideoGetGrab(MyVideoStream->Render, &video_size, &video_width, &video_height, &video_x, &video_y, 0);
+    if (!video) {
+        Debug2(L_GRAB, "GrabImage: video is NULL, create black screen!");
+        video = calloc(1, screensize);
+    }
+
+    // OSD comes as ARGB, width and height is original screen dimension (osd is always fullscreen)
+    uint8_t *osd = VideoGetGrab(MyVideoStream->Render, NULL, NULL, NULL, NULL, NULL, 1);
+    if (!osd)
+        Debug2(L_GRAB, "GrabImage: osd is NULL, skip it");
+
+    // first step: blit the video into a full black screen if scaled
+    uint8_t *scaledvideo;
+    if (video_width != screenwidth || video_height != screenheight || video_x != 0 || video_y != 0) {
+        scaledvideo = blitvideo(video, screenwidth, screenheight, video_x, video_y, video_width, video_height);
+        free(video);
+    } else {
+        scaledvideo = video;
+    }
+
+    // second step: alphablend fullscreen video with osd if available
+    uint8_t *result;
+    if (!osd) {
+        result = scaledvideo;
+    } else {
+        result = malloc(screensize);
+        alphablend(result, osd, scaledvideo, screenwidth, screenheight);
+        free(scaledvideo);
+        free(osd);
+    }
+
+    // need to scale result to requested size width + height, if it differs from fullscreen
+    int scaledsize = screensize;
+    uint8_t *scaledresult;
+    if (screenwidth != grabwidth || screenheight != grabheight) {
+        scaledresult = scalergb24(result, &scaledsize, screenwidth, screenheight, grabwidth, grabheight);
+        free(result);
+    } else {
+        scaledresult = result;
+    }
+
+    // make jpeg or pnm
+    uint8_t *grabbedimage;
+    if (jpeg) {
+        grabbedimage = CreateJpeg(scaledresult, size, quality, grabwidth, grabheight);
+    } else {  // add header to raw data
+        char buf[64];
+        int n = snprintf(buf, sizeof(buf), "P6\n%d\n%d\n255\n", grabwidth, grabheight);
+        grabbedimage = malloc(scaledsize + n);
+        memcpy(grabbedimage, buf, n);
+        memcpy(grabbedimage + n, scaledresult, scaledsize);
+        *size = scaledsize + n;
+    }
+    free(scaledresult);
+    Debug2(L_GRAB, "GrabImage: finished %s image (%dx%d, quality %d) at %p (size %d)", jpeg ? "jpg" : "pnm", grabwidth, grabheight, jpeg ? quality : 0, grabbedimage, *size);
+    VideoClearGrab(MyVideoStream->Render);
+    return grabbedimage;
 }
 
 //////////////////////////////////////////////////////////////////////////////
