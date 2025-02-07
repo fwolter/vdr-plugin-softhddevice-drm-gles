@@ -164,6 +164,7 @@ struct _Drm_Render_
 	int grabosdready;		///< flag for finished osd grabbing
 	struct grabimage *grabvideo;	///< struct with grabbed video image
 	struct grabimage *grabosd;	///< struct with grabbed osd image
+	int grabinwork;			///< grab is in work
 
 	int StartCounter;			///< counter for video start
 	int FramesDuped;			///< number of frames duplicated
@@ -282,6 +283,7 @@ void VideoGrab(struct grabimage *, struct drm_buf *, int *, int);
 extern void VideoTriggerGrab(VideoRender *);
 extern void VideoClearGrab(VideoRender *);
 extern int VideoGrabReady(VideoRender *);
+extern int VideoGrabInWork(VideoRender *);
 extern uint8_t *VideoGetGrab(VideoRender *, int *, int *, int *, int *, int *, int);
 
     /// Get decoder statistics.

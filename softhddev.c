@@ -1537,6 +1537,11 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
 uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
 {
     Debug2(L_GRAB, "GrabImage: Start grabbing");
+    if (VideoGrabInWork(MyVideoStream->Render)) {
+        Debug2(L_GRAB, "GrabImage: waiting for last grab...");
+        return NULL;
+    }
+
     VideoTriggerGrab(MyVideoStream->Render);
 
     int timeout = 100;

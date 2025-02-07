@@ -3001,8 +3001,11 @@ void VideoGrab(struct grabimage *grabimage, struct drm_buf *buf, int *ready, int
 ///
 void VideoTriggerGrab(VideoRender *render)
 {
+	render->grabinwork = 1;
 	render->grabvideo = malloc(sizeof(struct grabimage));
 	render->grabosd = malloc(sizeof(struct grabimage));
+	render->grabvideo->buf = NULL;
+	render->grabosd->buf = NULL;
 
 	render->grabvideoready = 0;
 	render->grabosdready = 0;
@@ -3018,6 +3021,7 @@ void VideoClearGrab(VideoRender *render)
 {
 	free(render->grabvideo);
 	free(render->grabosd);
+	render->grabinwork = 0;
 }
 
 ///
@@ -3031,6 +3035,19 @@ void VideoClearGrab(VideoRender *render)
 int VideoGrabReady(VideoRender *render)
 {
 	return (render->grabvideoready && render->grabosdready);
+}
+
+///
+///	Check, if the grab is in work
+///
+///	@param hw_render	video hardware render
+///
+///	@retval 0		grab is not in work
+///	@retval 1		grab is in work
+///
+int VideoGrabInWork(VideoRender *render)
+{
+	return render->grabinwork;
 }
 
 ///
