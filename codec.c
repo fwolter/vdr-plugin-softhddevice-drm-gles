@@ -384,7 +384,7 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 
 	if (ret == AVERROR(EAGAIN)) {
 		av_frame_free(&pFrame);
-		Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: AVERROR(EAGAIN)");
+//		Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: AVERROR(EAGAIN)");
 		return 1;
 	} else if (ret) {
 		av_frame_free(&pFrame);
