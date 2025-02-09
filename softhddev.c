@@ -1131,7 +1131,7 @@ int VideoDecodeInput(VideoStream * stream)
 	}
 
 	if (stream->NewStream && stream->CodecID != AV_CODEC_ID_NONE) {
-		if (CodecVideoOpen(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
+		if (CodecVideoOpen(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0, 0, 0))
 			Fatal("VideoDecodeInput: Could not open the decoder!");
 		stream->NewStream = 0;
 	}
@@ -1211,10 +1211,13 @@ receive_trickspeed:
 
 				goto receive_trickspeed; // try to get another frame
 			} else if (ret == -2) { // needs flush / reopen
-				if (CodecVideoReopenCodec(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
-					Fatal("VideoDecodeInput: Could not reopen the decoder (flush buffers)!");
+				if (stream->Render->CodecCanFlush) {
+					CodecVideoFlushBuffers(stream->Decoder);
+				} else {
+					if (CodecVideoReopenCodec(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
+						Fatal("VideoDecodeInput: Could not reopen the decoder (flush buffers)!");
+				}
 				sent = 0;
-//				CodecVideoFlushBuffers(stream->Decoder);
 			}
 		}
 		return 0;
@@ -1441,7 +1444,7 @@ void StillPicture(const uint8_t * data, int size)
 		}
 	}
 	if (!Codec_get_VideoContext(MyVideoStream->Decoder)) {
-		if (CodecVideoOpen(MyVideoStream->Decoder, codec, NULL, NULL, 0))
+		if (CodecVideoOpen(MyVideoStream->Decoder, codec, NULL, NULL, 0, 0, 0))
 			Fatal("StillPicture: Could not open the decoder!");
 		context = 1;
 	}
@@ -1840,7 +1843,7 @@ void *GetVideoRender()
 
 void SetInterlacedStream(int interlaced)
 {
-	Debug("SetInterlacedStream %d", interlaced);
+//	Debug("SetInterlacedStream %d", interlaced);
 	MyVideoStream->interlaced = interlaced;
 }
 

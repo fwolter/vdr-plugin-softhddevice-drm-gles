@@ -276,6 +276,8 @@ void ReadHWPlatform(VideoRender * render)
 
 	txt_buf = (char *) calloc(bufsize, sizeof(char));
 	render->NoHwDeint = 0;
+	render->CodecCanFlush = 1;
+	render->CodecNeedsExtInit = 0;
 
 	read_size = ReadLineFromFile(txt_buf, bufsize, "/sys/firmware/devicetree/base/compatible");
 	if (!read_size) {
@@ -289,10 +291,13 @@ void ReadHWPlatform(VideoRender * render)
 
 		if (strstr(read_ptr, "bcm2711")) {
 			Debug2(L_DRM, "ReadHWPlatform: bcm2711 found");
+			render->CodecCanFlush = 0;
 			break;
 		}
 		if (strstr(read_ptr, "amlogic")) {
 			Debug2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
+			render->CodecNeedsExtInit = 1;
+			render->CodecCanFlush = 0;
 			render->NoHwDeint = 1;
 			break;
 		}
@@ -1076,7 +1081,6 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 			return 1;
 		}
 
-/*
 		for (int object = 0; object < primedata->nb_objects; object++) {
 
 			Debug2(L_DRM, "SetupFB: PRIMEDATA %d x %d nb_objects %i Handle %i size %zu modifier %" PRIx64 "",
@@ -1093,7 +1097,7 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 					primedata->layers[layer].nb_planes, primedata->layers[layer].planes[plane].object_index);
 			}
 		}
-*/
+
 		buf->pix_fmt = primedata->layers[0].format;
 		buf->num_planes = primedata->layers[0].nb_planes;
 
@@ -2544,7 +2548,6 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 			filter_descr = "bwdif=1:-1:0";
 			render->Filter_Bug = 1;
 		}
-		SetInterlacedStream(1);
 	} else if (frame->format == AV_PIX_FMT_YUV420P) {
 		filter_descr = "scale";
 		render->Filter_Trick = 1;
@@ -2678,7 +2681,7 @@ int VideoRenderFrame(VideoRender * render,
 #if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
 	interlaced = frame->interlaced_frame;
 #else
-	interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
+	interlaced = !!(frame->flags & AV_FRAME_FLAG_INTERLACED);
 #endif
 	// we can't trust frame->interlaced_frame ...
 	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE) && video_ctx->framerate.num > 0) {
@@ -2689,6 +2692,9 @@ int VideoRenderFrame(VideoRender * render,
 	}
 	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE) && (video_ctx->codec_id == AV_CODEC_ID_HEVC))
 		interlaced = 0;
+
+	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE))
+		SetInterlacedStream(interlaced);
 
 	// normal mode: AV_PIX_FMT_YUV420P, interlaced -> software deinterlacer (bwdif filter)
 	// normal mode: AV_PIX_FMT_DRM_PRIME, interlaced with hw decoder -> hw deinterlacer
@@ -2704,7 +2710,6 @@ int VideoRenderFrame(VideoRender * render,
 		if (!FilterThread) {
 			Debug("VideoRenderFrame: wakeup filter thread");
 			if (VideoFilterInit(render, video_ctx, frame)) {
-				SetInterlacedStream(0);
 				av_frame_free(&frame);
 				return 0;
 			} else {

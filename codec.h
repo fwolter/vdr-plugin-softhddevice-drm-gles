@@ -48,6 +48,8 @@ struct _video_decoder_
     AVCodecContext *VideoCtx;		///< video codec context
     int sent;
     int received;
+    int last_coded_width;
+    int last_coded_height;
 };
 
 //----------------------------------------------------------------------------
@@ -79,7 +81,7 @@ extern void CodecVideoDelDecoder(VideoDecoder *);
 extern  AVCodecContext *Codec_get_VideoContext(VideoDecoder *);
 
     /// Open video codec.
-extern int CodecVideoOpen(VideoDecoder *, int, AVCodecParameters *, AVRational *, int);
+extern int CodecVideoOpen(VideoDecoder *, int, AVCodecParameters *, AVRational *, int, int, int);
 
     /// Close video codec.
 extern void CodecVideoClose(VideoDecoder *);

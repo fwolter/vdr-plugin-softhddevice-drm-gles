@@ -173,7 +173,7 @@ static const AVCodec* FindDecoder(enum AVCodecID codec_id, int force_software)
 **	@returns -1		open decoder failed
 */
 int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par,
-		AVRational * timebase, int force_software)
+		AVRational * timebase, int force_software, int width, int height)
 {
 	int swcodec = force_software;
 
@@ -222,26 +222,35 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 	decoder->VideoCtx->opaque = decoder;
 	decoder->VideoCtx->workaround_bugs = FF_BUG_AUTODETECT;
 
-	if (strstr(codec->name, "_v4l2") && codec_id == AV_CODEC_ID_H264) {
+	// amlogic h264 decoder needs this
+	if (codec_id == AV_CODEC_ID_H264) {
 		if (Par) {
 			decoder->VideoCtx->coded_width = Par->width;
 			decoder->VideoCtx->coded_height = Par->height;
-/* not needed anymore!?
-		} else {
-			int width;
-			int height;
-
-			ParseResolutionH264(&width, &height);
-			Debug2(L_CODEC, "CodecVideoOpen: Parsed width %d height %d", width, height);
+			decoder->VideoCtx->width = Par->width;
+			decoder->VideoCtx->height = Par->height;
+			Debug2(L_CODEC, "CodecVideoOpen: Set width %d and height %d from Par", Par->width, Par->height);
+		} else if (width && height) {
 			decoder->VideoCtx->coded_width = width;
 			decoder->VideoCtx->coded_height = height;
-*/
+			decoder->VideoCtx->width = width;
+			decoder->VideoCtx->height = height;
+			Debug2(L_CODEC, "CodecVideoOpen: Set width %d and height %d forced", width, height);
+		} else if (decoder->Render->CodecNeedsExtInit) {
+			int pWidth;
+			int pHeight;
+			ParseResolutionH264(&pWidth, &pHeight);
+			Debug2(L_CODEC, "CodecVideoOpen: Parsed width %d height %d", pWidth, pHeight);
+			decoder->VideoCtx->coded_width = pWidth;
+			decoder->VideoCtx->coded_height = pHeight;
+			decoder->VideoCtx->width = pWidth;
+			decoder->VideoCtx->height = pHeight;
 		}
 	}
 
 	if (codec->capabilities & AV_CODEC_CAP_FRAME_THREADS ||
 		AV_CODEC_CAP_SLICE_THREADS) {
-		decoder->VideoCtx->thread_count = 4;
+		decoder->VideoCtx->thread_count = swcodec ? 4 : 1;
 	}
 	if (codec->capabilities & AV_CODEC_CAP_SLICE_THREADS){
 		decoder->VideoCtx->thread_type = FF_THREAD_SLICE;
@@ -254,8 +263,11 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 	if (timebase) {
 		decoder->VideoCtx->pkt_timebase.num = timebase->num;
 		decoder->VideoCtx->pkt_timebase.den = timebase->den;
+	} else {
+		decoder->VideoCtx->pkt_timebase.num = 1;
+		decoder->VideoCtx->pkt_timebase.den = 90000;
 	}
-
+/*
 	if (strstr(codec->name, "_v4l2")) {
 		if (av_opt_set_int(decoder->VideoCtx->priv_data, "num_capture_buffers", NUM_CAPTURE_BUFFERS, 0) < 0) {
 			Error("CodecVideoOpen: can't set %d num_capture_buffers", NUM_CAPTURE_BUFFERS);
@@ -266,7 +278,7 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 		}
 		Debug2(L_CODEC, "CodecVideoOpen: set num_output_buffers %d", NUM_OUTPUT_BUFFERS);
 	}
-
+*/
 	int err = avcodec_open2(decoder->VideoCtx, decoder->VideoCtx->codec, NULL);
 	if (err < 0) {
 		avcodec_free_context(&decoder->VideoCtx);
@@ -278,7 +290,7 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 		Debug2(L_CODEC, "CodecVideoOpen: Could not open %s decoder, try opening software decoder",
 		       codec->long_name ? codec->long_name : codec->name);
 
-		return CodecVideoOpen(decoder, codec_id, Par, timebase, 1);
+		return CodecVideoOpen(decoder, codec_id, Par, timebase, 1, 0, 0);
 	}
 
 	Debug2(L_CODEC, "CodecVideoOpen: Codec %s for CodecID %s opened%s, using %d threads",
@@ -301,6 +313,8 @@ void CodecVideoClose(VideoDecoder * decoder)
 	Debug2(L_CODEC, "CodecVideoClose: VideoCtx %p", decoder->VideoCtx);
 	pthread_mutex_lock(&CodecLockMutex);
 	if (decoder->VideoCtx) {
+		decoder->last_coded_width = decoder->VideoCtx->coded_width;
+		decoder->last_coded_height = decoder->VideoCtx->coded_height;
 		avcodec_free_context(&decoder->VideoCtx);
 	}
 	pthread_mutex_unlock(&CodecLockMutex);
@@ -437,7 +451,7 @@ int CodecVideoReopenCodec(VideoDecoder * decoder, int codec_id, AVCodecParameter
 	Debug2(L_CODEC, "CodecVideoReopenCodec: VideoCtx %p", decoder->VideoCtx);
 	if (decoder->VideoCtx) {
 		CodecVideoClose(decoder);
-		if (CodecVideoOpen(decoder, codec_id, Par, timebase, force_software))
+		if (CodecVideoOpen(decoder, codec_id, Par, timebase, force_software, decoder->last_coded_width, decoder->last_coded_height))
 			return -1;
 	}
 	decoder->sent = decoder->received = 0;

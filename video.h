@@ -175,6 +175,8 @@ struct _Drm_Render_
 	int CodecMode;			/// CODEC_BY_ID, CODEC_NO_MPEG_HW, CODEC_V4L2M2M_H264
 
 	int NoHwDeint;			/// set if no hw deinterlacer
+	int CodecCanFlush;		/// CodecFlushBuffers works as expected
+	int CodecNeedsExtInit;		/// Codec needs some infos for init
 
 	AVFilterGraph *filter_graph;
 	AVFilterContext *buffersrc_ctx, *buffersink_ctx;
