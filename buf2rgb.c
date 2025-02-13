@@ -42,16 +42,11 @@ uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPi
     int ret;
     void *buffer = NULL;
 
-    // planes aren't mmapped, do it (PRIME)
+    // planes aren't mmapped, return
+    // this should be done before in VideoCloneBuf
     if (!buf->plane[0]) {
-        buffer = mmap(NULL, buf->size[0], PROT_READ, MAP_PRIVATE, buf->fd_prime, 0);
-        if (buffer == MAP_FAILED) {
-            Error("buf2rgb: map failed %d (%m)", errno);
-            return NULL;
-        }
-        for (int plane = 0; plane < buf->num_planes; plane++) {
-            buf->plane[plane] = buffer;
-        }
+        Error("buf2rgb: prime data is not mapped!");
+        return NULL;
     }
 
     // convert yuv to rgb
