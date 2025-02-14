@@ -50,6 +50,7 @@ struct _video_decoder_
     int received;
     int last_coded_width;
     int last_coded_height;
+    int FirstKeyFrame;
 };
 
 //----------------------------------------------------------------------------

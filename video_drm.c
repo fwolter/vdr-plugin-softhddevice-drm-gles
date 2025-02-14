@@ -278,6 +278,7 @@ void ReadHWPlatform(VideoRender * render)
 	render->NoHwDeint = 0;
 	render->CodecCanFlush = 1;
 	render->CodecNeedsExtInit = 0;
+	render->CodecSkipFirstFrames = 0;
 
 	read_size = ReadLineFromFile(txt_buf, bufsize, "/sys/firmware/devicetree/base/compatible");
 	if (!read_size) {
@@ -298,6 +299,7 @@ void ReadHWPlatform(VideoRender * render)
 			Debug2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
 			render->CodecNeedsExtInit = 1;
 			render->CodecCanFlush = 0;
+			render->CodecSkipFirstFrames = 2;
 			render->NoHwDeint = 1;
 			break;
 		}

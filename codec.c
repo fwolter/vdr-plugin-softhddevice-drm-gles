@@ -300,6 +300,7 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 	       decoder->VideoCtx->thread_count);
 
 	decoder->sent = decoder->received = 0;
+	decoder->FirstKeyFrame = 1;
 	return 0;
 }
 
@@ -422,6 +423,19 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 		Debug2(L_CODEC, "CodecVideoReceiveFrame: interlaced_frame = 0");
 	}
 
+	// codec artifacts workaround for amlogic H264, skip some key frames
+	if (decoder->Render->CodecSkipFirstFrames && decoder->FirstKeyFrame && decoder->VideoCtx->codec_id == AV_CODEC_ID_H264) {
+		if (pFrame->flags & AV_FRAME_FLAG_KEY) {
+			Debug2(L_CODEC, "CodecVideoReceiveFrame: artifact workaround - skip %s I-frame nr %d",
+			       pFrame->flags & AV_FRAME_FLAG_INTERLACED ? "interlaced" : "progressive", decoder->FirstKeyFrame);
+			if (decoder->FirstKeyFrame++ > decoder->Render->CodecSkipFirstFrames - 1)
+				decoder->FirstKeyFrame = 0;
+		}
+
+		av_frame_free(&pFrame);
+		return -1;
+	}
+
 	*frame = pFrame;
 
 	decoder->received++;
@@ -454,6 +468,7 @@ int CodecVideoReopenCodec(VideoDecoder * decoder, int codec_id, AVCodecParameter
 		if (CodecVideoOpen(decoder, codec_id, Par, timebase, force_software, decoder->last_coded_width, decoder->last_coded_height))
 			return -1;
 	}
+	decoder->FirstKeyFrame = 0; // unused, because we have no hardware which needs both quirks, but set here for safety reasons
 	decoder->sent = decoder->received = 0;
 
 	return 0;

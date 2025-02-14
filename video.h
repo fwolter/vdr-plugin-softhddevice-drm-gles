@@ -181,6 +181,7 @@ struct _Drm_Render_
 	int NoHwDeint;			/// set if no hw deinterlacer
 	int CodecCanFlush;		/// CodecFlushBuffers works as expected
 	int CodecNeedsExtInit;		/// Codec needs some infos for init
+	int CodecSkipFirstFrames;	/// Codec should skip first I-Frames
 
 	AVFilterGraph *filter_graph;
 	AVFilterContext *buffersrc_ctx, *buffersink_ctx;
