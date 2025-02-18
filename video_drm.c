@@ -1348,13 +1348,13 @@ void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 				return;
 			}
 
-			Debug2(L_DRM, "VideoCloneBuf: Copy %p to %p", src_buffer, dst_buffer);
+			Debug2(L_GRAB, "VideoCloneBuf: Copy %p to %p", src_buffer, dst_buffer);
 			memcpy(dst_buffer, src_buffer, src->size[object]);
 			munmap(src_buffer, src->size[object]);
 			for (int plane = 0; plane < buf->num_planes; plane++) {
 				if (buf->obj_index[plane] == object) {
 					buf->plane[plane] = dst_buffer;
-					Debug2(L_DRM, "VideoCloneBuf: buf->plane[%d] gets %p (object %d)", plane, dst_buffer, object);
+					Debug2(L_GRAB, "VideoCloneBuf: buf->plane[%d] gets %p (object %d)", plane, dst_buffer, object);
 				}
 			}
 		}
@@ -1367,7 +1367,7 @@ void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 	}
 
 	for (int plane = 0; plane < buf->num_planes; plane++) {
-		Debug2(L_DRM, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d",
+		Debug2(L_GRAB, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d",
 		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
 	}
 
