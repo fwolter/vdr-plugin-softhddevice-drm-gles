@@ -37,6 +37,7 @@
 #include <pthread.h>
 
 #include <libavcodec/avcodec.h>
+#include <libavcodec/bsf.h>
 #include <libavutil/opt.h>
 
 #ifdef MAIN_H
@@ -215,12 +216,24 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 		Debug2(L_CODEC, "CodecVideoOpen: Using %s HW codec",
 		       type_name ? type_name : "unknown");
 		decoder->VideoCtx->hw_device_ctx = av_buffer_ref(hw_device_ctx);
+		decoder->VideoCtx->pix_fmt = AV_PIX_FMT_DRM_PRIME;
+	}
+
+	if (Par) {
+		if ((avcodec_parameters_to_context(decoder->VideoCtx, Par)) < 0)
+			Error("CodecVideoOpen: insert parameters to context failed!");
 	}
 
 	decoder->VideoCtx->codec_id = codec_id;
 	decoder->VideoCtx->get_format = Codec_get_format;
 	decoder->VideoCtx->opaque = decoder;
-	decoder->VideoCtx->workaround_bugs = FF_BUG_AUTODETECT;
+	decoder->VideoCtx->pkt_timebase.num = 1;
+	decoder->VideoCtx->pkt_timebase.den = 90000;
+
+	if (timebase) {
+		decoder->VideoCtx->pkt_timebase.num = timebase->num;
+		decoder->VideoCtx->pkt_timebase.den = timebase->den;
+	}
 
 	// amlogic h264 decoder needs this
 	if (codec_id == AV_CODEC_ID_H264) {
@@ -256,17 +269,6 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 		decoder->VideoCtx->thread_type = FF_THREAD_SLICE;
 	}
 
-	if (Par) {
-		if ((avcodec_parameters_to_context(decoder->VideoCtx, Par)) < 0)
-			Error("CodecVideoOpen: insert parameters to context failed!");
-	}
-	if (timebase) {
-		decoder->VideoCtx->pkt_timebase.num = timebase->num;
-		decoder->VideoCtx->pkt_timebase.den = timebase->den;
-	} else {
-		decoder->VideoCtx->pkt_timebase.num = 1;
-		decoder->VideoCtx->pkt_timebase.den = 90000;
-	}
 /*
 	if (strstr(codec->name, "_v4l2")) {
 		if (av_opt_set_int(decoder->VideoCtx->priv_data, "num_capture_buffers", NUM_CAPTURE_BUFFERS, 0) < 0) {
@@ -323,6 +325,88 @@ void CodecVideoClose(VideoDecoder * decoder)
 }
 
 /**
+**	Get extradata from avpkt
+**
+**	@param decoder	video decoder data
+**	@param avpkt	video packet
+**
+**	@returns 0 extradata set
+**	@returns -1 something went wrong
+*/
+static int CodecVideoGetExtraData(VideoDecoder * decoder, const AVPacket * avpkt)
+{
+	AVBSFContext *bsf_ctx;
+	const AVBitStreamFilter *f;
+	size_t extradata_size;
+	uint8_t *extradata;
+	int ret = 0;
+
+	f = av_bsf_get_by_name("extract_extradata");
+	if (!f) {
+		Error("CodecVideoSendPacket: extradata av_bsf_get_by_name failed!");
+		ret = -1;
+		goto error_out;
+	}
+
+	ret = av_bsf_alloc(f, &bsf_ctx);
+	if (ret < 0) {
+		Error("CodecVideoSendPacket: extradata av_bsf_alloc failed!");
+		goto error_out;
+	}
+
+	bsf_ctx->par_in->codec_id = decoder->VideoCtx->codec_id;
+
+	ret = av_bsf_init(bsf_ctx);
+	if (ret < 0) {
+		Error("CodecVideoSendPacket: extradata av_bsf_init failed!");
+		goto bsf_free;
+	}
+
+	AVPacket *dstPkt = av_packet_alloc();
+	AVPacket *pktRef = dstPkt;
+
+	if (!dstPkt) {
+		Error("CodecVideoSendPacket: extradata av_packet_alloc failed!");
+		ret = -1;
+		goto bsf_free;
+	}
+
+	ret = av_packet_ref(pktRef, avpkt);
+	if (ret < 0) {
+		Error("CodecVideoSendPacket: extradata av_packet_ref failed!");
+		goto dst_free;
+	}
+
+	ret = av_bsf_send_packet(bsf_ctx, pktRef);
+	if (ret < 0) {
+		Error("CodecVideoSendPacket: extradata av_bsf_send_packet failed!");
+		goto pkt_unref;
+	}
+
+	ret = av_bsf_receive_packet(bsf_ctx, pktRef);
+	if (ret < 0) {
+		Error("CodecVideoSendPacket: extradata av_bsf_send_packet failed!");
+		goto pkt_unref;
+	}
+
+	extradata = av_packet_get_side_data(pktRef, AV_PKT_DATA_NEW_EXTRADATA,
+		&extradata_size);
+
+	decoder->VideoCtx->extradata = av_mallocz(extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
+	memcpy(decoder->VideoCtx->extradata, extradata, extradata_size);
+	decoder->VideoCtx->extradata_size = extradata_size;
+
+pkt_unref:
+	av_packet_unref(pktRef);
+dst_free:
+	av_packet_free(&dstPkt);
+bsf_free:
+	av_bsf_free(&bsf_ctx);
+error_out:
+	return ret;
+}
+
+/**
 **	Decode a video packet.
 **
 **	@param decoder	video decoder data
@@ -347,6 +431,12 @@ int CodecVideoSendPacket(VideoDecoder * decoder, const AVPacket * avpkt)
 
 	if (!avpkt->size) {
 		return -1;
+	}
+
+	// get extradata, if not yet done
+	if (!decoder->VideoCtx->extradata_size) {
+		if (!CodecVideoGetExtraData(decoder, avpkt))
+			Debug2(L_CODEC, "CodecVideoSendPacket: set extradata %p %d", decoder->VideoCtx->extradata, decoder->VideoCtx->extradata_size);
 	}
 
 	pthread_mutex_lock(&CodecLockMutex);
