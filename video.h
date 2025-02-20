@@ -56,6 +56,14 @@
 #define CODEC_DISABLE_MPEG_HW	1 << 0	///< disable mpeg hardware decoder
 #define CODEC_DISABLE_H264_HW	1 << 1	///< disable h264 hardware decoder
 
+// Hardware quirks, that are set depending on the hardware used
+#define QUIRK_NO_HW_DEINT		1 << 0	///< set, if no hw deinterlacer
+#define QUIRK_CODEC_FLUSH_WORKAROUND	1 << 1	///< set, if we have to close and reopen the codec instead of avcodec_flush_buffers (rpi)
+#define QUIRK_CODEC_NEEDS_EXT_INIT	1 << 2	///< set, if codec needs some infos for init (coded_width and coded_height)
+#define QUIRK_CODEC_SKIP_FIRST_FRAMES	1 << 3	///< set, if codec should skip first I-Frames
+
+#define QUIRK_CODEC_SKIP_NUM_FRAMES	2 ///< skip QUIRK_CODEC_SKIP_NUM_FRAMES, in case QUIRK_CODEC_SKIP_FIRST_FRAMES is set
+
 //----------------------------------------------------------------------------
 //	Typedefs
 //----------------------------------------------------------------------------
@@ -177,11 +185,7 @@ struct _Drm_Render_
 	int64_t pts;
 
 	int CodecMode;			/// CODEC_BY_ID, CODEC_NO_MPEG_HW, CODEC_V4L2M2M_H264
-
-	int NoHwDeint;			/// set if no hw deinterlacer
-	int CodecCanFlush;		/// CodecFlushBuffers works as expected
-	int CodecNeedsExtInit;		/// Codec needs some infos for init
-	int CodecSkipFirstFrames;	/// Codec should skip first I-Frames
+	int HardwareQuirks;		/// hardware specific quirks
 
 	AVFilterGraph *filter_graph;
 	AVFilterContext *buffersrc_ctx, *buffersink_ctx;

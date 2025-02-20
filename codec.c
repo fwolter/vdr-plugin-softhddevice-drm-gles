@@ -249,7 +249,7 @@ int CodecVideoOpen(VideoDecoder * decoder, int codec_id, AVCodecParameters * Par
 			decoder->VideoCtx->width = width;
 			decoder->VideoCtx->height = height;
 			Debug2(L_CODEC, "CodecVideoOpen: Set width %d and height %d forced", width, height);
-		} else if (decoder->Render->CodecNeedsExtInit) {
+		} else if (decoder->Render->HardwareQuirks & QUIRK_CODEC_NEEDS_EXT_INIT) {
 			int pWidth;
 			int pHeight;
 			ParseResolutionH264(&pWidth, &pHeight);
@@ -514,11 +514,12 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 	}
 
 	// codec artifacts workaround for amlogic H264, skip some key frames
-	if (decoder->Render->CodecSkipFirstFrames && decoder->FirstKeyFrame && decoder->VideoCtx->codec_id == AV_CODEC_ID_H264) {
+	if (decoder->VideoCtx->codec_id == AV_CODEC_ID_H264 && 
+	   (decoder->Render->HardwareQuirks & QUIRK_CODEC_SKIP_FIRST_FRAMES) && decoder->FirstKeyFrame) {
 		if (pFrame->flags & AV_FRAME_FLAG_KEY) {
 			Debug2(L_CODEC, "CodecVideoReceiveFrame: artifact workaround - skip %s I-frame nr %d",
 			       pFrame->flags & AV_FRAME_FLAG_INTERLACED ? "interlaced" : "progressive", decoder->FirstKeyFrame);
-			if (decoder->FirstKeyFrame++ > decoder->Render->CodecSkipFirstFrames - 1)
+			if (decoder->FirstKeyFrame++ > QUIRK_CODEC_SKIP_NUM_FRAMES - 1)
 				decoder->FirstKeyFrame = 0;
 		}
 

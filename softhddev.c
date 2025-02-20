@@ -1211,11 +1211,11 @@ receive_trickspeed:
 
 				goto receive_trickspeed; // try to get another frame
 			} else if (ret == -2) { // needs flush / reopen
-				if (stream->Render->CodecCanFlush) {
-					CodecVideoFlushBuffers(stream->Decoder);
-				} else {
+				if (stream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
 					if (CodecVideoReopenCodec(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
 						Fatal("VideoDecodeInput: Could not reopen the decoder (flush buffers)!");
+				} else {
+					CodecVideoFlushBuffers(stream->Decoder);
 				}
 				sent = 0;
 			}

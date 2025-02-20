@@ -275,10 +275,7 @@ void ReadHWPlatform(VideoRender * render)
 	size_t read_size;
 
 	txt_buf = (char *) calloc(bufsize, sizeof(char));
-	render->NoHwDeint = 0;
-	render->CodecCanFlush = 1;
-	render->CodecNeedsExtInit = 0;
-	render->CodecSkipFirstFrames = 0;
+	render->HardwareQuirks = 0;
 
 	read_size = ReadLineFromFile(txt_buf, bufsize, "/sys/firmware/devicetree/base/compatible");
 	if (!read_size) {
@@ -292,15 +289,14 @@ void ReadHWPlatform(VideoRender * render)
 
 		if (strstr(read_ptr, "bcm2711")) {
 			Debug2(L_DRM, "ReadHWPlatform: bcm2711 found");
-			render->CodecCanFlush = 0;
+			render->HardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "amlogic")) {
 			Debug2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
-			render->CodecNeedsExtInit = 1;
-			render->CodecCanFlush = 0;
-			render->CodecSkipFirstFrames = 2;
-			render->NoHwDeint = 1;
+			render->HardwareQuirks |= QUIRK_CODEC_NEEDS_EXT_INIT
+					       |  QUIRK_CODEC_SKIP_FIRST_FRAMES
+					       |  QUIRK_NO_HW_DEINT;
 			break;
 		}
 
@@ -2745,7 +2741,7 @@ int VideoRenderFrame(VideoRender * render,
 		SetInterlacedStream(interlaced);
 
 	if (frame->format == AV_PIX_FMT_YUV420P ||
-	   (frame->format == AV_PIX_FMT_DRM_PRIME && interlaced && !render->NoHwDeint)) {
+	   (frame->format == AV_PIX_FMT_DRM_PRIME && interlaced && !(render->HardwareQuirks & QUIRK_NO_HW_DEINT))) {
 		// use deinterlace/scale filter
 		// AV_PIX_FMT_YUV420P, interlaced -> software deinterlacer (bwdif filter)
 		// AV_PIX_FMT_YUV420P, progressive -> scale filter to get NV12 frames
