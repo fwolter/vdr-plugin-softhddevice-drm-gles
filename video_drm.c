@@ -458,14 +458,28 @@ static drmModeConnector *find_drm_connector(int fd, drmModeRes *resources)
 	drmModeConnector *connector = NULL;
 	int i;
 
+	// search for a connected connector
 	for (i = 0; i < resources->count_connectors; i++) {
 		connector = drmModeGetConnector(fd, resources->connectors[i]);
-		if (connector && connector->connection == DRM_MODE_CONNECTED) {
-			break;
-		}
+		if (connector && connector->connection == DRM_MODE_CONNECTED)
+			return connector;
 		drmModeFreeConnector(connector);
 		connector = NULL;
 	}
+
+	// search for a not connected connector, but with available modes
+	// this is a workaround for RPI: in case we don't have a monitor connected
+	// we can load an edid file at boot time, where the available modes are listed.
+	// To bring softhddevice up, we also have to go through the not connected connectors
+	for (i = 0; i < resources->count_connectors; i++) {
+		connector = drmModeGetConnector(fd, resources->connectors[i]);
+		if (connector && connector->count_modes > 0)
+			return connector;
+		drmModeFreeConnector(connector);
+		connector = NULL;
+	}
+
+	// we couldn't find a connector
 	return connector;
 }
 
@@ -650,7 +664,7 @@ static int FindDevice(VideoRender * render)
 		resources->count_connectors, resources->count_crtcs,
 		resources->count_encoders);
 
-	// find a connected connector
+	// find a connector
 	connector = find_drm_connector(render->fd_drm, resources);
 	if (!connector) {
 		Error("FindDevice: cannot retrieve DRM connector (%d): %m", errno);
