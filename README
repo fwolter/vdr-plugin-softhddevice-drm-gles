@@ -61,8 +61,9 @@ Supported Hardware:
 Known Bugs/ TODO:
 -----------------
 	- attach/detach isn't implemented
-	- amlogic trickspeed
+	- amlogic trickspeed is broken
 	- PASSTHROUGH is broken
+	- rpi avcodec_flush_buffers is broken in ffmpeg, use a workaround for now
 
 
 Install:
@@ -91,13 +92,30 @@ Requirements:
 -------------
         No running X!
 
-	vdr (version >=2.2.x)
+	vdr (version >=2.6.6)
 		Video Disk Recorder - turns a pc into a powerful set top box
 		for DVB.
 		http://www.tvdr.de/
 
 	ffmpeg
-		v4l2-request (Rockchip, Allwinner)	WIP LE version
+		Patched ffmpeg version needed (WIP LE version)
+
+		Have a look at https://github.com/LibreELEC/LibreELEC.tv/tree/master/packages/multimedia/ffmpeg
+		and choose the ffmpeg source and patches which matches your platform.
+		Most of them have not yet been upstreamed, so you probably need to build ffmpeg on your own.
+		LibreELEC supports Rockchip, Allwinner, Raspberry PI and (kind of) Amlogic.
+		Have a look at https://github.com/LibreELEC/LibreELEC.tv/tree/master/projects to find platform
+		specific patches.
+
+	kernel
+		Patched kernel needed (WIP LE version)
+
+		Have a look at https://github.com/LibreELEC/LibreELEC.tv/tree/master/packages/linux
+		and choose the linux source and patches which matches your platform.
+		Some of the needed patches have not yet been upstreamed, so you probably need to build the kernel on your own.
+		LibreELEC supports Rockchip, Allwinner, Raspberry PI and (kind of) Amlogic.
+		Have a look at https://github.com/LibreELEC/LibreELEC.tv/tree/master/projects to find platform
+		specific patches.
 
 	alsa-lib
 		Advanced Linux Sound Architecture Library
