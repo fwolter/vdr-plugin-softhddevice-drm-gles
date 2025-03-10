@@ -1234,6 +1234,12 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 	if (drmModeRmFB(fd_drm, buf->fb_id) < 0)
 		Error("DestroyFB: cannot rm FB (%d): %m", errno);
 
+	if (buf->fd_prime[0]) {
+		if (close(buf->fd_prime[0]))
+			Error("DestroyFB: error closing prime fd %d (%d): %m", buf->fd_prime[0], errno);
+		buf->fd_prime[0] = 0;
+	}
+
 	for (int i = 0; i < buf->num_planes; i++) {
 		if (buf->plane[i]) {
 			memset(&dreq, 0, sizeof(dreq));
