@@ -3082,6 +3082,9 @@ void VideoClearGrab(VideoRender *render)
 {
 	free(render->grabvideo);
 	free(render->grabosd);
+	render->grabvideoready = 0;
+	render->grabosdready = 0;
+	render->startgrab = 0;
 	render->grabinwork = 0;
 }
 

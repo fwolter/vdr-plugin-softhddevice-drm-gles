@@ -1551,7 +1551,10 @@ uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
     while(!VideoGrabReady(MyVideoStream->Render)) {
         usleep(10000);
         if (timeout-- <= 0) {
+            // TODO: This is not safe! It can occur when we get stuck in Frame2Display,
+            // if no OSD or video frames are filled. Reset Grabbing after a timeout.
             Debug2(L_GRAB, "GrabImage: Timeout!");
+            VideoClearGrab(MyVideoStream->Render);
             return NULL;
         }
     }
