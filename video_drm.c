@@ -688,17 +688,17 @@ static int FindDevice(VideoRender * render)
 	// find the highest resolution mode with 50, 60 or any refresh rate
 	if (!mode) {
 		j = 0;
-		int area;
+		int width;
 find_mode:
-		for (i = 0, area = 0; i < connector->count_modes; i++) {
+		for (i = 0, width = 0; i < connector->count_modes; i++) {
 			drmModeModeInfo *current_mode = &connector->modes[i];
 			if (preferred_hz[j] && current_mode->vrefresh != preferred_hz[j])
 				continue;
 
-			int current_area = current_mode->hdisplay * current_mode->vdisplay;
-			if (current_area > area) {
+			int current_width = current_mode->hdisplay;
+			if (current_width > width) {
 				mode = current_mode;
-				area = current_area;
+				width = current_width;
 			}
 		}
 
@@ -708,7 +708,7 @@ find_mode:
 		}
 
 		if (mode)
-			Debug2(L_DRM, "FindDevice: Use mode with the highest resolution: %dx%d@%d",
+			Debug2(L_DRM, "FindDevice: Use mode with the biggest width: %dx%d@%d",
 				mode->hdisplay, mode->vdisplay, mode->vrefresh);
 	}
 
