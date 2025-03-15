@@ -1308,7 +1308,7 @@ static void *GrabHandlerThread(void *arg)
 	if (osdbuf) {
 		for (int plane = 0; plane < osdbuf->num_planes; plane++) {
 			if (osdbuf->size[plane]) {
-				Debug2(L_GRAB, "GrabHandlerThread: free osdbuf %p (plane %d)", videobuf->plane[plane], plane);
+				Debug2(L_GRAB, "GrabHandlerThread: free osdbuf %p (plane %d)", osdbuf->plane[plane], plane);
 				free(osdbuf->plane[plane]);
 			}
 		}

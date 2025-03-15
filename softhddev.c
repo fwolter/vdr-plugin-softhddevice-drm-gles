@@ -1572,7 +1572,7 @@ uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
 
     int video_size = 0;			// data size of the grabbed video
     int video_width = screenwidth;	// width of the grabbed video
-    int video_height = screenwidth;	// height of the grabbed video
+    int video_height = screenheight;	// height of the grabbed video
     int video_x = 0, video_y = 0;	// x, y of the grabbed video
 
     // Video comes as RGB, width and height is original screen dimension (video is maybe scaled)
