@@ -805,47 +805,121 @@ static int AlsaPlayer(void)
 
 //----------------------------------------------------------------------------
 
+static char *opendevice(const char *device, int passthrough)
+{
+	int err;
+
+	if (!device)
+		return NULL;
+
+	Debug2(L_SOUND, "audio/alsa: try opening %sdevice '%s'",
+		passthrough ? "pass-through " : "", device);
+
+	// open none blocking; if device is already used, we don't want wait
+	if ((err = snd_pcm_open(&AlsaPCMHandle, device, SND_PCM_STREAM_PLAYBACK,
+		SND_PCM_NONBLOCK)) < 0) {
+
+		Warning("audio: AlsaInitPCM: could not open device '%s' error: %s", device,
+			snd_strerror(err));
+		return NULL;
+	}
+
+	Debug2(L_SOUND, "audio/alsa: opened %sdevice '%s'",
+		passthrough ? "pass-through " : "", device);
+
+	return (char *)device;
+}
+
+static char *finddevice(char *devname, char *hint)
+{
+	char **hints;
+	int err;
+	char **n;
+	char *name;
+	char *device = NULL;
+
+	err = snd_device_name_hint(-1, devname, (void ***)&hints);
+	if (err != 0) {
+		Warning("AlsaInitPCM: Cannot get device names for %s!", hint);
+		return NULL;
+	}
+
+	n = hints;
+	while (*n != NULL) {
+		name = snd_device_name_get_hint(*n, "NAME");
+
+		if (strstr(name, hint)) {
+			if ((device = opendevice(name, 0))) {
+				device = malloc(sizeof(char) * (strlen(name) + 1));
+				strcpy(device, name);
+				free(name);
+				snd_device_name_free_hint((void **)hints);
+				return (char *)device;
+			}
+		}
+
+		if (name && strcmp("null", name)) free(name);
+		n++;
+	}
+
+	snd_device_name_free_hint((void **)hints);
+	return NULL;
+}
+
 /**
 **	Open alsa pcm device.
 */
 static void AlsaInitPCM(void)
 {
-	const char *device;
+	char *device = NULL;
 	int err;
 
-	if (!(Passthrough && ((device = AudioPassthroughDevice)
-		|| (device = getenv("ALSA_PASSTHROUGH_DEVICE"))))
-		&& !(device = AudioPCMDevice) && !(device = getenv("ALSA_DEVICE"))) {
+	// try user set device
+	if (Passthrough)
+		device = opendevice(AudioPassthroughDevice, Passthrough);
 
-		device = "default";
-	}
-	Info("audio/alsa: using %sdevice '%s'",
-		Passthrough ? "pass-through " : "", device);
-#if 0
-    // for AC3 pass-through try to set the non-audio bit, use AES0=6 to set spdif in raw mode
-    if (Passthrough && AudioAppendAES) {
-	// FIXME: not yet finished
-	char *buf;
-	const char *s;
-	int n;
+	if (!device && Passthrough)
+		device = opendevice(getenv("ALSA_PASSTHROUGH_DEVICE"), Passthrough);
 
-	n = strlen(device);
-	buf = alloca(n + sizeof(":AES0=6") + 1);
-	strcpy(buf, device);
-	if (!(s = strchr(buf, ':'))) {
-	    // no alsa parameters
-	    strcpy(buf + n, ":AES=6");
-	}
-	Debug2(L_SOUND, "audio/alsa: try '%s'", buf);
-    }
-#endif
-	// open none blocking; if device is already used, we don't want wait
-	if ((err = snd_pcm_open(&AlsaPCMHandle, device, SND_PCM_STREAM_PLAYBACK,
-		SND_PCM_NONBLOCK)) < 0) {
+	if (!device)
+		device = opendevice(AudioPCMDevice, Passthrough);
 
-		Fatal("audio: AlsaOpenPCM: playback open '%s' error: %s", device,
-			snd_strerror(err));
+	if (!device)
+		device = opendevice(getenv("ALSA_DEVICE"), Passthrough);
+
+	// walkthrough hdmi: devices
+	if (!device) {
+		Debug2(L_SOUND, "AlsaInitPCM: Try hdmi: devices...");
+		device = finddevice("pcm", "hdmi:");
 	}
+
+	// walkthrough default: devices
+	if (!device) {
+		Debug2(L_SOUND, "AlsaInitPCM: Try default: devices...");
+		device = finddevice("pcm", "default:");
+	}
+
+	// try default device
+	if (!device) {
+		Debug2(L_SOUND, "AlsaInitPCM: Try default device...");
+		device = opendevice("default", Passthrough);
+	}
+
+	// use null device
+	if (!device) {
+		Debug2(L_SOUND, "AlsaInitPCM: Try null device...");
+		device = opendevice("null", Passthrough);
+	}
+
+	if (!device)
+		Fatal("audio: AlsaInitPCM: could not open any device, abort!");
+
+	if (!strcmp(device, "null"))
+		Warning("audio/alsa: using %sdevice '%s'",
+			Passthrough ? "pass-through " : "", device);
+	else
+		Info("audio/alsa: using %sdevice '%s'",
+			Passthrough ? "pass-through " : "", device);
 
 	if ((err = snd_pcm_nonblock(AlsaPCMHandle, 0)) < 0) {
 		Error("audio/alsa: can't set block mode: %s", snd_strerror(err));
