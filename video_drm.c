@@ -1565,7 +1565,7 @@ skip_video:
 
 		SetPlane(ModeReq, render->planes[OSD_PLANE]);
 		dirty += 1;
-		Debug2(L_DRM, "Frame2Display: SetPlane OSD (fb = %"PRIu64")", render->planes[OSD_PLANE]->properties.fb_id);
+		Debug2(L_DRM, "Frame2Display: SetPlane OSD %d (fb = %"PRIu64")", render->OsdShown, render->planes[OSD_PLANE]->properties.fb_id);
 		render->buf_osd->dirty = 0;
 	}
 
