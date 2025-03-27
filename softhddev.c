@@ -1083,7 +1083,12 @@ void ClearVideo(VideoStream * stream)
 	avpkt->size = 0;
 	avpkt->pts = AV_NOPTS_VALUE;
 
-	CodecVideoFlushBuffers(stream->Decoder);
+	if (stream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+		if (CodecVideoReopenCodec(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
+			Fatal("ClearVideo: Could not reopen the decoder (flush buffers)!");
+	} else {
+		CodecVideoFlushBuffers(stream->Decoder);
+	}
 	pthread_mutex_unlock(&PktsLockMutex);
 }
 
