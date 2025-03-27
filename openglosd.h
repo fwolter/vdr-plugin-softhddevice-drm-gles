@@ -37,7 +37,6 @@ extern "C"
 
 #include "audio.h"
 #include "video.h"
-#include "codec.h"
 #include "softhddev.h"
 }
 

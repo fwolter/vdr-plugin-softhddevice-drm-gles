@@ -1,5 +1,5 @@
 ///
-///	@file codec.h	@brief Codec module headerfile
+///	@file codec_audio.h	@brief Audio codec module headerfile
 ///
 ///	Copyright (c) 2009 - 2013, 2015 by Johns.  All Rights Reserved.
 ///
@@ -22,81 +22,40 @@
 /// @addtogroup Codec
 /// @{
 
-#ifndef __CODEC_H
-#define __CODEC_H
+#ifndef __CODEC_AUDIO_H
+#define __CODEC_AUDIO_H
+
+#include <libavcodec/avcodec.h>
 
 //----------------------------------------------------------------------------
 //	Defines
 //----------------------------------------------------------------------------
 
-#define CodecPCM 0x01			///< PCM bit mask
-#define CodecMPA 0x02			///< MPA bit mask (planned)
-#define CodecAC3 0x04			///< AC-3 bit mask
-#define CodecEAC3 0x08			///< E-AC-3 bit mask
-#define CodecDTS 0x10			///< DTS bit mask (planned)
+//----------------------------------------------------------------------------
+//	Variables, structs
+//----------------------------------------------------------------------------
 
-//----------------------------------------------------------------------------
-//	Video
-//----------------------------------------------------------------------------
 ///
-///	Video decoder structure.
+///	Audio decoder structure.
 ///
-struct _video_decoder_
+struct _audio_decoder_
 {
-    VideoRender *Render;		///< video hardware decoder
+    AVCodecContext *AudioCtx;		///< audio codec context
 
-    AVCodecContext *VideoCtx;		///< video codec context
-    int sent;
-    int received;
-    int last_coded_width;
-    int last_coded_height;
-    int FirstKeyFrame;
+    AVFrame *Frame;			///< decoded audio frame buffer
+    int64_t last_pts;			///< last PTS
 };
 
 //----------------------------------------------------------------------------
 //	Typedefs
 //----------------------------------------------------------------------------
 
-    /// Video decoder typedef.
-typedef struct _video_decoder_ VideoDecoder;
-
     /// Audio decoder typedef.
 typedef struct _audio_decoder_ AudioDecoder;
 
 //----------------------------------------------------------------------------
-//	Variables
-//----------------------------------------------------------------------------
-
-
-//----------------------------------------------------------------------------
 //	Prototypes
 //----------------------------------------------------------------------------
-
-    /// Allocate a new video decoder context.
-extern VideoDecoder *CodecVideoNewDecoder(VideoRender *);
-
-    /// Deallocate a video decoder context.
-extern void CodecVideoDelDecoder(VideoDecoder *);
-
-	/// Get VideoContext
-extern  AVCodecContext *Codec_get_VideoContext(VideoDecoder *);
-
-    /// Open video codec.
-extern int CodecVideoOpen(VideoDecoder *, int, AVCodecParameters *, AVRational *, int, int, int);
-
-    /// Close video codec.
-extern void CodecVideoClose(VideoDecoder *);
-
-    /// Decode a video packet.
-extern int CodecVideoSendPacket(VideoDecoder *, const AVPacket *);
-
-extern int CodecVideoReceiveFrame(VideoDecoder *, int, AVFrame **);
-
-    /// Flush video buffers.
-extern void CodecVideoFlushBuffers(VideoDecoder *);
-
-    /// Close and reopen video codec.
-extern int CodecVideoReopenCodec(VideoDecoder *, int, AVCodecParameters *, AVRational *, int);
 
     /// Allocate a new audio decoder context.
 extern AudioDecoder *CodecAudioNewDecoder(void);
@@ -110,20 +69,11 @@ extern void CodecAudioOpen(AudioDecoder *, int, AVCodecParameters *, AVRational 
     /// Close audio codec.
 extern void CodecAudioClose(AudioDecoder *);
 
-    /// Set audio pass-through.
-extern void CodecSetAudioPassthrough(int);
-
     /// Decode an audio packet.
 extern void CodecAudioDecode(AudioDecoder *, const AVPacket *);
 
     /// Flush audio buffers.
 extern void CodecAudioFlushBuffers(AudioDecoder *);
-
-    /// Setup and initialize codec module.
-extern void CodecInit(void);
-
-    /// Cleanup and exit codec module.
-extern void CodecExit(void);
 
 /// @}
 

@@ -63,7 +63,7 @@
 #include "misc.h"
 #include "video.h"
 #include "audio.h"
-#include "codec.h"
+#include "codec_video.h"
 #include "drm.h"
 #include "buf2rgb.h"
 

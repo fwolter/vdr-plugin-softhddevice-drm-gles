@@ -34,6 +34,7 @@ extern "C"
 
 #include <syslog.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <time.h>			// clock_gettime
 #include <unistd.h>
 #include <sys/syscall.h>

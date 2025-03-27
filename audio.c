@@ -60,7 +60,7 @@
 #include "misc.h"
 #include "audio.h"
 #include "video.h"
-#include "codec.h"
+#include "codec_audio.h"
 #include "softhddev.h"
 
 
@@ -76,6 +76,7 @@
 
 static const char *AudioPCMDevice;	///< PCM device name
 static const char *AudioPassthroughDevice;	///< Passthrough device name
+static int AudioPassthrough;	///< Passthrough mask
 static char AudioAppendAES;		///< flag automatic append AES
 static const char *AudioMixerDevice;	///< mixer device name
 static const char *AudioMixerChannel;	///< mixer channel name
@@ -1810,6 +1811,16 @@ void AudioSetDevice(const char *device)
 void AudioSetPassthroughDevice(const char *device)
 {
     AudioPassthroughDevice = device;
+}
+
+/**
+**	Set audio pass-through mask
+**
+**	@param mask	enable mask (PCM, AC-3, E-AC-3)
+*/
+void AudioSetPassthrough(int mask)
+{
+    AudioPassthrough = mask & (CodecPCM | CodecAC3 | CodecEAC3);
 }
 
 /**

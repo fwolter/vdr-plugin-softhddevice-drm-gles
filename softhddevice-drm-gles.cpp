@@ -46,7 +46,7 @@ extern "C"
 #include "softhddev.h"
 #include "audio.h"
 #include "video.h"
-#include "codec.h"
+#include "codec_audio.h"
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -775,10 +775,10 @@ void cMenuSetupSoft::Store(void)
     AudioPassthroughState = AudioPassthroughDefault;
     if (AudioPassthroughState) {
 	SetupStore("AudioPassthrough", ConfigAudioPassthrough);
-	CodecSetAudioPassthrough(ConfigAudioPassthrough);
+	AudioSetPassthrough(ConfigAudioPassthrough);
     } else {
 	SetupStore("AudioPassthrough", -ConfigAudioPassthrough);
-	CodecSetAudioPassthrough(0);
+	AudioSetPassthrough(0);
     }
     SetupStore("AudioDownmix", ConfigAudioDownmix = AudioDownmix);
     AudioSetDownmix(ConfigAudioDownmix);
@@ -1385,9 +1385,9 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 	AudioPassthroughState = i > 0;
 	ConfigAudioPassthrough = abs(i);
 	if (AudioPassthroughState) {
-	    CodecSetAudioPassthrough(ConfigAudioPassthrough);
+	    AudioSetPassthrough(ConfigAudioPassthrough);
 	} else {
-	    CodecSetAudioPassthrough(0);
+	    AudioSetPassthrough(0);
 	}
 	return true;
     }

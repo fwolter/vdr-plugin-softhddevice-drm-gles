@@ -1,5 +1,5 @@
 ///
-///	@file codec.c	@brief Codec functions
+///	@file codec_video.c	@brief Video codec functions
 ///
 ///	Copyright (c) 2009 - 2015 by Johns.  All Rights Reserved.
 ///	Copyright (c) 2018 by zille.  All Rights Reserved.
@@ -27,28 +27,18 @@
 ///		It is uses ffmpeg (http://ffmpeg.org) as backend.
 ///
 
-    /// compile with pass-through support (stable, AC-3, E-AC-3 only)
-#define USE_PASSTHROUGH
-
-#include <unistd.h>
-#include <libintl.h>
-#define _(str) gettext(str)		///< gettext shortcut
-#define _N(str) str			///< gettext_noop shortcut
 #include <pthread.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdarg.h>
 
 #include <libavcodec/avcodec.h>
 #include <libavcodec/bsf.h>
 #include <libavutil/opt.h>
 
-#ifdef MAIN_H
-#include MAIN_H
-#endif
-#include "iatomic.h"
+#include "codec_video.h"
 #include "misc.h"
 #include "video.h"
-#include "audio.h"
-#include "codec.h"
-#include "softhddev.h"
 
 #define NUM_CAPTURE_BUFFERS 10
 #define NUM_OUTPUT_BUFFERS 10
@@ -86,37 +76,8 @@ AVCodecContext *Codec_get_VideoContext(VideoDecoder * decoder)
 }
 
 //----------------------------------------------------------------------------
-//	Test
+//	Helper functions
 //----------------------------------------------------------------------------
-
-/**
-**	Allocate a new video decoder context.
-**
-**	@param hw_decoder	video hardware decoder
-**
-**	@returns private decoder pointer for video decoder.
-*/
-VideoDecoder *CodecVideoNewDecoder(VideoRender * render)
-{
-    VideoDecoder *decoder;
-
-    if (!(decoder = calloc(1, sizeof(*decoder)))) {
-		Fatal("codec: can't allocate vodeo decoder");
-    }
-    decoder->Render = render;
-
-    return decoder;
-}
-
-/**
-**	Deallocate a video decoder context.
-**
-**	@param decoder	private video decoder
-*/
-void CodecVideoDelDecoder(VideoDecoder * decoder)
-{
-    free(decoder);
-}
 
 static const AVCodecHWConfig *FindHWConfig(const AVCodec *codec)
 {
@@ -159,6 +120,41 @@ static const AVCodec* FindDecoder(enum AVCodecID codec_id, int force_software)
 
 	Warning("CodecVideoOpen: no decoder found");
 	return NULL;
+}
+
+//----------------------------------------------------------------------------
+//	Video
+//----------------------------------------------------------------------------
+
+/**
+**	Allocate a new video decoder context.
+**
+**	@param hw_decoder	video hardware decoder
+**
+**	@returns private decoder pointer for video decoder.
+*/
+VideoDecoder *CodecVideoNewDecoder(VideoRender * render)
+{
+    VideoDecoder *decoder;
+
+    if (!(decoder = calloc(1, sizeof(*decoder)))) {
+		Fatal("codec: can't allocate vodeo decoder");
+    }
+    decoder->Render = render;
+    pthread_mutex_init(&CodecLockMutex, NULL);
+
+    return decoder;
+}
+
+/**
+**	Deallocate a video decoder context.
+**
+**	@param decoder	private video decoder
+*/
+void CodecVideoDelDecoder(VideoDecoder * decoder)
+{
+    pthread_mutex_destroy(&CodecLockMutex);
+    free(decoder);
 }
 
 /**
@@ -582,207 +578,6 @@ void CodecVideoFlushBuffers(VideoDecoder * decoder)
 }
 
 //----------------------------------------------------------------------------
-//	Audio
-//----------------------------------------------------------------------------
-
-///
-///	Audio decoder structure.
-///
-struct _audio_decoder_
-{
-    AVCodecContext *AudioCtx;		///< audio codec context
-
-    AVFrame *Frame;			///< decoded audio frame buffer
-    int64_t last_pts;			///< last PTS
-};
-
-///
-///	IEC Data type enumeration.
-///
-enum IEC61937
-{
-    IEC61937_AC3 = 0x01,		///< AC-3 data
-    // FIXME: more data types
-    IEC61937_EAC3 = 0x15,		///< E-AC-3 data
-};
-
-#ifdef USE_PASSTHROUGH
-    ///
-    /// Pass-through flags: CodecPCM, CodecAC3, CodecEAC3, ...
-    ///
-static char CodecPassthrough;
-#else
-static const int CodecPassthrough = 0;
-#endif
-
-
-/**
-**	Allocate a new audio decoder context.
-**
-**	@returns private decoder pointer for audio decoder.
-*/
-AudioDecoder *CodecAudioNewDecoder(void)
-{
-    AudioDecoder *audio_decoder;
-
-    if (!(audio_decoder = calloc(1, sizeof(*audio_decoder)))) {
-		Fatal("codec: can't allocate audio decoder");
-    }
-    if (!(audio_decoder->Frame = av_frame_alloc())) {
-		Fatal("codec: can't allocate audio decoder frame buffer");
-    }
-	audio_decoder->AudioCtx = NULL;
-
-    return audio_decoder;
-}
-
-/**
-**	Deallocate an audio decoder context.
-**
-**	@param decoder	private audio decoder
-*/
-void CodecAudioDelDecoder(AudioDecoder * decoder)
-{
-    av_frame_free(&decoder->Frame);	// callee does checks
-    free(decoder);
-}
-
-/**
-**	Open audio decoder.
-**
-**	@param audio_decoder	private audio decoder
-**	@param codec_id	audio	codec id
-*/
-void CodecAudioOpen(AudioDecoder * audio_decoder, int codec_id,
-		AVCodecParameters *Par, AVRational * timebase)
-{
-	const AVCodec *codec;
-
-	if (codec_id == AV_CODEC_ID_AC3) {
-		if (!(codec = avcodec_find_decoder_by_name("ac3_fixed"))) {
-			Fatal("codec: codec ac3_fixed ID %#06x not found", codec_id);
-		}
-	} else if (codec_id == AV_CODEC_ID_AAC) {
-		if (!(codec = avcodec_find_decoder_by_name("aac_fixed"))) {
-			Fatal("codec: codec aac_fixed ID %#06x not found", codec_id);
-		}
-	} else {
-		if (!(codec = avcodec_find_decoder(codec_id))) {
-			Fatal("codec: codec %s ID %#06x not found",
-				avcodec_get_name(codec_id), codec_id);
-			// FIXME: errors aren't fatal
-		}
-	}
-
-	if (!(audio_decoder->AudioCtx = avcodec_alloc_context3(codec))) {
-		Fatal("codec: can't allocate audio codec context");
-	}
-
-	audio_decoder->AudioCtx->pkt_timebase.num = timebase->num;
-	audio_decoder->AudioCtx->pkt_timebase.den = timebase->den;
-
-	if (Par) {
-		if ((avcodec_parameters_to_context(audio_decoder->AudioCtx, Par)) < 0)
-			Error("CodecAudioOpen: insert parameters to context failed!");
-	}
-
-	// open codec
-	if (avcodec_open2(audio_decoder->AudioCtx, audio_decoder->AudioCtx->codec, NULL) < 0) {
-		Fatal("codec: can't open audio codec");
-	}
-	Debug2(L_CODEC, "CodecAudioOpen: Codec %s found", audio_decoder->AudioCtx->codec->long_name);
-}
-
-/**
-**	Close audio decoder.
-**
-**	@param audio_decoder	private audio decoder
-*/
-void CodecAudioClose(AudioDecoder * audio_decoder)
-{
-	Debug2(L_CODEC, "CodecAudioClose");
-	if (audio_decoder->AudioCtx) {
-		avcodec_free_context(&audio_decoder->AudioCtx);
-	}
-}
-
-/**
-**	Set audio pass-through.
-**
-**	@param mask	enable mask (PCM, AC-3, E-AC-3)
-*/
-void CodecSetAudioPassthrough(int mask)
-{
-#ifdef USE_PASSTHROUGH
-    CodecPassthrough = mask & (CodecPCM | CodecAC3 | CodecEAC3);
-#endif
-    (void)mask;
-}
-
-/**
-**	Decode an audio packet.
-**
-**	@param audio_decoder	audio decoder data
-**	@param avpkt		audio packet
-*/
-void CodecAudioDecode(AudioDecoder * audio_decoder, const AVPacket * avpkt)
-{
-	AVFrame *frame;
-	int ret_send, ret_rec;
-
-	// FIXME: don't need to decode pass-through codecs
-	frame = audio_decoder->Frame;
-	av_frame_unref(frame);
-
-send:
-	ret_send = avcodec_send_packet(audio_decoder->AudioCtx, avpkt);
-	if (ret_send < 0)
-		Error("CodecAudioDecode: avcodec_send_packet error: %s",
-			av_err2str(ret_send));
-
-	ret_rec = avcodec_receive_frame(audio_decoder->AudioCtx, frame);
-	if (ret_rec < 0) {
-		Error("CodecAudioDecode: avcodec_receive_frame error: %s",
-			av_err2str(ret_rec));
-	} else {
-		// Control PTS is valid
-		if (audio_decoder->last_pts == (int64_t) AV_NOPTS_VALUE &&
-			frame->pts == (int64_t) AV_NOPTS_VALUE) {
-			Warning("CodecAudioDecode: NO VALID PTS");
-		}
-		// update audio clock
-		if (frame->pts != (int64_t) AV_NOPTS_VALUE) {
-			audio_decoder->last_pts = frame->pts;
-		} else if (audio_decoder->last_pts != (int64_t) AV_NOPTS_VALUE) {
-			frame->pts = audio_decoder->last_pts + 
-				(int64_t)(frame->nb_samples /
-				av_q2d(audio_decoder->AudioCtx->pkt_timebase) /
-				frame->sample_rate);
-			audio_decoder->last_pts = frame->pts;
-		}
-		AudioFilter(frame, audio_decoder->AudioCtx);
-	}
-
-	if (ret_send == AVERROR(EAGAIN))
-		goto send;
-}
-
-
-/**
-**	Flush the audio decoder.
-**
-**	@param decoder	audio decoder data
-*/
-void CodecAudioFlushBuffers(AudioDecoder * decoder)
-{
-	Debug2(L_CODEC, "CodecAudioFlushBuffers");
-	if (decoder->AudioCtx) {
-		avcodec_flush_buffers(decoder->AudioCtx);
-	}
-	decoder->last_pts = AV_NOPTS_VALUE;
-}
-
-//----------------------------------------------------------------------------
 //	Codec
 //----------------------------------------------------------------------------
 
@@ -834,7 +629,6 @@ void CodecInit(void)
 #if LIBAVCODEC_VERSION_INT < AV_VERSION_INT(58,18,100)
 	avcodec_register_all();		// register all formats and codecs
 #endif
-	pthread_mutex_init(&CodecLockMutex, NULL);
 }
 
 /**
@@ -842,5 +636,4 @@ void CodecInit(void)
 */
 void CodecExit(void)
 {
-	pthread_mutex_destroy(&CodecLockMutex);
 }

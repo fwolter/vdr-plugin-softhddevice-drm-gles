@@ -46,7 +46,8 @@
 #include "softhddev.h"
 #include "audio.h"
 #include "video.h"
-#include "codec.h"
+#include "codec_audio.h"
+#include "codec_video.h"
 #include "buf2rgb.h"
 
 //////////////////////////////////////////////////////////////////////////////

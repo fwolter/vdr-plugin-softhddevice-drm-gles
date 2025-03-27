@@ -23,6 +23,16 @@
 /// @{
 
 //----------------------------------------------------------------------------
+//	Defines
+//----------------------------------------------------------------------------
+
+#define CodecPCM  0x01			///< PCM bit mask
+#define CodecMPA  0x02			///< MPA bit mask (planned)
+#define CodecAC3  0x04			///< AC-3 bit mask
+#define CodecEAC3 0x08			///< E-AC-3 bit mask
+#define CodecDTS  0x10			///< DTS bit mask (planned)
+
+//----------------------------------------------------------------------------
 //	Prototypes
 //----------------------------------------------------------------------------
 
@@ -51,6 +61,7 @@ extern void AudioSetDownmix(int);
 
 extern void AudioSetDevice(const char *);	///< set PCM audio device
 extern void AudioSetPassthroughDevice(const char *);	/// set pass-through device
+extern void AudioSetPassthrough(int);	/// set pass-through mask
 extern void AudioSetChannel(const char *);	///< set mixer channel
 extern void AudioSetAutoAES(int);	///< set automatic AES flag handling
 
