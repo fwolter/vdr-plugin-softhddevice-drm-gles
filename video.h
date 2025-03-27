@@ -95,7 +95,7 @@ struct drm_buf {
 	int obj_index[4];
 	uint32_t primehandle[4];	// primedata objects prime handles (count is nb_objects, index is obj_index)
 	int trickspeed;
-	int enqueue;
+	int swbuffer;
 #ifdef USE_GLES
 	struct gbm_bo *bo;
 #endif

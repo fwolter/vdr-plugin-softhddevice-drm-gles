@@ -1272,7 +1272,7 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 	buf->fb_id = 0;
 	buf->trickspeed = 0;
 	buf->dirty = 0;
-	buf->enqueue = 0;
+	buf->swbuffer = 0;
 	buf->num_planes = 0;
 }
 
@@ -1335,7 +1335,7 @@ void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 	buf->pix_fmt = src->pix_fmt;
 	buf->num_planes = src->num_planes;
 	buf->trickspeed = src->trickspeed;
-	buf->enqueue = src->enqueue;
+	buf->swbuffer = src->swbuffer;
 	buf->nb_objects = src->nb_objects;
 
 	for (int object = 0; object < buf->nb_objects; object++) {
@@ -1745,10 +1745,10 @@ static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf *
 
 	// search for a made fd / FB combination
 	for (i = 0; i < RENDERBUFFERS; i++) {
-		if (render->FlushLast && !render->bufs[i].enqueue)
+		if (render->FlushLast && !render->bufs[i].swbuffer)
 			break;
 
-		if (render->bufs[i].trickspeed && !render->bufs[i].enqueue)
+		if (render->bufs[i].trickspeed && !render->bufs[i].swbuffer)
 			break;
 
 		if (render->bufs[i].dirty == 0)
@@ -1779,7 +1779,7 @@ static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf *
 		if (SetupFB(render, pbuf, primedata))
 			return 1;
 
-		render->bufs[i].enqueue = 0;
+		render->bufs[i].swbuffer = 0;
 	}
 
 	if (pbuf == 0) {
@@ -2365,7 +2365,7 @@ get_buffer:
 	}
 
 	// mark this buffer as a software decoded buffer
-	buf->enqueue = 1;
+	buf->swbuffer = 1;
 
 	for (i = 0; i < inframe->height; ++i) {
 		memcpy(buf->plane[0] + i * buf->pitch[0],
