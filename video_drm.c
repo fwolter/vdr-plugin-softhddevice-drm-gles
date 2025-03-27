@@ -1234,7 +1234,7 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 	if (drmModeRmFB(fd_drm, buf->fb_id) < 0)
 		Error("DestroyFB: cannot rm FB (%d): %m", errno);
 
-	if (buf->fd_prime[0]) {
+	if (buf->fd_prime[0] && buf->swbuffer) {
 		if (close(buf->fd_prime[0]))
 			Error("DestroyFB: error closing prime fd %d (%d): %m", buf->fd_prime[0], errno);
 		buf->fd_prime[0] = 0;
