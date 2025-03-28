@@ -512,9 +512,15 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 	// codec artifacts workaround for amlogic H264, skip some key frames
 	if (decoder->VideoCtx->codec_id == AV_CODEC_ID_H264 && 
 	   (decoder->Render->HardwareQuirks & QUIRK_CODEC_SKIP_FIRST_FRAMES) && decoder->FirstKeyFrame) {
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
+		if (pFrame->key_frame) {
+			Debug2(L_CODEC, "CodecVideoReceiveFrame: artifact workaround - skip %s I-frame nr %d",
+			       pFrame->interlaced_frame ? "interlaced" : "progressive", decoder->FirstKeyFrame);
+#else
 		if (pFrame->flags & AV_FRAME_FLAG_KEY) {
 			Debug2(L_CODEC, "CodecVideoReceiveFrame: artifact workaround - skip %s I-frame nr %d",
 			       pFrame->flags & AV_FRAME_FLAG_INTERLACED ? "interlaced" : "progressive", decoder->FirstKeyFrame);
+#endif
 			if (decoder->FirstKeyFrame++ > QUIRK_CODEC_SKIP_NUM_FRAMES - 1)
 				decoder->FirstKeyFrame = 0;
 		}
