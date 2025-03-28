@@ -303,9 +303,6 @@ extern void VideoGetStats(VideoRender *, int *, int *, int *);
     /// Get screen size
 extern void VideoGetScreenSize(VideoRender *, int *, int *, double *);
 
-    /// Get video size
-extern void VideoGetVideoSize(VideoDecoder *, int *, int *, double *);
-
     /// Set display resolution
 extern void VideoSetDisplay(const char *);
 

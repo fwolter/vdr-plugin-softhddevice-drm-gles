@@ -37,6 +37,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/timestamp.h>
@@ -49,6 +50,7 @@
 #include "codec_audio.h"
 #include "codec_video.h"
 #include "buf2rgb.h"
+}
 
 //////////////////////////////////////////////////////////////////////////////
 //	Variables
@@ -74,7 +76,7 @@ static volatile char StreamFreezed;	///< stream freezed
 struct __video_stream__
 {
     VideoRender *Render;		///< video hardware decoder
-    VideoDecoder *Decoder;		///< video decoder
+    cVideoDecoder *Decoder = nullptr;	///< video decoder
 
     enum AVCodecID CodecID;		///< current codec id
     AVCodecParameters * Par;
@@ -682,7 +684,7 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 	p = AudioAvPkt->data;
 	while (n >= 5) {
 		int r;
-		unsigned codec_id;
+		enum AVCodecID codec_id;
 
 		// 4 bytes 0xFFExxxxx Mpeg audio
 		// 3 bytes 0x56Exxx AAC LATM audio
@@ -733,7 +735,7 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 				Error("avpkt allocation failed");
 				continue;
 			};
-			avpkt->data = (void *)p;
+			avpkt->data = (uint8_t *)p;
 			avpkt->size = r;
 			avpkt->pts = AudioAvPkt->pts;
 			CodecAudioDecode(MyAudioDecoder, avpkt);
@@ -1059,8 +1061,9 @@ static void VideoStreamClose(VideoStream * stream)
 {
 	Debug("VideoStreamClose:");
 	if (stream->Decoder) {
-		CodecVideoDelDecoder(stream->Decoder);
-		stream->Decoder = NULL;
+		stream->Decoder->Close();
+		delete(stream->Decoder);
+		stream->Decoder = nullptr;
 	}
 	if (stream->Render) {
 		VideoDelRender(stream->Render);
@@ -1085,10 +1088,10 @@ void ClearVideo(VideoStream * stream)
 	avpkt->pts = AV_NOPTS_VALUE;
 
 	if (stream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
-		if (CodecVideoReopenCodec(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
+		if (stream->Decoder->ReopenCodec(stream->CodecID, stream->Par, &stream->timebase, 0))
 			Fatal("ClearVideo: Could not reopen the decoder (flush buffers)!");
 	} else {
-		CodecVideoFlushBuffers(stream->Decoder);
+		stream->Decoder->FlushBuffers();
 	}
 	pthread_mutex_unlock(&PktsLockMutex);
 }
@@ -1100,7 +1103,7 @@ int closing_stream_requested(VideoStream *stream)
 		if (!MyVideoStream->TrickSpeed || !VideoGetTrickForward(stream->Render)) {
 			ClearVideo(stream);
 			stream->CodecID = AV_CODEC_ID_NONE;
-			CodecVideoClose(stream->Decoder);
+			stream->Decoder->Close();
 			stream->Par = NULL;
 		}
 		stream->ClosingStream = 0;
@@ -1137,7 +1140,7 @@ int VideoDecodeInput(VideoStream * stream)
 	}
 
 	if (stream->NewStream && stream->CodecID != AV_CODEC_ID_NONE) {
-		if (CodecVideoOpen(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0, 0, 0))
+		if (stream->Decoder->Open(stream->CodecID, stream->Par, &stream->timebase, 0, 0, 0))
 			Fatal("VideoDecodeInput: Could not open the decoder!");
 		stream->NewStream = 0;
 	}
@@ -1153,7 +1156,7 @@ int VideoDecodeInput(VideoStream * stream)
 		avpkt = &stream->PacketRb[stream->PacketRead];
 
 		// try sending packet to decoder
-		ret = CodecVideoSendPacket(stream->Decoder, avpkt);
+		ret = stream->Decoder->SendPacket(avpkt);
 		if (ret != AVERROR(EAGAIN)) { // something went wrong or packet was sent, advance packet
 			stream->PacketRead = (stream->PacketRead + 1) % VIDEO_PACKET_MAX;
 			atomic_dec(&stream->PacketsFilled);
@@ -1161,7 +1164,7 @@ int VideoDecodeInput(VideoStream * stream)
 			if (ret == 0 && VideoGetTrickSpeed(stream->Render) && !VideoGetTrickForward(stream->Render)) {
 				sent++;
 				if (sent >= minpkts) {
-					CodecVideoSendPacket(stream->Decoder, NULL);
+					stream->Decoder->SendPacket(NULL);
 					sent = 0;
 				}
 			}
@@ -1172,8 +1175,8 @@ int VideoDecodeInput(VideoStream * stream)
 // this is normal Playback
 		if (!VideoGetTrickSpeed(stream->Render)) {
 			if (!stream->NewStream) { // this is for mediaplayer ?
-				if (!CodecVideoReceiveFrame(stream->Decoder, 0, &frame)) {
-					while (VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, frame, 0)) {
+				if (!stream->Decoder->ReceiveFrame(0, &frame)) {
+					while (VideoRenderFrame(stream->Render, stream->Decoder->GetContext(), frame, 0)) {
 						if (closing_stream_requested(stream)) {
 							av_frame_free(&frame);
 							return -1;
@@ -1185,7 +1188,7 @@ int VideoDecodeInput(VideoStream * stream)
 		} else {
 receive_trickspeed:
 			// try receiving frame from decoder
-			ret = CodecVideoReceiveFrame(stream->Decoder, 1, &frame);
+			ret = stream->Decoder->ReceiveFrame(1, &frame);
 			if (ret == 0) {
 				while (VideoGetTrickSpeed(stream->Render) && VideoGetTrickCounter(stream->Render) > 0) {
 					AVFrame *trickframe = av_frame_clone(frame);
@@ -1194,7 +1197,7 @@ receive_trickspeed:
 						break;
 					}
 					Debug2(L_TRICK, "VideoDecodeInput: Trickspeed, send another cloned trick frame %d %p", VideoGetTrickCounter(stream->Render), trickframe);
-					while (VideoRenderFrame(stream->Render, stream->Decoder->VideoCtx, trickframe, FRAME_FLAG_TRICKSPEED)) {
+					while (VideoRenderFrame(stream->Render, stream->Decoder->GetContext(), trickframe, FRAME_FLAG_TRICKSPEED)) {
 						if (closing_stream_requested(stream)) {
 							av_frame_free(&trickframe);
 							av_frame_free(&frame);
@@ -1218,10 +1221,10 @@ receive_trickspeed:
 				goto receive_trickspeed; // try to get another frame
 			} else if (ret == AVERROR_EOF) { // needs flush / reopen
 				if (stream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
-					if (CodecVideoReopenCodec(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
+					if (stream->Decoder->ReopenCodec(stream->CodecID, stream->Par, &stream->timebase, 0))
 						Fatal("VideoDecodeInput: Could not reopen the decoder (flush buffers)!");
 				} else {
-					CodecVideoFlushBuffers(stream->Decoder);
+					stream->Decoder->FlushBuffers();
 				}
 				sent = 0;
 			}
@@ -1379,7 +1382,7 @@ void StillPicture(const uint8_t * data, int size)
 
 	const uchar * pos;
 	int size_rest;
-	int codec = AV_CODEC_ID_NONE;
+	enum AVCodecID codec = AV_CODEC_ID_NONE;
 	int i;
 	int pes_length;
 	int head_length;
@@ -1444,34 +1447,34 @@ void StillPicture(const uint8_t * data, int size)
 	atomic_inc(&MyVideoStream->PacketsFilled);
 
 	StreamFreezed = 1;
-	if (Codec_get_VideoContext(MyVideoStream->Decoder)) {
-		if ((int)(Codec_get_VideoContext(MyVideoStream->Decoder)->codec_id) != codec) {
-			CodecVideoClose(MyVideoStream->Decoder);
+	if (MyVideoStream->Decoder->GetContext()) {
+		if ((int)(MyVideoStream->Decoder->GetContext()->codec_id) != codec) {
+			MyVideoStream->Decoder->Close();
 		}
 	}
-	if (!Codec_get_VideoContext(MyVideoStream->Decoder)) {
-		if (CodecVideoOpen(MyVideoStream->Decoder, codec, NULL, NULL, 0, 0, 0))
+	if (!MyVideoStream->Decoder->GetContext()) {
+		if (MyVideoStream->Decoder->Open(codec, NULL, NULL, 0, 0, 0))
 			Fatal("StillPicture: Could not open the decoder!");
 		context = 1;
 	}
 	AudioPause();
 
 	int ret = 0;
-	ret = CodecVideoSendPacket(MyVideoStream->Decoder, avpkt);
+	ret = MyVideoStream->Decoder->SendPacket(avpkt);
 	if (ret)
-		Debug2(L_STILL, "StillPicture: CodecVideoSendPacket(avpkt) returned %d", ret);
+		Debug2(L_STILL, "StillPicture: SendPacket(avpkt) returned %d", ret);
 	else
 		Debug2(L_STILL, "StillPicture: avpkt sent");
 
 	// force decoder to enter draining because we only want 1 avpkt to be decoded
-	CodecVideoSendPacket(MyVideoStream->Decoder, NULL);
+	MyVideoStream->Decoder->SendPacket(NULL);
 
 receive:
-	ret = CodecVideoReceiveFrame(MyVideoStream->Decoder, 1, &frame);
+	ret = MyVideoStream->Decoder->ReceiveFrame(1, &frame);
 	if (!ret) {
 		// frame received, render it and try another one (should end up with AVERROR_EOF)
 		Debug2(L_STILL, "StillPicture: frame received");
-		while (VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, FRAME_FLAG_STILLPICTURE)) {
+		while (VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->GetContext(), frame, FRAME_FLAG_STILLPICTURE)) {
 			if (MyVideoStream->ClosingStream) {
 				av_frame_free(&frame);
 				break;
@@ -1481,10 +1484,10 @@ receive:
 	} else if (ret == AVERROR_EOF) {
 		// AVERROR_EOF, flush needed
 		if (MyVideoStream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
-			if (CodecVideoReopenCodec(MyVideoStream->Decoder, MyVideoStream->CodecID, MyVideoStream->Par, &MyVideoStream->timebase, 0))
+			if (MyVideoStream->Decoder->ReopenCodec(MyVideoStream->CodecID, MyVideoStream->Par, &MyVideoStream->timebase, 0))
 				Fatal("StillPicture: Could not reopen the decoder (flush buffers)!");
 		} else {
-			CodecVideoFlushBuffers(MyVideoStream->Decoder);
+			MyVideoStream->Decoder->FlushBuffers();
 		}
 	} else {
 		// sth went wrong or AVERROR(EAGAIN)
@@ -1492,7 +1495,7 @@ receive:
 	}
 
 	if (context) {
-		CodecVideoClose(MyVideoStream->Decoder);
+		MyVideoStream->Decoder->Close();
 		MyVideoStream->CodecID = AV_CODEC_ID_NONE;
 	}
 	ClearAudio();
@@ -1503,7 +1506,7 @@ receive:
 
 
     /// call VDR support function
-extern uint8_t *CreateJpeg(uint8_t *, int *, int, int, int);
+extern "C" uint8_t *CreateJpeg(uint8_t *, int *, int, int, int);
 
 #if defined(USE_JPEG) && JPEG_LIB_VERSION >= 80
 /**
@@ -1608,7 +1611,7 @@ uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
     uint8_t *video = VideoGetGrab(MyVideoStream->Render, &video_size, &video_width, &video_height, &video_x, &video_y, 0);
     if (!video) {
         Debug2(L_GRAB, "GrabImage: video is NULL, create black screen!");
-        video = calloc(1, screensize);
+        video = (uint8_t *)calloc(1, screensize);
     }
 
     // OSD comes as ARGB, width and height is original screen dimension (osd is always fullscreen)
@@ -1630,7 +1633,7 @@ uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
     if (!osd) {
         result = scaledvideo;
     } else {
-        result = malloc(screensize);
+        result = (uint8_t *)malloc(screensize);
         alphablend(result, osd, scaledvideo, screenwidth, screenheight);
         free(scaledvideo);
         free(osd);
@@ -1653,7 +1656,7 @@ uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
     } else {  // add header to raw data
         char buf[64];
         int n = snprintf(buf, sizeof(buf), "P6\n%d\n%d\n255\n", grabwidth, grabheight);
-        grabbedimage = malloc(scaledsize + n);
+        grabbedimage = (uint8_t *)malloc(scaledsize + n);
         memcpy(grabbedimage, buf, n);
         memcpy(grabbedimage + n, scaledresult, scaledsize);
         *size = scaledsize + n;
@@ -1673,7 +1676,7 @@ void SetAudioCodec(int codec_id, AVCodecParameters * par, AVRational * timebase)
 	CodecAudioOpen(MyAudioDecoder, codec_id, par, timebase);
 }
 
-void SetVideoCodec(int codec_id, AVCodecParameters * par, AVRational * timebase)
+void SetVideoCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
 {
 	MyVideoStream->CodecID = codec_id;
 	MyVideoStream->NewStream = 1;
@@ -1864,7 +1867,7 @@ void GetScreenSize(int *width, int *height, double *pixel_aspect)
 
 void GetVideoSize(int *width, int *height, double *aspect_ratio)
 {
-	VideoGetVideoSize(MyVideoStream->Decoder, width, height, aspect_ratio);
+	MyVideoStream->Decoder->GetVideoSize(width, height, aspect_ratio);
 //	Debug("GetVideoSize: %d x %d @ %f", *width, *height, *aspect_ratio);
 }
 
@@ -1954,8 +1957,6 @@ void SoftHdDeviceExit(void)
 
     VideoExit(MyVideoStream->Render);
     VideoStreamClose(MyVideoStream);
-
-    CodecExit();
 }
 
 
@@ -1977,14 +1978,13 @@ int Start(void)
 		AudioCodecID = AV_CODEC_ID_NONE;
 		AudioChannelID = -1;
 
-		CodecInit();
 		if (!MyVideoStream->Decoder) {
 			MyVideoStream->CodecID = AV_CODEC_ID_NONE;
 		}
 
 		if ((MyVideoStream->Render = VideoNewRender(MyVideoStream))) {
 			VideoInit(MyVideoStream->Render);
-			MyVideoStream->Decoder = CodecVideoNewDecoder(MyVideoStream->Render);
+			MyVideoStream->Decoder = new cVideoDecoder(MyVideoStream->Render);
 			VideoPacketInit(MyVideoStream);
 		}
 	}
