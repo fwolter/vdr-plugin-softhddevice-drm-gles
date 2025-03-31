@@ -39,6 +39,7 @@ extern "C"
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <string.h>
+#include <inttypes.h>
 
 //////////////////////////////////////////////////////////////////////////////
 //	Defines

@@ -150,7 +150,7 @@ unsigned int HwChannels;		///< hardware number of channels
 AVRational *timebase;			///< pointer to AVCodecContext pkts_timebase
 int64_t PTS;			///< pts clock
 
-RingBuffer *AudioRingBuffer;		///< sample ring buffer
+cDeviceRingbuffer *AudioRingBuffer = nullptr;		///< sample ring buffer
 
 static unsigned AudioStartThreshold;	///< start play, if filled
 
@@ -629,7 +629,7 @@ static int AudioFilterInit(AVCodecContext *AudioCtx)
 static void AudioRingInit(void)
 {
 	// ~2s 8ch 16bit
-	AudioRingBuffer = RingBufferNew(AudioRingBufferSize);
+	AudioRingBuffer = new cDeviceRingbuffer(AudioRingBufferSize);
 }
 
 /**
@@ -638,8 +638,8 @@ static void AudioRingInit(void)
 static void AudioRingExit(void)
 {
 	if (AudioRingBuffer) {
-		RingBufferDel(AudioRingBuffer);
-		AudioRingBuffer = NULL;
+		delete AudioRingBuffer;
+		AudioRingBuffer = nullptr;
 	}
 	HwSampleRate = 0;	// checked for valid setup
 }
@@ -690,7 +690,7 @@ static void AlsaFlushBuffers(void)
 	Debug2(L_SOUND, "audio: AlsaFlushBuffers: pcm state %s", snd_pcm_state_name(state));
 	}
 
-	RingBufferReset(AudioRingBuffer);
+	AudioRingBuffer->Reset();
 	AudioSkip = 0;
 	PTS = AV_NOPTS_VALUE;
 	AudioVideoIsReady = 0;
@@ -754,7 +754,7 @@ static int AlsaPlayer(void)
 			break;
 		}
 
-		n = RingBufferGetReadPointer(AudioRingBuffer, &p);
+		n = AudioRingBuffer->GetReadPointer(&p);
 		if (!n) {			// ring buffer empty
 			Warning("AlsaPlayer: ring buffer empty Videopkts: %d",
 				VideoGetPackets());
@@ -781,7 +781,7 @@ static int AlsaPlayer(void)
 		} else {
 			err = snd_pcm_writei(AlsaPCMHandle, p, frames);
 		}
-		RingBufferReadAdvance(AudioRingBuffer, avail);
+		AudioRingBuffer->ReadAdvance(avail);
 		pthread_mutex_unlock(&AudioRbMutex);
 		if (err != frames) {
 			if (err < 0) {
@@ -1231,7 +1231,7 @@ static void *AudioPlayHandlerThread(void *dummy)
 
 			if (AlsaPlayerStop)
 				break;
-		} while (RingBufferUsedBytes(AudioRingBuffer));
+		} while (AudioRingBuffer->UsedBytes());
 	}
 	return dummy;
 }
@@ -1304,7 +1304,7 @@ void AudioEnqueue(AVFrame *frame)
 	AudioReorderAudioFrame(buffer, count, frame->ch_layout.nb_channels);
 
 	pthread_mutex_lock(&AudioRbMutex);
-	n = RingBufferWrite(AudioRingBuffer, buffer, count);
+	n = AudioRingBuffer->Write(buffer, count);
 	if (n != (size_t) count)
 		Error("audio: AudioEnqueue: can't place %d samples in ring buffer", count);
 	PTS = frame->pts + (frame->nb_samples * timebase->den /
@@ -1314,7 +1314,7 @@ void AudioEnqueue(AVFrame *frame)
 	if (!AudioRunning && !AudioPaused) {		// check, if we can start the thread
 		int skip;
 
-		n = RingBufferUsedBytes(AudioRingBuffer);
+		n = AudioRingBuffer->UsedBytes();
 		skip = AudioSkip;
 		// FIXME: round to packet size
 
@@ -1327,8 +1327,8 @@ void AudioEnqueue(AVFrame *frame)
 				skip = n;
 			}
 			AudioSkip -= skip;
-			RingBufferReadAdvance(AudioRingBuffer, skip);
-			n = RingBufferUsedBytes(AudioRingBuffer);
+			AudioRingBuffer->ReadAdvance(skip);
+			n = AudioRingBuffer->UsedBytes();
 		}
 		// forced start or enough video + audio buffered
 		// for some exotic channels * 4 too small
@@ -1442,7 +1442,7 @@ int AudioVideoReady(int64_t video_pts)
 		return -1;
 	}
 
-	used = RingBufferUsedBytes(AudioRingBuffer);
+	used = AudioRingBuffer->UsedBytes();
 	audio_pts = PTS * 1000 * av_q2d(*timebase) -
 				used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample;
 
@@ -1463,9 +1463,9 @@ int AudioVideoReady(int64_t video_pts)
 			used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			AudioSkip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample);
-		RingBufferReadAdvance(AudioRingBuffer, skip);
+		AudioRingBuffer->ReadAdvance(skip);
 
-		used = RingBufferUsedBytes(AudioRingBuffer);
+		used = AudioRingBuffer->UsedBytes();
 	}
 
 	// enough audio buffered
@@ -1501,7 +1501,7 @@ int AudioSkipInTrickSpeed(int64_t video_pts, int full)
 	}
 
 	while (1) {
-		used = RingBufferUsedBytes(AudioRingBuffer); // in bytes
+		used = AudioRingBuffer->UsedBytes(); // in bytes
 
 		if (used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample == 0)
 			break;
@@ -1530,7 +1530,7 @@ int AudioSkipInTrickSpeed(int64_t video_pts, int full)
 			Timestamp2String(audio_pts + skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample),
 			Timestamp2String(video_pts * 1000 * av_q2d(*timebase)));
 
-		RingBufferReadAdvance(AudioRingBuffer, skip);
+		AudioRingBuffer->ReadAdvance(skip);
 	}
 
 	return 0;
@@ -1570,7 +1570,7 @@ void AudioPoller(void)
 int AudioFreeBytes(void)
 {
     return AudioRingBuffer ?
-		RingBufferFreeBytes(AudioRingBuffer)
+		AudioRingBuffer->FreeBytes()
 		: INT32_MAX;
 }
 
@@ -1581,7 +1581,7 @@ int AudioUsedBytes(void)
 {
     // FIXME: not correct, if multiple buffer are in use
     return AudioRingBuffer ?
-	RingBufferUsedBytes(AudioRingBuffer) : 0;
+	AudioRingBuffer->UsedBytes() : 0;
 }
 
 /**
@@ -1614,7 +1614,7 @@ int64_t AudioGetClock(void)
 
 	pts = (int64_t)delay * 1000 / HwSampleRate;
 
-	pts += (int64_t)RingBufferUsedBytes(AudioRingBuffer) * 1000 /
+	pts += (int64_t)AudioRingBuffer->UsedBytes() * 1000 /
 			HwSampleRate / HwChannels / AudioBytesProSample;
 
 	ret = PTS * 1000 * av_q2d(*timebase) - pts;
@@ -1669,7 +1669,7 @@ void AudioPlay(void)
 		}
 	} else {
 		AudioPaused = 0;
-		if (AudioStartThreshold < RingBufferUsedBytes(AudioRingBuffer)) {
+		if (AudioStartThreshold < AudioRingBuffer->UsedBytes()) {
 			pthread_cond_signal(&AudioStartCond);
 		}
 	}

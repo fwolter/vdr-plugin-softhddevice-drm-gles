@@ -22,40 +22,56 @@
 /// @addtogroup Ringbuffer
 /// @{
 
-    /// ring buffer typedef
-typedef struct _ring_buffer_ RingBuffer;
+#ifndef __DEVICE_RINGBUFFER_H
+#define __DEVICE_RINGBUFFER_H
 
-    /// reset ring buffer pointers
-extern void RingBufferReset(RingBuffer *);
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-    /// create new ring buffer
-extern RingBuffer *RingBufferNew(size_t);
+#include "iatomic.h"
 
-    /// free ring buffer
-extern void RingBufferDel(RingBuffer *);
+//----------------------------------------------------------------------------
+//	Ringbuffer
+//----------------------------------------------------------------------------
 
-    /// write into ring buffer
-extern size_t RingBufferWrite(RingBuffer *, const void *, size_t);
+/**
+**	cRingDeviceBuffer - RingBuffer class
+*/
 
-    /// get write pointer of ring buffer
-extern size_t RingBufferGetWritePointer(RingBuffer *, void **);
+class cDeviceRingbuffer
+{
+private:
+    char *Buffer;			///< ring buffer data
+    const char *BufferEnd;		///< end of buffer
+    size_t Size;			///< bytes in buffer (for faster calc)
+    const char *ReadPointer;		///< only used by reader
+    char *WritePointer;			///< only used by writer
 
-    /// advance write pointer of ring buffer
-extern size_t RingBufferWriteAdvance(RingBuffer *, size_t);
-
-    /// read from ring buffer
-extern size_t RingBufferRead(RingBuffer *, void *, size_t);
-
-    /// get read pointer of ring buffer
-extern size_t RingBufferGetReadPointer(RingBuffer *, const void **);
-
-    /// advance read pointer of ring buffer
-extern size_t RingBufferReadAdvance(RingBuffer *, size_t);
-
-    /// free bytes ring buffer
-extern size_t RingBufferFreeBytes(RingBuffer *);
-
-    /// used bytes ring buffer
-extern size_t RingBufferUsedBytes(RingBuffer *);
+    /// The only thing modified by both
+    atomic_t Filled;			///< how many of the buffer is used
+public:
+    cDeviceRingbuffer(size_t);
+    virtual ~cDeviceRingbuffer(void);
+    void Reset(void);
+	///< reset ring buffer pointers
+    size_t Write(const void *, size_t);
+	///< write into ring buffer
+    size_t GetWritePointer(void **);
+	///< get write pointer of ring buffer
+    size_t WriteAdvance(size_t);
+	///< advance write pointer of ring buffer
+    size_t Read(void *, size_t);
+	///< read from ring buffer
+    size_t GetReadPointer(const void **);
+	///< get read pointer of ring buffer
+    size_t ReadAdvance(size_t);
+	///< advance read pointer of ring buffer
+    size_t FreeBytes(void);
+	///< free bytes ring buffer
+    size_t UsedBytes(void);
+	///< used bytes ring buffer
+};
+#endif
 
 /// @}
