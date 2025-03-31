@@ -61,7 +61,6 @@ extern int ConfigAudioBufferTime;	///< config size ms of audio buffer
 extern int DisableOglOsd;		///< disable OpenGL OSD (command line parameter)
 #endif
 
-static volatile char StreamFreezed;	///< stream freezed
 
 //////////////////////////////////////////////////////////////////////////////
 //	Video
@@ -86,19 +85,20 @@ struct __video_stream__
     volatile char NewStream;		///< flag new video stream
     volatile char ClosingStream;	///< flag closing video stream
     volatile char TrickSpeed;		///< flag trickspeed stream
+    volatile char StreamFreezed;	///< stream freezed
     int interlaced;			///< is this an interlaced stream?
 
     AVPacket PacketRb[VIDEO_PACKET_MAX];	///< PES packet ring buffer
     int PacketWrite;			///< ring buffer write pointer
     int PacketRead;			///< ring buffer read pointer
     atomic_t PacketsFilled;		///< how many of the ring buffer is used
+
+    pthread_mutex_t PktsLockMutex;	///< video packets lock mutex
+    pthread_mutex_t WaitCloseMutex;	///< mutex for closing stream
+    pthread_cond_t WaitCloseCondition;	///< condition for closing stream
 };
 
 static VideoStream MyVideoStream[1];	///< normal video stream
-
-static pthread_mutex_t PktsLockMutex;	///< video packets lock mutex
-static pthread_mutex_t WaitCloseMutex = PTHREAD_MUTEX_INITIALIZER;	///< mutex for closing stream
-static pthread_cond_t WaitCloseCondition;	///< condition for closing stream
 
 //////////////////////////////////////////////////////////////////////////////
 //	Audio
@@ -546,7 +546,7 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 
 	AudioAvPkt->pts = AV_NOPTS_VALUE;
 
-	if (StreamFreezed) {	// stream is freezed, don't accept new audio data
+	if (MyVideoStream->StreamFreezed) {	// stream is freezed, don't accept new audio data
 		Debug("PlayAudio: StreamFreezed");
 		return 0;
 	}
@@ -1079,7 +1079,7 @@ void ClearVideo(VideoStream * stream)
 {
 	AVPacket *avpkt;
 	Debug("ClearVideo() packets %d", atomic_read(&stream->PacketsFilled));
-	pthread_mutex_lock(&PktsLockMutex);
+	pthread_mutex_lock(&stream->PktsLockMutex);
 	atomic_set(&stream->PacketsFilled, 0);
 	stream->PacketRead = stream->PacketWrite = 0;
 
@@ -1093,13 +1093,13 @@ void ClearVideo(VideoStream * stream)
 	} else {
 		stream->Decoder->FlushBuffers();
 	}
-	pthread_mutex_unlock(&PktsLockMutex);
+	pthread_mutex_unlock(&stream->PktsLockMutex);
 }
 
 int closing_stream_requested(VideoStream *stream)
 {
 	if (stream->ClosingStream && stream->CodecID != AV_CODEC_ID_NONE) {
-		pthread_mutex_lock(&WaitCloseMutex);
+		pthread_mutex_lock(&stream->WaitCloseMutex);
 		if (!MyVideoStream->TrickSpeed || !VideoGetTrickForward(stream->Render)) {
 			ClearVideo(stream);
 			stream->CodecID = AV_CODEC_ID_NONE;
@@ -1107,8 +1107,8 @@ int closing_stream_requested(VideoStream *stream)
 			stream->Par = NULL;
 		}
 		stream->ClosingStream = 0;
-		pthread_cond_signal(&WaitCloseCondition);
-		pthread_mutex_unlock(&WaitCloseMutex);
+		pthread_cond_signal(&stream->WaitCloseCondition);
+		pthread_mutex_unlock(&stream->WaitCloseMutex);
 		return -1;
 	}
 	return 0;
@@ -1133,7 +1133,7 @@ int VideoDecodeInput(VideoStream * stream)
 	if (closing_stream_requested(stream))
 		return -1;
 
-	if (StreamFreezed) {		// stream freezed
+	if (MyVideoStream->StreamFreezed) {		// stream freezed
 //		Info("VideoDecodeInput: stream->Freezed");
 		// clear is called during freezed
 		return 1;
@@ -1146,11 +1146,11 @@ int VideoDecodeInput(VideoStream * stream)
 	}
 
 	if (stream->CodecID != AV_CODEC_ID_NONE) {
-		pthread_mutex_lock(&PktsLockMutex);
+		pthread_mutex_lock(&stream->PktsLockMutex);
 		// in trickspeed wait for minimum pkts needed to decode a frame
 		int minpkts = (VideoGetTrickSpeed(stream->Render) && stream->interlaced) ? stream->trickpkts : 1;
 		if (atomic_read(&stream->PacketsFilled) < minpkts) {
-			pthread_mutex_unlock(&PktsLockMutex);
+			pthread_mutex_unlock(&stream->PktsLockMutex);
 			return -1;
 		}
 		avpkt = &stream->PacketRb[stream->PacketRead];
@@ -1170,7 +1170,7 @@ int VideoDecodeInput(VideoStream * stream)
 			}
 		}
 
-		pthread_mutex_unlock(&PktsLockMutex);
+		pthread_mutex_unlock(&stream->PktsLockMutex);
 
 // this is normal Playback
 		if (!VideoGetTrickSpeed(stream->Render)) {
@@ -1265,7 +1265,7 @@ int PlayVideo(const uint8_t * data, int size)
 	int64_t pts = AV_NOPTS_VALUE;
 	int i, n;
 
-	if (StreamFreezed) {
+	if (MyVideoStream->StreamFreezed) {
 		return 0;
 	}
 
@@ -1446,7 +1446,7 @@ void StillPicture(const uint8_t * data, int size)
 	}
 	atomic_inc(&MyVideoStream->PacketsFilled);
 
-	StreamFreezed = 1;
+	MyVideoStream->StreamFreezed = 1;
 	if (MyVideoStream->Decoder->GetContext()) {
 		if ((int)(MyVideoStream->Decoder->GetContext()->codec_id) != codec) {
 			MyVideoStream->Decoder->Close();
@@ -1500,7 +1500,7 @@ receive:
 	}
 	ClearAudio();
 	ClearVideo(MyVideoStream);
-	StreamFreezed = 0;
+	MyVideoStream->StreamFreezed = 0;
 	AudioPlay();
 }
 
@@ -1735,9 +1735,9 @@ void TrickSpeed(int speed, int forward)
 	Debug("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
 
 	VideoSetClosing(MyVideoStream->Render, 0);
-	if (StreamFreezed) {
-		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", StreamFreezed, SkipAudio);
-		StreamFreezed = 0;
+	if (MyVideoStream->StreamFreezed) {
+		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", MyVideoStream->StreamFreezed, SkipAudio);
+		MyVideoStream->StreamFreezed = 0;
 		ClearAudio();
 		SkipAudio = 0;
 	}
@@ -1764,16 +1764,16 @@ void Play(void)
 {
 	Debug("Play(void)");
 	if (MyVideoStream->TrickSpeed && MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
-		pthread_mutex_lock(&WaitCloseMutex);
+		pthread_mutex_lock(&MyVideoStream->WaitCloseMutex);
 		MyVideoStream->ClosingStream = 1;
 		while (MyVideoStream->ClosingStream)
-			pthread_cond_wait(&WaitCloseCondition, &WaitCloseMutex);
-		pthread_mutex_unlock(&WaitCloseMutex);
+			pthread_cond_wait(&MyVideoStream->WaitCloseCondition, &MyVideoStream->WaitCloseMutex);
+		pthread_mutex_unlock(&MyVideoStream->WaitCloseMutex);
 		VideoSetClosing(MyVideoStream->Render, 0);
 	}
 	MyVideoStream->TrickSpeed = 0;
 	SkipAudio = 0;
-	StreamFreezed = 0;
+	MyVideoStream->StreamFreezed = 0;
 	AudioPlay();
 	VideoPlay(MyVideoStream->Render);
 }
@@ -1784,7 +1784,7 @@ void Play(void)
 void Freeze(void)
 {
 	Debug("Freeze(void)");
-	StreamFreezed = 1;
+	MyVideoStream->StreamFreezed = 1;
 	AudioPause();
 	VideoPause(MyVideoStream->Render);
 }
@@ -1895,11 +1895,11 @@ int SetPlayMode(int play_mode)
 	case 0:			// none audio/video
 		MyVideoStream->TrickSpeed = 0;
 		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
-			pthread_mutex_lock(&WaitCloseMutex);
+			pthread_mutex_lock(&MyVideoStream->WaitCloseMutex);
 			MyVideoStream->ClosingStream = 1;
 			while (MyVideoStream->ClosingStream)
-				pthread_cond_wait(&WaitCloseCondition, &WaitCloseMutex);
-			pthread_mutex_unlock(&WaitCloseMutex);
+				pthread_cond_wait(&MyVideoStream->WaitCloseCondition, &MyVideoStream->WaitCloseMutex);
+			pthread_mutex_unlock(&MyVideoStream->WaitCloseMutex);
 		}
 		VideoSetClosing(MyVideoStream->Render, 1);
 		SkipAudio = 0;
@@ -1909,7 +1909,7 @@ int SetPlayMode(int play_mode)
 			NewAudioStream = 1;
 		}
 		MyVideoStream->interlaced = 0; // probably not necessary
-		StreamFreezed = 0;
+		MyVideoStream->StreamFreezed = 0;
 		break;
 	case 1:			// audio/video
 		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
