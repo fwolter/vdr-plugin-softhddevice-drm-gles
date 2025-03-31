@@ -106,7 +106,7 @@ static pthread_cond_t WaitCloseCondition;	///< condition for closing stream
 
 static volatile char NewAudioStream;	///< new audio stream
 static volatile char SkipAudio;		///< skip audio stream
-static AudioDecoder *MyAudioDecoder;	///< audio decoder
+static cAudioDecoder *MyAudioDecoder;	///< audio decoder
 static enum AVCodecID AudioCodecID;	///< current codec id
 static int AudioChannelID;		///< current audio channel id
 //static VideoStream *AudioSyncStream;	///< video stream for audio/video sync
@@ -566,7 +566,7 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 	if (NewAudioStream) {
 		// this clears the audio ringbuffer indirect, open and setup does it
 		Debug("PlayAudio: NewAudioStream");
-		CodecAudioClose(MyAudioDecoder);
+		MyAudioDecoder->Close();
 //		AudioFlushBuffers();
 //		AudioSetBufferTime(ConfigAudioBufferTime);		// ???
 		AudioCodecID = AV_CODEC_ID_NONE;
@@ -629,7 +629,7 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 	    Debug("%s: LPCM %d sr:%d bits:%d chan:%d\n",
 		__FUNCTION__, id, p[5] >> 4, (((p[5] >> 6) & 0x3) + 4) * 4,
 		(p[5] & 0x7) + 1);
-	    CodecAudioClose(MyAudioDecoder);
+	    MyAudioDecoder->Close();
 
 	    bits_per_sample = (((p[5] >> 6) & 0x3) + 4) * 4;
 	    if (bits_per_sample != 16) {
@@ -654,7 +654,7 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 		    (p[5] & 0x7) + 1);
 		// FIXME: support resample
 	    }
-	    //CodecAudioOpen(MyAudioDecoder, AV_CODEC_ID_PCM_DVD);
+	    //MyAudioDecoder->Open(AV_CODEC_ID_PCM_DVD);
 	    AudioCodecID = AV_CODEC_ID_PCM_DVD;
 	}
 
@@ -726,8 +726,8 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 
 			// new codec id, close and open new
 			if (AudioCodecID != codec_id) {
-				CodecAudioClose(MyAudioDecoder);
-				CodecAudioOpen(MyAudioDecoder, codec_id, NULL, &timebase);
+				MyAudioDecoder->Close();
+				MyAudioDecoder->Open(codec_id, NULL, &timebase);
 				AudioCodecID = codec_id;
 			}
 			avpkt = av_packet_alloc();
@@ -738,7 +738,7 @@ int PlayAudio(const uint8_t * data, int size, uint8_t id)
 			avpkt->data = (uint8_t *)p;
 			avpkt->size = r;
 			avpkt->pts = AudioAvPkt->pts;
-			CodecAudioDecode(MyAudioDecoder, avpkt);
+			MyAudioDecoder->Decode(avpkt);
 			AudioAvPkt->pts = AV_NOPTS_VALUE;
 			av_packet_free(&avpkt);
 			p += r;
@@ -765,7 +765,7 @@ void ClearAudio(void)
 {
 	if (!SkipAudio) {
 		Debug("ClearAudio()");
-		CodecAudioFlushBuffers(MyAudioDecoder);
+		MyAudioDecoder->FlushBuffers();
 		AudioFlushBuffers();
 		NewAudioStream = 1;
 	}
@@ -1671,9 +1671,9 @@ uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
 //	mediaplayer functions
 //////////////////////////////////////////////////////////////////////////////
 
-void SetAudioCodec(int codec_id, AVCodecParameters * par, AVRational * timebase)
+void SetAudioCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
 {
-	CodecAudioOpen(MyAudioDecoder, codec_id, par, timebase);
+	MyAudioDecoder->Open(codec_id, par, timebase);
 }
 
 void SetVideoCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
@@ -1691,7 +1691,7 @@ int PlayAudioPkts(AVPacket * pkt)
 //		Error("PlayAudioPkts: AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
 		return 0;
 	}
-	CodecAudioDecode(MyAudioDecoder, pkt);
+	MyAudioDecoder->Decode(pkt);
 	return 1;
 }
 
@@ -1948,9 +1948,8 @@ void SoftHdDeviceExit(void)
 	Debug("SoftHdDeviceExit(void):");
     AudioExit();
     if (MyAudioDecoder) {
-		CodecAudioClose(MyAudioDecoder);
-		CodecAudioDelDecoder(MyAudioDecoder);
-		MyAudioDecoder = NULL;
+		MyAudioDecoder->Close();
+		delete MyAudioDecoder;
     }
     NewAudioStream = 0;
     av_packet_unref(AudioAvPkt);
@@ -1974,7 +1973,7 @@ int Start(void)
 		AudioInit();
 		AudioSetBufferTime(ConfigAudioBufferTime);
 		av_new_packet(AudioAvPkt, AUDIO_BUFFER_SIZE);
-		MyAudioDecoder = CodecAudioNewDecoder();
+		MyAudioDecoder = new cAudioDecoder();
 		AudioCodecID = AV_CODEC_ID_NONE;
 		AudioChannelID = -1;
 

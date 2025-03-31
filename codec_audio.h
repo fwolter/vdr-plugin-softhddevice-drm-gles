@@ -1,5 +1,5 @@
 ///
-///	@file codec_audio.h	@brief Audio codec module headerfile
+///	@file codec_audio.h	@brief Audio decoder module headerfile
 ///
 ///	Copyright (c) 2009 - 2013, 2015 by Johns.  All Rights Reserved.
 ///
@@ -28,54 +28,30 @@
 #include <libavcodec/avcodec.h>
 
 //----------------------------------------------------------------------------
-//	Defines
+//	Audio
 //----------------------------------------------------------------------------
 
-//----------------------------------------------------------------------------
-//	Variables, structs
-//----------------------------------------------------------------------------
+/**
+**	cAudioDecoder - AudioDecoder class
+*/
 
-///
-///	Audio decoder structure.
-///
-struct _audio_decoder_
-{
+class cAudioDecoder {
+private:
     AVCodecContext *AudioCtx;		///< audio codec context
-
     AVFrame *Frame;			///< decoded audio frame buffer
     int64_t last_pts;			///< last PTS
     int64_t initial_pts;		///< initial PTS
+public:
+    cAudioDecoder(void);
+    virtual ~cAudioDecoder(void);
+    void Open(enum AVCodecID, AVCodecParameters *, AVRational *);
+	///< Open audio decoder
+    void Close(void);
+	///< Close audio decoder
+    void Decode(const AVPacket *);
+	///< Decode an audio packet
+    void FlushBuffers(void);
+	///< Flush audio buffers
 };
-
-//----------------------------------------------------------------------------
-//	Typedefs
-//----------------------------------------------------------------------------
-
-    /// Audio decoder typedef.
-typedef struct _audio_decoder_ AudioDecoder;
-
-//----------------------------------------------------------------------------
-//	Prototypes
-//----------------------------------------------------------------------------
-
-    /// Allocate a new audio decoder context.
-extern AudioDecoder *CodecAudioNewDecoder(void);
-
-    /// Deallocate an audio decoder context.
-extern void CodecAudioDelDecoder(AudioDecoder *);
-
-    /// Open audio codec.
-extern void CodecAudioOpen(AudioDecoder *, int, AVCodecParameters *, AVRational *);
-
-    /// Close audio codec.
-extern void CodecAudioClose(AudioDecoder *);
-
-    /// Decode an audio packet.
-extern void CodecAudioDecode(AudioDecoder *, const AVPacket *);
-
-    /// Flush audio buffers.
-extern void CodecAudioFlushBuffers(AudioDecoder *);
-
-/// @}
-
 #endif
+/// @}

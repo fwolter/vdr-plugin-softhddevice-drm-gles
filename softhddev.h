@@ -45,7 +45,7 @@ extern "C"
 		int);
 
     /// C plugin play media file
-    extern void SetAudioCodec(int, AVCodecParameters *, AVRational *);
+    extern void SetAudioCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
     extern void SetVideoCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
     extern int PlayAudioPkts(AVPacket *);
     extern int PlayVideoPkts(AVPacket *);

@@ -44,8 +44,8 @@ extern "C"
 #include <libavcodec/avcodec.h>
 
 #include "softhddev.h"
-#include "audio.h"
 #include "video.h"
+#include "audio.h"
 #include "codec_audio.h"
 }
 

@@ -47,6 +47,9 @@
 #endif
 #include <pthread.h>
 
+extern "C"
+{
+
 #include <libavcodec/avcodec.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/opt.h>
@@ -62,7 +65,7 @@
 #include "video.h"
 #include "codec_audio.h"
 #include "softhddev.h"
-
+}
 
 //----------------------------------------------------------------------------
 //	Defines
@@ -831,7 +834,7 @@ static char *opendevice(const char *device, int passthrough)
 	return (char *)device;
 }
 
-static char *finddevice(char *devname, char *hint)
+static char *finddevice(const char *devname, const char *hint)
 {
 	char **hints;
 	int err;
@@ -851,7 +854,7 @@ static char *finddevice(char *devname, char *hint)
 
 		if (strstr(name, hint)) {
 			if ((device = opendevice(name, 0))) {
-				device = malloc(sizeof(char) * (strlen(name) + 1));
+				device = (char *)malloc(sizeof(char) * (strlen(name) + 1));
 				strcpy(device, name);
 				free(name);
 				snd_device_name_free_hint((void **)hints);
@@ -939,11 +942,10 @@ static void AlsaInitPCM(void)
 static void AlsaSetVolume(int volume)
 {
     int v;
-
     if (AlsaMixer && AlsaMixerElem) {
 		v = (volume * AlsaRatio) / (1000 * 1000);
-		snd_mixer_selem_set_playback_volume(AlsaMixerElem, 0, v);
-		snd_mixer_selem_set_playback_volume(AlsaMixerElem, 1, v);
+		snd_mixer_selem_set_playback_volume(AlsaMixerElem, SND_MIXER_SCHN_FRONT_LEFT, v);
+		snd_mixer_selem_set_playback_volume(AlsaMixerElem, SND_MIXER_SCHN_FRONT_RIGHT, v);
     }
 }
 
@@ -1290,7 +1292,7 @@ void AudioEnqueue(AVFrame *frame)
 	}
 
 	int count = frame->nb_samples * frame->ch_layout.nb_channels * AudioBytesProSample;
-	buffer = (void *)frame->data[0];
+	buffer = (int16_t *)frame->data[0];
 
 	if (AudioCompression) {		// in place operation
 		AudioCompressor(buffer, count);
