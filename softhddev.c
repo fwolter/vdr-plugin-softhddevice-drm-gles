@@ -291,14 +291,14 @@ static int MpegCheck(const uint8_t * data, int size)
 	return -frame_size - 4;
     }
 
-#ifdef DEBUG
-	if (!FastMpegCheck(data + frame_size)) {
-		Debug("MpegCheck: after this frame NO new mpeg frame starts");
-		PrintStreamData(data + frame_size, frame_size);
-	}
-#endif
-
+    if (FastMpegCheck(data + frame_size)) {
 	return frame_size;
+    } else {
+	Debug("MpegCheck: after this frame NO new mpeg frame starts");
+	PrintStreamData(data + frame_size, frame_size);
+    }
+
+    return 0;
 }
 
 ///

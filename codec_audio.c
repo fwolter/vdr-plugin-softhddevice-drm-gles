@@ -154,8 +154,10 @@ send:
 
 	ret_rec = avcodec_receive_frame(audio_decoder->AudioCtx, frame);
 	if (ret_rec < 0) {
-		Error("CodecAudioDecode: avcodec_receive_frame error: %s",
-			av_err2str(ret_rec));
+		if (ret_rec != AVERROR(EAGAIN)) {
+			Error("CodecAudioDecode: avcodec_receive_frame error: %s",
+				av_err2str(ret_rec));
+		}
 	} else {
 		// Control PTS is valid
 		if (audio_decoder->last_pts == (int64_t) AV_NOPTS_VALUE &&
