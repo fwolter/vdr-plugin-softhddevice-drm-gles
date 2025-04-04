@@ -422,7 +422,7 @@ int CodecVideoSendPacket(VideoDecoder * decoder, const AVPacket * avpkt)
 			Debug2(L_CODEC, "CodecVideoSendPacket: send NULL packet, flush reqeusted");
 			avcodec_send_packet(decoder->VideoCtx, NULL);
 		}
-		return -1;
+		return 0;
 	}
 
 	if (!avpkt->size) {

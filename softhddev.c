@@ -1456,18 +1456,41 @@ void StillPicture(const uint8_t * data, int size)
 	}
 	AudioPause();
 
-send:
-	CodecVideoSendPacket(MyVideoStream->Decoder, avpkt);
-	usleep(10000);
-	if (CodecVideoReceiveFrame(MyVideoStream->Decoder, 1, &frame))
-		goto send;
-	else Debug2(L_STILL, "StillPicture: Received Frame");
-	while (VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, FRAME_FLAG_STILLPICTURE)) {
-		if (MyVideoStream->ClosingStream) {
-			av_frame_free(&frame);
-			break;
+	int ret = 0;
+	ret = CodecVideoSendPacket(MyVideoStream->Decoder, avpkt);
+	if (ret)
+		Debug2(L_STILL, "StillPicture: CodecVideoSendPacket(avpkt) returned %d", ret);
+	else
+		Debug2(L_STILL, "StillPicture: avpkt sent");
+
+	// force decoder to enter draining because we only want 1 avpkt to be decoded
+	CodecVideoSendPacket(MyVideoStream->Decoder, NULL);
+
+receive:
+	ret = CodecVideoReceiveFrame(MyVideoStream->Decoder, 1, &frame);
+	if (!ret) {
+		// frame received, render it and try another one (should end up with AVERROR_EOF)
+		Debug2(L_STILL, "StillPicture: frame received");
+		while (VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->VideoCtx, frame, FRAME_FLAG_STILLPICTURE)) {
+			if (MyVideoStream->ClosingStream) {
+				av_frame_free(&frame);
+				break;
+			}
 		}
+		goto receive;
+	} else if (ret == -2) {
+		// AVERROR_EOF, flush needed
+		if (MyVideoStream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+			if (CodecVideoReopenCodec(MyVideoStream->Decoder, MyVideoStream->CodecID, MyVideoStream->Par, &MyVideoStream->timebase, 0))
+				Fatal("StillPicture: Could not reopen the decoder (flush buffers)!");
+		} else {
+			CodecVideoFlushBuffers(MyVideoStream->Decoder);
+		}
+	} else {
+		// sth went wrong or AVERROR(EAGAIN)
+		Debug2(L_STILL, "StillPicture: Receive Frame returned %d, should not happen!", ret);
 	}
+
 	if (context) {
 		CodecVideoClose(MyVideoStream->Decoder);
 		MyVideoStream->CodecID = AV_CODEC_ID_NONE;
