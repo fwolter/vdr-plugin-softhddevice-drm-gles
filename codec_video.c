@@ -408,25 +408,27 @@ error_out:
 **	@param decoder	video decoder data
 **	@param avpkt	video packet
 **
-**	@returns 1 packet not accepted, first receive frame and send packet again
-**	@returns 0 packet was sent
-**	@returns -1 something went wrong
+**	@returns 0			packet was sent
+**	@returns AVERROR(EAGAIN)	packet not accepted, first receive frame and send packet again
+**	@returns AVERROR(EINVAL)	invalid input or missing VideoCtx
+**	@returns ret			return any other ffmpeg error
 */
 int CodecVideoSendPacket(VideoDecoder * decoder, const AVPacket * avpkt)
 {
 	int ret = 0;
 
+	if (!decoder->VideoCtx)
+		return AVERROR(EINVAL);
+
 	// force a flush, ich avpkt is NULL
 	if (!avpkt) {
-		if (decoder->VideoCtx) {
-			Debug2(L_CODEC, "CodecVideoSendPacket: send NULL packet, flush reqeusted");
-			avcodec_send_packet(decoder->VideoCtx, NULL);
-		}
+		Debug2(L_CODEC, "CodecVideoSendPacket: send NULL packet, flush reqeusted");
+		avcodec_send_packet(decoder->VideoCtx, NULL);
 		return 0;
 	}
 
 	if (!avpkt->size) {
-		return -1;
+		return AVERROR(EINVAL);
 	}
 
 	// get extradata, if not yet done
@@ -436,16 +438,13 @@ int CodecVideoSendPacket(VideoDecoder * decoder, const AVPacket * avpkt)
 	}
 
 	pthread_mutex_lock(&CodecLockMutex);
-	if (decoder->VideoCtx) {
-		ret = avcodec_send_packet(decoder->VideoCtx, avpkt);
-	}
+	ret = avcodec_send_packet(decoder->VideoCtx, avpkt);
 	pthread_mutex_unlock(&CodecLockMutex);
-	if (ret == AVERROR(EAGAIN))
-		return 1;
-	else if (ret) {
-		Debug2(L_CODEC, "CodecVideoSendPacket: send_packet ret: %s",
-			av_err2str(ret));
-		return -1;
+	if (ret) {
+		if (ret != AVERROR(EAGAIN))
+			Debug2(L_CODEC, "CodecVideoSendPacket: send_packet ret: %s",
+				av_err2str(ret));
+		return ret;
 	}
 
 	decoder->sent++;
@@ -459,42 +458,36 @@ int CodecVideoSendPacket(VideoDecoder * decoder, const AVPacket * avpkt)
 **	@param decoder		video decoder data
 **	@param no_deint		set interlaced_frame to 0
 **
-**	@returns 1	get no frame, send avpkt again
-**	@returns 0	received frame
-**	@returns -1	get no frame, something went wrong
-**	@returns -2	EOF, needs flushing
+**	@returns 0			received frame
+**	@returns AVERROR(EAGAIN)	get no frame, send avpkt again
+**	@returns AVERROR_EOF		EOF, needs flushing
+**	@returns AVERROR(EINVAL)	get no frame, something went wrong
+**	@returns ret			return any other ffmpeg error
 */
 int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame)
 {
 	int ret;
 	AVFrame *pFrame;
 
-	if (!(pFrame = av_frame_alloc())) {
+	if (!decoder->VideoCtx)
+		return AVERROR(EINVAL);
+
+	if (!(pFrame = av_frame_alloc()))
 		Fatal("CodecVideoReceiveFrame: can't allocate decoder frame");
-	}
 
 	pthread_mutex_lock(&CodecLockMutex);
-	if (decoder->VideoCtx) {
-		ret = avcodec_receive_frame(decoder->VideoCtx, pFrame);
-	} else {
-		av_frame_free(&pFrame);
-		pthread_mutex_unlock(&CodecLockMutex);
-		return -1;
-	}
+	ret = avcodec_receive_frame(decoder->VideoCtx, pFrame);
 	pthread_mutex_unlock(&CodecLockMutex);
 
-	if (ret == AVERROR(EAGAIN)) {
-		av_frame_free(&pFrame);
-//		Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: AVERROR(EAGAIN)");
-		return 1;
-	} else if (ret) {
-		av_frame_free(&pFrame);
-		if (ret == AVERROR_EOF) {
+	if (ret) {
+		if (ret == AVERROR_EOF)
 			Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: AVERROR_EOF");
-			return -2;
-		}
-		Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: %s", av_err2str(ret));
-		return -1;
+		else if (ret != AVERROR(EAGAIN))
+			Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: %s", av_err2str(ret));
+//		else
+//			Debug2(L_CODEC, "CodecVideoReceiveFrame: receive_frame ret: AVERROR(EAGAIN)");
+		av_frame_free(&pFrame);
+		return ret;
 	}
 
 	if (pFrame->flags == AV_FRAME_FLAG_CORRUPT)
@@ -526,7 +519,7 @@ int CodecVideoReceiveFrame(VideoDecoder * decoder, int no_deint, AVFrame **frame
 		}
 
 		av_frame_free(&pFrame);
-		return -1;
+		return AVERROR(EAGAIN);
 	}
 
 	*frame = pFrame;

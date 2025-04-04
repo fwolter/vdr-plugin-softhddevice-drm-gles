@@ -1154,7 +1154,7 @@ int VideoDecodeInput(VideoStream * stream)
 
 		// try sending packet to decoder
 		ret = CodecVideoSendPacket(stream->Decoder, avpkt);
-		if (ret <= 0) { // something went wrong or packet was sent, advance packet
+		if (ret != AVERROR(EAGAIN)) { // something went wrong or packet was sent, advance packet
 			stream->PacketRead = (stream->PacketRead + 1) % VIDEO_PACKET_MAX;
 			atomic_dec(&stream->PacketsFilled);
 			// in backward trickspeed force the decoder to decode the frame
@@ -1216,7 +1216,7 @@ receive_trickspeed:
 				VideoSetTrickCounter(stream->Render, TrickSpeed);
 
 				goto receive_trickspeed; // try to get another frame
-			} else if (ret == -2) { // needs flush / reopen
+			} else if (ret == AVERROR_EOF) { // needs flush / reopen
 				if (stream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
 					if (CodecVideoReopenCodec(stream->Decoder, stream->CodecID, stream->Par, &stream->timebase, 0))
 						Fatal("VideoDecodeInput: Could not reopen the decoder (flush buffers)!");
@@ -1478,7 +1478,7 @@ receive:
 			}
 		}
 		goto receive;
-	} else if (ret == -2) {
+	} else if (ret == AVERROR_EOF) {
 		// AVERROR_EOF, flush needed
 		if (MyVideoStream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
 			if (CodecVideoReopenCodec(MyVideoStream->Decoder, MyVideoStream->CodecID, MyVideoStream->Par, &MyVideoStream->timebase, 0))
