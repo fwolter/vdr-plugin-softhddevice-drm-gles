@@ -157,12 +157,22 @@ send:
 		if (ret_rec != AVERROR(EAGAIN)) {
 			Error("CodecAudioDecode: avcodec_receive_frame error: %s",
 				av_err2str(ret_rec));
+		} else if (audio_decoder->last_pts == (int64_t)AV_NOPTS_VALUE && avpkt->pts != (int64_t)AV_NOPTS_VALUE) {
+			// if multiple avpkt are needed for the (first!) frame (last_pts == AV_NOPTS_VALUE),
+			// remember the avpkt->pts if we have one and use it for the frame->pts
+			// if we don't get one after decode. this way, last_pts also gets set
+			Debug2(L_CODEC, "CodecAudioDecode: New audio stream, set initial pts to avpkt->pts %s",
+				Timestamp2String(avpkt->pts * 1000 * av_q2d(audio_decoder->AudioCtx->pkt_timebase)));
+			audio_decoder->initial_pts = avpkt->pts;
 		}
 	} else {
 		// Control PTS is valid
 		if (audio_decoder->last_pts == (int64_t) AV_NOPTS_VALUE &&
 			frame->pts == (int64_t) AV_NOPTS_VALUE) {
-			Warning("CodecAudioDecode: NO VALID PTS");
+			Warning("CodecAudioDecode: NO VALID PTS, set frame->pts to last known avpkt->pts %s",
+				Timestamp2String(audio_decoder->initial_pts * 1000 * av_q2d(audio_decoder->AudioCtx->pkt_timebase)));
+			frame->pts = audio_decoder->initial_pts;
+			audio_decoder->initial_pts = AV_NOPTS_VALUE;
 		}
 		// update audio clock
 		if (frame->pts != (int64_t) AV_NOPTS_VALUE) {

@@ -44,6 +44,7 @@ struct _audio_decoder_
 
     AVFrame *Frame;			///< decoded audio frame buffer
     int64_t last_pts;			///< last PTS
+    int64_t initial_pts;		///< initial PTS
 };
 
 //----------------------------------------------------------------------------
