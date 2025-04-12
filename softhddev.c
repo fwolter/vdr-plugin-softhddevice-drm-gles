@@ -2052,6 +2052,14 @@ void ScaleVideo(int x, int y, int width, int height)
 	}
 }
 
+/**
+**	Can play IBP frames in fast forward trickspeed
+*/
+bool HasIBPTrickSpeed(void)
+{
+	return true;
+}
+
 
 //////////////////////////////////////////////////////////////////////////////
 //	OSD

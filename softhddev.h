@@ -110,6 +110,9 @@ extern "C"
     /// C plugin scale video
     extern void ScaleVideo(int, int, int, int);
 
+    /// C plugin can play IBP frames in fastforward
+    extern bool HasIBPTrickspeed(void);
+
     /// C plugin get video render
     extern void *GetVideoRender(void);
     /// Set interlaced stream flag
