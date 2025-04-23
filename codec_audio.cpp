@@ -45,12 +45,17 @@ extern "C" {
 
 /**
 **	cAudioDecoder constructor
+**
+**	@param mask	passthrough mask
 */
-cAudioDecoder::cAudioDecoder(void)
+cAudioDecoder::cAudioDecoder(int mask)
 {
     if (!(Frame = av_frame_alloc()))
 	Fatal("cAudioDecoder::cAudioDecoder: can't allocate audio decoder frame buffer");
     AudioCtx = NULL;
+
+    PassthroughMask = mask & (CodecPCM | CodecAC3 | CodecEAC3 | CodecDTS);
+    Debug2(L_CODEC, "cAudioDecoder::SetPassthrough %d", PassthroughMask);
 }
 
 /**
@@ -103,7 +108,13 @@ void cAudioDecoder::Open(enum AVCodecID codec_id, AVCodecParameters *Par, AVRati
 	if (avcodec_open2(AudioCtx, AudioCtx->codec, NULL) < 0) {
 		Fatal("cAudioDecoder::Open: can't open audio codec");
 	}
-	Debug2(L_CODEC, "cAudioDecoder::Open: Codec %s found", AudioCtx->codec->long_name);
+	Debug2(L_CODEC, "cAudioDecoder::Open: Codec %s found PassthroughMask %d", AudioCtx->codec->long_name, PassthroughMask);
+
+	SampleRate = 0;
+	HwSampleRate = 0;
+	Channels = 0;
+	HwChannels = 0;
+	Passthrough = 0;
 }
 
 /**
@@ -115,6 +126,202 @@ void cAudioDecoder::Close(void)
 	Debug2(L_CODEC, "cAudioDecoder::Close");
 	if (AudioCtx)
 		avcodec_free_context(&AudioCtx);
+}
+
+/**
+**	Audio pass-through decoder helper.
+**
+**	@param avpkt		undecoded audio packet
+**	@param frame		decoded audio frame
+**
+**	@returns 0		no passthrough, nothing done
+**	@returns -1		passthrough, but sth went wrong
+**	@returns 1		passthrough, data enqueued
+*/
+int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
+{
+    // AC3 passthrough
+    if (PassthroughMask & CodecAC3 && AudioCtx->codec_id == AV_CODEC_ID_AC3) {
+	uint16_t *spdif;
+	int spdif_sz;
+
+	spdif = Spdif;
+	spdif_sz = 6144;
+
+	// build SPDIF header and append A52 audio to it
+	// avpkt is the original data
+	if (spdif_sz < avpkt->size + 8) {
+	    Error("cAudioDecoder::DecodePassthrough: decoded data smaller than encoded");
+	    return -1;
+	}
+	spdif[0] = htole16(0xF872);	// iec 61937 sync word
+	spdif[1] = htole16(0x4E1F);
+	spdif[2] = htole16(IEC61937_AC3 | (avpkt->data[5] & 0x07) << 8);
+	spdif[3] = htole16(avpkt->size * 8);
+	// copy original data for output
+	// FIXME: not 100% sure, if endian is correct on not intel hardware
+	swab(avpkt->data, spdif + 4, avpkt->size);
+	// FIXME: don't need to clear always
+	memset(spdif + 4 + avpkt->size / 2, 0, spdif_sz - 8 - avpkt->size);
+	// don't play with the ac-3 samples
+	AudioEnqueueSpdif(AudioCtx, spdif, spdif_sz, frame);
+	return 1;
+    }
+
+    // EAC3 passthrough
+    if (PassthroughMask & CodecEAC3 && AudioCtx->codec_id == AV_CODEC_ID_EAC3) {
+	uint16_t *spdif;
+	int spdif_sz;
+	int repeat;
+
+	// build SPDIF header and append A52 audio to it
+	// avpkt is the original data
+	spdif = Spdif;
+	spdif_sz = 24576;		// 4 * 6144
+	if (HwSampleRate == 48000) {
+	    spdif_sz = 6144;
+	}
+	if (spdif_sz < SpdifIndex + avpkt->size + 8) {
+	    Error("cAudioDecoder::DecodePassthrough: decoded data smaller than encoded");
+	    return -1;
+	}
+	// check if we must pack multiple packets
+	repeat = 1;
+	if ((avpkt->data[4] & 0xc0) != 0xc0) {	// fscod
+	    static const uint8_t eac3_repeat[4] = { 6, 3, 2, 1 };
+
+	    // fscod2
+	    repeat = eac3_repeat[(avpkt->data[4] & 0x30) >> 4];
+	}
+	// Debug2(L_CODEC, "cAudioDecoder::DecodePassthrough: repeat %d %d\n", repeat, avpkt->size);
+
+	// copy original data for output
+	// pack upto repeat EAC-3 pakets into one IEC 61937 burst
+	// FIXME: not 100% sure, if endian is correct on not intel hardware
+	swab(avpkt->data, spdif + 4 + SpdifIndex, avpkt->size);
+	SpdifIndex += avpkt->size;
+	if (++SpdifCount < repeat) {
+	    return 1;
+	}
+
+	spdif[0] = htole16(0xF872);	// iec 61937 sync word
+	spdif[1] = htole16(0x4E1F);
+	spdif[2] = htole16(IEC61937_EAC3);
+	spdif[3] = htole16(SpdifIndex * 8);
+	memset(spdif + 4 + SpdifIndex / 2, 0,
+	    spdif_sz - 8 - SpdifIndex);
+
+	// don't play with the eac-3 samples
+	AudioEnqueueSpdif(AudioCtx, spdif, spdif_sz, frame);
+	SpdifIndex = 0;
+	SpdifCount = 0;
+	return 1;
+    }
+
+    // DTS passthrough
+    if (PassthroughMask & CodecDTS && AudioCtx->codec_id == AV_CODEC_ID_DTS) {
+	uint16_t *spdif;
+	uint8_t nbs;
+	int bsid;
+	int burst_sz;
+
+	nbs = (uint8_t)((avpkt->data[4]&0x01)<<6)|((avpkt->data[5]>>2)&0x3f);
+	switch(nbs) {
+	    case 0x07:
+	        bsid = 0x0a;
+	        burst_sz = 1024;
+	        break;
+	    case 0x0f:
+	        bsid = IEC61937_DTS1;
+	        burst_sz = 2048;
+	        break;
+	    case 0x1f:
+	        bsid = IEC61937_DTS2;
+	        burst_sz = 4096;
+	        break;
+	    case 0x3f:
+	        bsid = IEC61937_DTS3;
+	        burst_sz = 8192;
+	        break;
+	    default:
+	        bsid = 0x00;
+	        if (nbs < 5)
+	            nbs = 127;
+	        burst_sz = (nbs+1)*32*2+2;
+	        break;
+	}
+
+	spdif = Spdif;
+
+	// build SPDIF header and append DTS audio to it
+	// avpkt is the original data
+	if (burst_sz < avpkt->size + 8) {
+	    Error("cAudioDecoder::DecodePassthrough: decoded data smaller than encoded");
+	    return -1;
+	}
+	spdif[0] = htole16(0xF872);	// iec 61937 sync word
+	spdif[1] = htole16(0x4E1F);
+	spdif[2] = htole16(bsid);
+	spdif[3] = htole16(avpkt->size * 8);
+	spdif[4] = htole16(0x7FFE);
+	spdif[5] = htole16(0x8001);
+	// copy original data for output
+	// FIXME: not 100% sure, if endian is correct on not intel hardware
+	swab(avpkt->data, spdif + 4, avpkt->size);
+	// FIXME: don't need to clear always
+	memset(spdif + 4 + avpkt->size, 0, burst_sz - 8 - avpkt->size);
+	// don't play with the dts samples
+	AudioEnqueueSpdif(AudioCtx, spdif, burst_sz, frame);
+	return 1;
+    }
+    return 0;
+}
+
+/**
+**	Handle audio format changes
+**
+*/
+int cAudioDecoder::UpdateFormat(void)
+{
+	int passthrough;
+	int err;
+
+	Debug2(L_SOUND, "cAudioDecoder::UpdateFormat: format change %s %dHz *%d channels%s%s%s%s%s%s%d",
+		av_get_sample_fmt_name(AudioCtx->sample_fmt), AudioCtx->sample_rate, AudioCtx->ch_layout.nb_channels,
+		PassthroughMask & CodecPCM ? " PCM" : "",
+		PassthroughMask & CodecMPA ? " MPA" : "",
+		PassthroughMask & CodecAC3 ? " AC3" : "",
+		PassthroughMask & CodecEAC3 ? " EAC3" : "",
+		PassthroughMask & CodecDTS ? " DTS" : "",
+		PassthroughMask ? " passthrough mask " : "",
+		PassthroughMask ? PassthroughMask : 0);
+
+	SampleRate = AudioCtx->sample_rate;
+	HwSampleRate = AudioCtx->sample_rate;
+	Channels = AudioCtx->ch_layout.nb_channels;
+	HwChannels = AudioCtx->ch_layout.nb_channels;
+	Passthrough = PassthroughMask;
+
+	if ((Passthrough & CodecAC3 && AudioCtx->codec_id == AV_CODEC_ID_AC3) ||
+	    (Passthrough & CodecEAC3 && AudioCtx->codec_id == AV_CODEC_ID_EAC3) ||
+	    (Passthrough & CodecDTS && AudioCtx->codec_id == AV_CODEC_ID_DTS)) {
+		HwChannels = 2;
+		SpdifIndex = 0;
+		SpdifCount = 0;
+		passthrough = 1;
+	}
+
+	if ((err = AudioSetup(AudioCtx, HwSampleRate, HwChannels, passthrough))) {
+		HwSampleRate /= 4;
+		if (AudioCtx->codec_id != AV_CODEC_ID_EAC3 ||
+		   (err = AudioSetup(AudioCtx, HwSampleRate, HwChannels, passthrough))) {
+			HwSampleRate = 0;
+			HwChannels = 0;
+			Error("cAudioDecoder::UpdateFormat: format change update error");
+			return err;
+		}
+	}
+	return 0;
 }
 
 /**
@@ -169,13 +376,28 @@ send:
 				frame->sample_rate);
 			last_pts = frame->pts;
 		}
+
+		if (Passthrough != PassthroughMask ||
+		    Channels != AudioCtx->ch_layout.nb_channels ||
+		    SampleRate != AudioCtx->sample_rate) {
+			UpdateFormat();
+		}
+
+		if (!HwChannels || !HwSampleRate) {
+			Error("cAudioDecoder::Decode: unsupported format!");
+			av_frame_unref(frame);
+			return;
+		}
+
+		if (DecodePassthrough(avpkt, frame))
+			return;
+
 		AudioFilter(frame, AudioCtx);
 	}
 
 	if (ret_send == AVERROR(EAGAIN))
 		goto send;
 }
-
 
 /**
 **	Flush the audio decoder.
@@ -187,4 +409,15 @@ void cAudioDecoder::FlushBuffers(void)
 		avcodec_flush_buffers(AudioCtx);
 
 	last_pts = AV_NOPTS_VALUE;
+}
+
+/**
+**	Set audio pass-through mask
+**
+**	@param mask	enable mask (PCM, AC-3, E-AC-3, DTS)
+*/
+void cAudioDecoder::SetPassthrough(int mask)
+{
+	Debug2(L_CODEC, "cAudioDecoder::SetPassthrough %d", mask);
+	PassthroughMask = mask & (CodecPCM | CodecAC3 | CodecEAC3 | CodecDTS);
 }

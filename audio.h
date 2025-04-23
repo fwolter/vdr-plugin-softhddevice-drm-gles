@@ -27,20 +27,11 @@ extern "C" {
 #endif
 
 //----------------------------------------------------------------------------
-//	Defines
-//----------------------------------------------------------------------------
-
-#define CodecPCM  0x01			///< PCM bit mask
-#define CodecMPA  0x02			///< MPA bit mask (planned)
-#define CodecAC3  0x04			///< AC-3 bit mask
-#define CodecEAC3 0x08			///< E-AC-3 bit mask
-#define CodecDTS  0x10			///< DTS bit mask (planned)
-
-//----------------------------------------------------------------------------
 //	Prototypes
 //----------------------------------------------------------------------------
 
 extern void AudioFilter(AVFrame *, AVCodecContext *);	///< buffer audio samples
+extern void AudioEnqueueSpdif(AVCodecContext *, const uint16_t *, int, AVFrame *);	///< buffer spdif audio samples
 extern void AudioFlushBuffers(void);	///< flush audio buffers
 extern void AudioPoller(void);		///< poll audio events/handling		not used!
 extern int AudioFreeBytes(void);	///< free bytes in audio output
@@ -50,7 +41,6 @@ extern int AudioVideoReady(int64_t);	///< tell audio video is ready
 extern int AudioSkipInTrickSpeed(int64_t, int);	///< skip old audio data in trickspeed
 
 extern void AudioSetVolume(int);	///< set volume
-//extern int AudioSetup(int *, int *, int);	///< setup audio output
 
 extern void AudioPlay(void);		///< play audio
 extern void AudioPause(void);		///< pause audio
@@ -69,7 +59,8 @@ extern void AudioSetPassthrough(int);	/// set pass-through mask
 extern void AudioSetChannel(const char *);	///< set mixer channel
 extern void AudioSetAutoAES(int);	///< set automatic AES flag handling
 
-extern void AudioInit(void);		///< setup audio module
+extern void AudioInit(int);		///< setup audio module
+extern int AudioSetup(AVCodecContext *, int , int , int);	///< setup audio (for passthrough only atm)
 extern void AudioExit(void);		///< cleanup and exit audio module
 
 //----------------------------------------------------------------------------

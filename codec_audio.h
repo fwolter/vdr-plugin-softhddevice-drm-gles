@@ -28,6 +28,34 @@
 #include <libavcodec/avcodec.h>
 
 //----------------------------------------------------------------------------
+//	Defines
+//----------------------------------------------------------------------------
+
+#define CodecPCM  0x01			///< PCM bit mask
+#define CodecMPA  0x02			///< MPA bit mask (planned)
+#define CodecAC3  0x04			///< AC-3 bit mask
+#define CodecEAC3 0x08			///< E-AC-3 bit mask
+#define CodecDTS  0x10			///< DTS bit mask (planned)
+
+//----------------------------------------------------------------------------
+//	Variables and enums
+//----------------------------------------------------------------------------
+
+///
+///	IEC Data type enumeration.
+///
+enum IEC61937
+{
+    IEC61937_AC3 = 0x01,		///< AC-3 data
+    IEC61937_EAC3 = 0x15,		///< E-AC-3 data
+    IEC61937_DTS1 = 0x0B,		///< DTS type I (512 samples)
+    IEC61937_DTS2 = 0x0C,		///< DTS type II (1024 samples)
+    IEC61937_DTS3 = 0x0D,		///< DTS type III (2048 samples)
+    IEC61937_DTSHD = 0x11,		///< DTS HD data
+    IEC61937_TRUEHD = 0x16,		///< TrueHD data
+};
+
+//----------------------------------------------------------------------------
 //	Audio
 //----------------------------------------------------------------------------
 
@@ -41,8 +69,24 @@ private:
     AVFrame *Frame;			///< decoded audio frame buffer
     int64_t last_pts;			///< last PTS
     int64_t initial_pts;		///< initial PTS
+    int PassthroughMask;		///< set audio passthrough mask
+
+    int Passthrough;			///< current passthrough mask
+    int SampleRate;			///< current sample rate
+    int Channels;			///< current channels
+
+    int HwSampleRate;			///< hw sample rate
+    int HwChannels;			///< hw channels
+
+    uint16_t Spdif[24576 / 2];		///< SPDIF output buffer
+    int SpdifIndex;			///< index into SPDIF output buffer
+    int SpdifCount;			///< SPDIF repeat counter
+
+    int DecodePassthrough(const AVPacket *, AVFrame *);	///< try to decode passthrough
+    int UpdateFormat(void);		///< update format
+
 public:
-    cAudioDecoder(void);
+    cAudioDecoder(int);
     virtual ~cAudioDecoder(void);
     void Open(enum AVCodecID, AVCodecParameters *, AVRational *);
 	///< Open audio decoder
@@ -52,6 +96,8 @@ public:
 	///< Decode an audio packet
     void FlushBuffers(void);
 	///< Flush audio buffers
+    void SetPassthrough(int);
+	/// set pass-through mask
 };
 #endif
 /// @}

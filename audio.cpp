@@ -79,7 +79,7 @@ extern "C"
 
 static const char *AudioPCMDevice;	///< PCM device name
 static const char *AudioPassthroughDevice;	///< Passthrough device name
-static int AudioPassthrough;	///< Passthrough mask
+static int AudioPassthrough;		///< Passthrough mask
 static char AudioAppendAES;		///< flag automatic append AES
 static const char *AudioMixerDevice;	///< mixer device name
 static const char *AudioMixerChannel;	///< mixer channel name
@@ -144,7 +144,6 @@ int AudioEq;
 int Filterchanged;
 
 //	ring buffer variables
-char Passthrough;			///< flag: use pass-through (AC-3, ...)
 unsigned int HwSampleRate;		///< hardware sample rate in Hz
 unsigned int HwChannels;		///< hardware number of channels
 AVRational *timebase;			///< pointer to AVCodecContext pkts_timebase
@@ -749,8 +748,8 @@ static int AlsaPlayer(void)
 		}
 		avail = snd_pcm_frames_to_bytes(AlsaPCMHandle, n);
 		if (avail < 256) {		// too much overhead
-			Debug2(L_SOUND, "audio/alsa: break state '%s'",
-				snd_pcm_state_name(snd_pcm_state(AlsaPCMHandle)));
+			Debug2(L_SOUND, "audio/alsa: break state '%s' avail %d",
+				snd_pcm_state_name(snd_pcm_state(AlsaPCMHandle)), avail);
 			break;
 		}
 
@@ -767,7 +766,7 @@ static int AlsaPlayer(void)
 		}
 		// muting pass-through AC-3, can produce disturbance
 		if (AudioMute || (AudioSoftVolume
-			&& !Passthrough)) {
+			&& !AudioPassthrough)) {
 			// FIXME: quick&dirty cast
 			AudioSoftAmplifier((int16_t *) p, avail);
 			// FIXME: if not all are written, we double amplify them
@@ -812,6 +811,7 @@ static int AlsaPlayer(void)
 static char *opendevice(const char *device, int passthrough)
 {
 	int err;
+	char tmp[80];
 
 	if (!device)
 		return NULL;
@@ -819,8 +819,27 @@ static char *opendevice(const char *device, int passthrough)
 	Debug2(L_SOUND, "audio/alsa: try opening %sdevice '%s'",
 		passthrough ? "pass-through " : "", device);
 
+	if (passthrough && AudioAppendAES) {
+		if (!(strchr(device, ':'))) {
+			sprintf(tmp, "%s:AES0=%d,AES1=%d,AES2=0,AES3=%d",
+				device,
+				IEC958_AES0_NONAUDIO | IEC958_AES0_PRO_EMPHASIS_NONE,
+				IEC958_AES1_CON_ORIGINAL | IEC958_AES1_CON_PCM_CODER,
+				IEC958_AES3_CON_FS_48000);
+		} else {
+			sprintf(tmp, "%s,AES0=%d,AES1=%d,AES2=0,AES3=%d",
+				device,
+				IEC958_AES0_NONAUDIO | IEC958_AES0_PRO_EMPHASIS_NONE,
+				IEC958_AES1_CON_ORIGINAL | IEC958_AES1_CON_PCM_CODER,
+				IEC958_AES3_CON_FS_48000);
+		}
+		Debug2(L_SOUND, "audio/alsa: auto append AES: %s -> %s", device, tmp);
+	} else {
+		sprintf(tmp, "%s", device);
+	}
+
 	// open none blocking; if device is already used, we don't want wait
-	if ((err = snd_pcm_open(&AlsaPCMHandle, device, SND_PCM_STREAM_PLAYBACK,
+	if ((err = snd_pcm_open(&AlsaPCMHandle, tmp, SND_PCM_STREAM_PLAYBACK,
 		SND_PCM_NONBLOCK)) < 0) {
 
 		Warning("audio: AlsaInitPCM: could not open device '%s' error: %s", device,
@@ -834,7 +853,7 @@ static char *opendevice(const char *device, int passthrough)
 	return (char *)device;
 }
 
-static char *finddevice(const char *devname, const char *hint)
+static char *finddevice(const char *devname, const char *hint, int passthrough)
 {
 	char **hints;
 	int err;
@@ -853,7 +872,7 @@ static char *finddevice(const char *devname, const char *hint)
 		name = snd_device_name_get_hint(*n, "NAME");
 
 		if (strstr(name, hint)) {
-			if ((device = opendevice(name, 0))) {
+			if ((device = opendevice(name, passthrough))) {
 				device = (char *)malloc(sizeof(char) * (strlen(name) + 1));
 				strcpy(device, name);
 				free(name);
@@ -877,42 +896,43 @@ static void AlsaInitPCM(void)
 {
 	char *device = NULL;
 	int err;
+	Debug2(L_SOUND, "AlsaInit: passthrough %d", AudioPassthrough);
 
 	// try user set device
-	if (Passthrough)
-		device = opendevice(AudioPassthroughDevice, Passthrough);
+	if (AudioPassthrough)
+		device = opendevice(AudioPassthroughDevice, AudioPassthrough);
 
-	if (!device && Passthrough)
-		device = opendevice(getenv("ALSA_PASSTHROUGH_DEVICE"), Passthrough);
-
-	if (!device)
-		device = opendevice(AudioPCMDevice, Passthrough);
+	if (!device && AudioPassthrough)
+		device = opendevice(getenv("ALSA_PASSTHROUGH_DEVICE"), AudioPassthrough);
 
 	if (!device)
-		device = opendevice(getenv("ALSA_DEVICE"), Passthrough);
+		device = opendevice(AudioPCMDevice, AudioPassthrough);
+
+	if (!device)
+		device = opendevice(getenv("ALSA_DEVICE"), AudioPassthrough);
 
 	// walkthrough hdmi: devices
 	if (!device) {
 		Debug2(L_SOUND, "AlsaInitPCM: Try hdmi: devices...");
-		device = finddevice("pcm", "hdmi:");
+		device = finddevice("pcm", "hdmi:", AudioPassthrough);
 	}
 
 	// walkthrough default: devices
 	if (!device) {
 		Debug2(L_SOUND, "AlsaInitPCM: Try default: devices...");
-		device = finddevice("pcm", "default:");
+		device = finddevice("pcm", "default:", AudioPassthrough);
 	}
 
 	// try default device
 	if (!device) {
 		Debug2(L_SOUND, "AlsaInitPCM: Try default device...");
-		device = opendevice("default", Passthrough);
+		device = opendevice("default", AudioPassthrough);
 	}
 
 	// use null device
 	if (!device) {
 		Debug2(L_SOUND, "AlsaInitPCM: Try null device...");
-		device = opendevice("null", Passthrough);
+		device = opendevice("null", AudioPassthrough);
 	}
 
 	if (!device)
@@ -920,10 +940,10 @@ static void AlsaInitPCM(void)
 
 	if (!strcmp(device, "null"))
 		Warning("audio/alsa: using %sdevice '%s'",
-			Passthrough ? "pass-through " : "", device);
+			AudioPassthrough ? "pass-through " : "", device);
 	else
 		Info("audio/alsa: using %sdevice '%s'",
-			Passthrough ? "pass-through " : "", device);
+			AudioPassthrough ? "pass-through " : "", device);
 
 	if ((err = snd_pcm_nonblock(AlsaPCMHandle, 0)) < 0) {
 		Error("audio/alsa: can't set block mode: %s", snd_strerror(err));
@@ -1020,7 +1040,7 @@ static void AlsaInitMixer(void)
 **
 **	@todo FIXME: remove pointer for freq + channels
 */
-static int AlsaSetup(int channels, int sample_rate, __attribute__ ((unused)) int passthrough)
+static int AlsaSetup(int channels, int sample_rate, int passthrough)
 {
 	snd_pcm_hw_params_t *hwparams;
 	snd_pcm_state_t state;
@@ -1068,7 +1088,7 @@ static int AlsaSetup(int channels, int sample_rate, __attribute__ ((unused)) int
 		Warning("AlsaSetup: %d channels not supported! %s",
 			HwChannels, snd_strerror(err));
 	}
-	if ((int)HwChannels != channels) {
+	if ((int)HwChannels != channels && !passthrough) {
 		AudioDownMix = 1;
 	}
 
@@ -1122,11 +1142,12 @@ static int AlsaSetup(int channels, int sample_rate, __attribute__ ((unused)) int
 		AudioStartThreshold = AudioRingBufferSize / 3;
 	}
 
-	Info("AlsaSetup: Channels %d SampleRate %d\n"
+	Info("AlsaSetup: Channels %d SampleRate %d%s\n"
 		"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
 		"           Supports pause: %s mmap: %s\n"
 		"           AlsaBufferTime %dms AudioBufferTime %dms Threshold %ums",
-		channels, sample_rate, HwChannels, HwSampleRate,
+		channels, sample_rate, passthrough ? " -> passthrough" : "",
+		HwChannels, HwSampleRate,
 		snd_pcm_format_name(SND_PCM_FORMAT_S16),
 		AlsaCanPause ? "yes" : "no", AlsaUseMmap ? "yes" : "no",
 		buffer_time / 1000, AudioBufferTime, (AudioStartThreshold * 1000) /
@@ -1209,7 +1230,11 @@ static void *AudioPlayHandlerThread(void *dummy)
 		AlsaPlayerStop = 0;
 		pthread_mutex_lock(&AudioStartMutex);
 		Debug2(L_SOUND, "audio: AudioPlayHandlerThread: pthread_cond_wait");
-		pthread_cond_wait(&AudioStartCond, &AudioStartMutex);
+
+		do {
+			pthread_cond_wait(&AudioStartCond, &AudioStartMutex);
+		} while (!AudioRunning);
+
 		pthread_mutex_unlock(&AudioStartMutex);
 
 		Debug2(L_SOUND, "audio: AudioPlayHandlerThread: nach pthread_cond_wait ----> %dms start", (AudioUsedBytes() * 1000)
@@ -1345,6 +1370,103 @@ void AudioEnqueue(AVFrame *frame)
 		}
 	}
 	av_frame_free(&frame);
+}
+
+/**
+**	Place samples in spdif audio output queue
+**
+**	@param samples		sample buffer
+**	@param count		number of bytes in sample buffer
+**	@param frame		decoded frame (used to get frame parameters), unref'd at the end
+*/
+void AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *samples, int count, AVFrame *frame)
+{
+	size_t n;
+	const uint16_t *buffer;
+
+	timebase = &ctx->pkt_timebase;
+
+	if (AlsaPlayerStop) {
+//		Debug2(L_SOUND, "AudioEnqueueSpdif: AlsaPlayerStop!!!");
+		av_frame_unref(frame);
+		return;
+	}
+
+	buffer = samples;
+
+	pthread_mutex_lock(&AudioRbMutex);
+	n = AudioRingBuffer->Write(buffer, count);
+	if (n != (size_t) count)
+		Error("audio: AudioEnqueueSpdif: can't place %d samples in ring buffer", count);
+
+	PTS = frame->pts + (frame->nb_samples * timebase->den /
+		timebase->num / frame->sample_rate);
+	pthread_mutex_unlock(&AudioRbMutex);
+
+	if (!AudioRunning && !AudioPaused) {		// check, if we can start the thread
+		int skip;
+
+		n = AudioRingBuffer->UsedBytes();
+		skip = AudioSkip;
+		// FIXME: round to packet size
+
+		Debug2(L_AV_SYNC, "AudioEnqueueSpdif: start? in Rb %4zdms to skip %dms nb_samples %d",
+			n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
+			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
+			frame->nb_samples);
+		if (skip) {
+			if (n < (unsigned)skip) {
+				skip = n;
+			}
+			AudioSkip -= skip;
+			AudioRingBuffer->ReadAdvance(skip);
+			n = AudioRingBuffer->UsedBytes();
+		}
+		// forced start or enough video + audio buffered
+		// for some exotic channels * 4 too small
+		if ((AudioVideoIsReady && AudioStartThreshold < n) ||
+			AudioStartThreshold * 4 < n) {
+			// restart play-back
+			// no lock needed, can wakeup next time
+			Debug2(L_AV_SYNC, "AudioEnqueueSpdif: start play-back Threshold %ums RingBuffer %zums AudioVideoIsReady %d",
+				AudioStartThreshold * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
+				n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
+				AudioVideoIsReady);
+			AudioRunning = 1;
+			pthread_cond_signal(&AudioStartCond);
+		}
+	}
+	av_frame_unref(frame);
+}
+
+/**
+**	Setup alsa (only used for passthrough atm)
+**	setting up PCM goes via AudioFilter()
+**
+**	@param AudioCtx		decoding context
+**	@param samplerate	stream samplerate
+**	@param channels		stream nb of channels
+**	@param passthrough	passthrough enabled
+**
+**	@retval 0	everything ok
+**	@retval err	something gone wrong
+*/
+int AudioSetup(AVCodecContext *AudioCtx, int samplerate, int channels, int passthrough)
+{
+	int err = 0;
+
+	if (samplerate != (int)HwSampleRate ||
+	   (channels != (int)HwChannels && !(AudioDownMix && HwChannels == 2))) {
+
+		err = AlsaSetup(channels, samplerate, passthrough);
+		if (err) {
+			Debug2(L_SOUND, "AudioSetup: failed!");
+			return err;
+		}
+	}
+	timebase = &AudioCtx->pkt_timebase;
+
+	return 0;
 }
 
 /**
@@ -1633,7 +1755,7 @@ void AudioSetVolume(int volume)
     AudioVolume = volume;
     AudioMute = !volume;
     // reduce loudness for stereo output
-    if (AudioStereoDescent && HwChannels == 2 && !Passthrough) {
+    if (AudioStereoDescent && HwChannels == 2 && !AudioPassthrough) {
 		volume -= AudioStereoDescent;
 		if (volume < 0) {
 			volume = 0;
@@ -1818,11 +1940,11 @@ void AudioSetPassthroughDevice(const char *device)
 /**
 **	Set audio pass-through mask
 **
-**	@param mask	enable mask (PCM, AC-3, E-AC-3)
+**	@param mask	passthrough-mask
 */
 void AudioSetPassthrough(int mask)
 {
-    AudioPassthrough = mask & (CodecPCM | CodecAC3 | CodecEAC3);
+    AudioPassthrough = mask;
 }
 
 /**
@@ -1854,10 +1976,13 @@ void AudioSetAutoAES(int onoff)
 /**
 **	Initialize audio output module.
 **
+**	@param passthrough	passthrough enabled
+**
 **	@todo FIXME: make audio output module selectable.
 */
-void AudioInit(void)
+void AudioInit(int passthrough)
 {
+	AudioPassthrough = passthrough;
 	AudioRingInit();
 	AlsaInit();
 	AudioInitThread();

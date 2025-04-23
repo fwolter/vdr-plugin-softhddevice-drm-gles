@@ -118,6 +118,9 @@ extern "C"
     /// Set interlaced stream flag
     extern void SetInterlacedStream(int);
 
+    /// Set audio passthrough mask
+    extern void SetPassthrough(int);
+
 #ifdef __cplusplus
 }
 #endif

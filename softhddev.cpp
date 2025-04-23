@@ -111,6 +111,7 @@ static volatile char SkipAudio;		///< skip audio stream
 static cAudioDecoder *MyAudioDecoder;	///< audio decoder
 static enum AVCodecID AudioCodecID;	///< current codec id
 static int AudioChannelID;		///< current audio channel id
+static int AudioPassthrough;
 //static VideoStream *AudioSyncStream;	///< video stream for audio/video sync
 
     /// Minimum free space in audio buffer 8 packets for 8 channels
@@ -1909,6 +1910,14 @@ void SetInterlacedStream(int interlaced)
 	MyVideoStream->interlaced = interlaced;
 }
 
+void SetPassthrough(int mask)
+{
+	AudioPassthrough = mask;
+	AudioSetPassthrough(mask);
+	if (MyAudioDecoder)
+		MyAudioDecoder->SetPassthrough(mask);
+}
+
 /**
 **	Set play mode, called on channel switch.
 **
@@ -1997,10 +2006,10 @@ int Start(void)
 {
 	Debug("Start(void):");
 	if (!MyAudioDecoder) {
-		AudioInit();
+		AudioInit(AudioPassthrough);
 		AudioSetBufferTime(ConfigAudioBufferTime);
 		av_new_packet(AudioAvPkt, AUDIO_BUFFER_SIZE);
-		MyAudioDecoder = new cAudioDecoder();
+		MyAudioDecoder = new cAudioDecoder(AudioPassthrough);
 		AudioCodecID = AV_CODEC_ID_NONE;
 		AudioChannelID = -1;
 

@@ -178,6 +178,7 @@ class cMenuSetupSoft:public cMenuSetupPage
     int AudioPassthroughPCM;
     int AudioPassthroughAC3;
     int AudioPassthroughEAC3;
+    int AudioPassthroughDTS;
     int AudioDownmix;
     int AudioSoftvol;
     int AudioNormalize;
