@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: VDR \n"
 "Report-Msgid-Bugs-To: <see README>\n"
-"POT-Creation-Date: 2022-11-23 13:48+0100\n"
+"POT-Creation-Date: 2025-05-07 21:58+0200\n"
 "PO-Revision-Date: blabla\n"
 "Last-Translator: blabla\n"
 "Language-Team: blabla\n"
@@ -15,170 +15,6 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-
-#, c-format
-msgid "audio/alsa: Can't recovery from xrun: %s pcm state: %s\n"
-msgstr ""
-
-#, c-format
-msgid "audio: snd_pcm_drop(): %s\n"
-msgstr ""
-
-#, c-format
-msgid "audio: snd_pcm_prepare(): %s\n"
-msgstr ""
-
-#, c-format
-msgid "audio/alsa: snd_pcm_avail_update(): %s\n"
-msgstr ""
-
-#, c-format
-msgid "audio/alsa: writei underrun error? '%s'\n"
-msgstr ""
-
-#, c-format
-msgid "audio/alsa: snd_pcm_writei failed: %s\n"
-msgstr ""
-
-msgid "audio/alsa: not all frames written\n"
-msgstr ""
-
-#, c-format
-msgid "audio/alsa: using %sdevice '%s'\n"
-msgstr ""
-
-#, c-format
-msgid "audio/alsa: playback open '%s' error: %s\n"
-msgstr ""
-
-#, c-format
-msgid "audio/alsa: can't set block mode: %s\n"
-msgstr ""
-
-#, c-format
-msgid "audio/alsa: can't open mixer '%s'\n"
-msgstr ""
-
-#, c-format
-msgid "audio/AlsaSetup: recover from xrun pcm state: %s\n"
-msgstr ""
-
-#, c-format
-msgid ""
-"audio/alsa: set params error: %s\n"
-"AlsaSetup: Channels %d SampleRate %d\n"
-"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
-"           Supports pause: %s mmap: %s\n"
-"           AlsaBufferTime %dms pcm state: %s\n"
-msgstr ""
-
-#, c-format
-msgid ""
-"AlsaSetup: Channels %d SampleRate %d\n"
-"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
-"           Supports pause: %s mmap: %s\n"
-"           AlsaBufferTime %dms AudioBufferTime %dms Threshold %ums\n"
-msgstr ""
-
-msgid "audio: can't cancel play thread\n"
-msgstr ""
-
-#, c-format
-msgid "audio: can't place %d samples in ring buffer\n"
-msgstr ""
-
-msgid "AudioGetClock: delay < 0\n"
-msgstr ""
-
-#, c-format
-msgid "AudioPlay: snd_pcm_pause(): %s\n"
-msgstr ""
-
-#, c-format
-msgid "AudioPause: snd_pcm_pause(): %s\n"
-msgstr ""
-
-msgid "codec: can't allocate vodeo decoder\n"
-msgstr ""
-
-#, c-format
-msgid "CodecVideoOpen: Error opening the decoder: %s\n"
-msgstr ""
-
-msgid "CodecVideoReceiveFrame: can't allocate decoder frame\n"
-msgstr ""
-
-msgid "codec: can't allocate audio decoder\n"
-msgstr ""
-
-msgid "codec: can't allocate audio decoder frame buffer\n"
-msgstr ""
-
-#, c-format
-msgid "codec: codec ac3_fixed ID %#06x not found\n"
-msgstr ""
-
-#, c-format
-msgid "codec: codec aac_fixed ID %#06x not found\n"
-msgstr ""
-
-#, c-format
-msgid "codec: codec %s ID %#06x not found\n"
-msgstr ""
-
-msgid "codec: can't allocate audio codec context\n"
-msgstr ""
-
-msgid "codec: can't open audio codec\n"
-msgstr ""
-
-msgid "[softhddev] invalid PES audio packet\n"
-msgstr ""
-
-msgid "[softhddev] empty audio packet\n"
-msgstr ""
-
-#, c-format
-msgid "[softhddev] invalid audio packet %d bytes\n"
-msgstr ""
-
-#, c-format
-msgid "[softhddev] audio buffer too small needed %d avail %d\n"
-msgstr ""
-
-#, c-format
-msgid "[softhddev] invalid LPCM audio packet %d bytes\n"
-msgstr ""
-
-msgid "[softhddev] out of memory\n"
-msgstr ""
-
-#, c-format
-msgid "video: packet buffer too small for %d\n"
-msgstr ""
-
-#, c-format
-msgid "softhddev: %s called without hw decoder\n"
-msgstr ""
-
-#, c-format
-msgid "We need no long options\n"
-msgstr ""
-
-#, c-format
-msgid "Missing argument for option '%c'\n"
-msgstr ""
-
-#, c-format
-msgid "Unknown option '%c'\n"
-msgstr ""
-
-#, c-format
-msgid "Unhandled argument '%s'\n"
-msgstr ""
-
-msgid "[softhddev]: dirty area too big\n"
-msgstr ""
 
 msgid "show"
 msgstr "anzeigen"
@@ -195,11 +31,28 @@ msgstr "Erzeuge primäres Gerät"
 msgid "Hide main menu entry"
 msgstr "Verstecke Hauptmenüeintrag"
 
+msgid "GPU mem used for image caching (MB)"
+msgstr "GPU-Speichergröße für Bild-Zwischenspeicher"
+
+msgid "Statistics"
+msgstr "Statistiken"
+
+#, c-format
+msgid " Frames duped(%d) dropped(%d) total(%d)"
+msgstr " Frames verdoppelt(%d) verworfen (%d) gesamt (%d)"
+
+#, c-format
+msgid " OSD: Using %s rendering"
+msgstr " OSD: Benutze %s rendering"
+
+msgid " OSD: Using software rendering"
+msgstr " OSD: Benutze software rendering"
+
+msgid "Debug"
+msgstr "Debug"
+
 msgid "Write OSD to file"
 msgstr "OSD in Datei schreiben"
-
-msgid "GPU mem used for image caching (MB)"
-msgstr ""
 
 msgid "Audio"
 msgstr "Audio"
@@ -235,28 +88,28 @@ msgid "Reduce stereo volume (/1000)"
 msgstr "Reduziere Steropegel (/1000)"
 
 msgid "Enable Stereo downmix"
-msgstr ""
+msgstr "Audio auf Stereo herunterrechnen"
 
 msgid "Pass-through default"
 msgstr "Pass-Through-Standard"
 
 msgid "  PCM pass-through"
-msgstr ""
+msgstr "PCM Bitstream ausgeben"
 
 msgid "  AC-3 pass-through"
-msgstr ""
+msgstr "AC-3 Bitstream ausgeben"
 
 msgid "  E-AC-3 pass-through"
-msgstr ""
+msgstr "E-AC-3 Bitstream ausgeben"
 
 msgid "Enable automatic AES"
 msgstr "Aktiviere automatiche AES"
 
 msgid "Audio Filter"
-msgstr ""
+msgstr "Ton-Filter"
 
 msgid " Enable Audio Equalizer"
-msgstr ""
+msgstr " Aktiviere Audio Equalizer"
 
 msgid "  60 Hz band gain"
 msgstr ""
@@ -311,227 +164,3 @@ msgstr ""
 
 msgid "  17200 Hz band gain"
 msgstr ""
-
-#, c-format
-msgid "FindDevice: DRM have %i connectors, %i crtcs, %i encoders\n"
-msgstr ""
-
-msgid "FindDevice: No Monitor Mode found! Give up!\n"
-msgstr ""
-
-#, c-format
-msgid "FindDevice: Found Monitor Mode %dx%d@%d\n"
-msgstr ""
-
-msgid "FindDevice: No suitable planes found!\n"
-msgstr ""
-
-#, c-format
-msgid "FindDevice: DRM setup CRTC: %i video_plane: %i (%s %lld) osd_plane: %i (%s %lld) use_zpos: %d\n"
-msgstr ""
-
-#, c-format
-msgid "drm_get_buf_from_bo: cannot create framebuffer (%d): %m\n"
-msgstr ""
-
-#, c-format
-msgid "SetupFB: cannot create modifiers framebuffer (%d): %m\n"
-msgstr ""
-
-msgid "video: can't queue cancel video display thread\n"
-msgstr ""
-
-msgid "video: can't cancel video display thread\n"
-msgstr ""
-
-msgid "video: can't cancel DisplayHandlerThread thread\n"
-msgstr ""
-
-msgid "video/DRM: out of memory\n"
-msgstr ""
-
-msgid "softhddev: grab unsupported\n"
-msgstr ""
-
-msgid "VideoOsdInit: SetupFB FB OSD failed!\n"
-msgstr ""
-
-#~ msgid "Enable (E-)AC-3 (decoder) downmix"
-#~ msgstr "Aktiviere (E-)AC-3 (decoder) downmix"
-
-#~ msgid "Video"
-#~ msgstr "Video"
-
-#~ msgid " Frames missed(%d) duped(%d) dropped(%d) total(%d)"
-#~ msgstr " Frames verloren(%d) verdoppelt(%d) übersprungen(%d) Gesamt(%d)"
-
-#~ msgid "A software and GPU emulated HD device"
-#~ msgstr "Ein Software und GPU emulieres HD-Gerät"
-
-#~ msgid "Clear decoder on channel switch"
-#~ msgstr "Decoder bei Kanalwechsel leeren"
-
-#~ msgid "Audio drift correction"
-#~ msgstr "Audio Driftkorrektur"
-
-#~ msgid "SoftHdDevice"
-#~ msgstr "SoftHdDevice"
-
-#~ msgid "Channel not available!"
-#~ msgstr "Kanal nicht verfügbar!"
-
-#~ msgid "PIP toggle on/off: off"
-#~ msgstr "PIP deaktivieren"
-
-#~ msgid "PIP toggle on/off: on"
-#~ msgstr "PIP aktivieren"
-
-#~ msgid "PIP channel +"
-#~ msgstr "PIP Kanal +"
-
-#~ msgid "PIP channel -"
-#~ msgstr "PIP Kanal -"
-
-#~ msgid "PIP close"
-#~ msgstr "PIP schließen"
-
-#~ msgid "Suspend SoftHdDevice"
-#~ msgstr "Unterbreche SoftHdDevice"
-
-#~ msgid "Picture-In-Picture"
-#~ msgstr "Bild in Bild (PIP)"
-
-#~ msgid "Pip X (%)"
-#~ msgstr "PIP X (%)"
-
-#~ msgid "Pip Y (%)"
-#~ msgstr "PIP Y (%)"
-
-#~ msgid "Pip Width (%)"
-#~ msgstr "PIP Breite (%)"
-
-#~ msgid "Pip Height (%)"
-#~ msgstr "PIP Höhe (%)"
-
-#~ msgid "Video X (%)"
-#~ msgstr "Video X (%)"
-
-#~ msgid "Video Y (%)"
-#~ msgstr "Video Y (%)"
-
-#~ msgid "Video Width (%)"
-#~ msgstr "Videobreite (%)"
-
-#~ msgid "Video Height (%)"
-#~ msgstr "Videohöhe (%)"
-
-#~ msgid "Alternative Pip X (%)"
-#~ msgstr "Alternative PIP X (%)"
-
-#~ msgid "Alternative Pip Y (%)"
-#~ msgstr "Alternative Pip Y (%)"
-
-#~ msgid "Alternative Pip Width (%)"
-#~ msgstr "Alternative PIP Breite (%)"
-
-#~ msgid "Alternative Pip Height (%)"
-#~ msgstr "Alternative PIP Höhe (%)"
-
-#~ msgid "Alternative Video X (%)"
-#~ msgstr "Alternative Video X (%)"
-
-#~ msgid "Alternative Video Y (%)"
-#~ msgstr "Alternative Video Y (%)"
-
-#~ msgid "Alternative Video Width (%)"
-#~ msgstr "Alternative Videobreite (%)"
-
-#~ msgid "Alternative Video Height (%)"
-#~ msgstr "Alternative Videohöhe (%)"
-
-#~ msgid "Osd size"
-#~ msgstr "OSD Größe"
-
-#~ msgid "Osd width"
-#~ msgstr "OSD Breite"
-
-#~ msgid "Osd height"
-#~ msgstr "OSD Höhe"
-
-#~ msgid "Suspend"
-#~ msgstr "Unterbrechen"
-
-#~ msgid "Detach from main menu entry"
-#~ msgstr "Detach durch Hauptmenüeintrag"
-
-#~ msgid "Suspend closes video+audio"
-#~ msgstr "Unterbrechen schließt Video+Audio"
-
-#~ msgid "Suspend stops x11"
-#~ msgstr "Unterbrechen stoppt X11"
-
-#~ msgid "Enable Screensaver(DPMS) at black screen"
-#~ msgstr "Bildschirmschoner(DPMS) bei schwarzen Bild  aktivieren"
-
-#~ msgid "Video background color (RGB)"
-#~ msgstr "Video Hintergrundfrabe (RGB)"
-
-#~ msgid "Video background color (Alpha)"
-#~ msgstr "Video Hintergrundfarbe (Alpha)"
-
-#~ msgid "Use studio levels (vdpau only)"
-#~ msgstr "Benutze Studio Levels (nur vdpau)"
-
-#~ msgid "60hz display mode"
-#~ msgstr "60Hz Anzeigemodus"
-
-#~ msgid "Soft start a/v sync"
-#~ msgstr "Sanftanlauf A/V Sync"
-
-#~ msgid "Black during channel switch"
-#~ msgstr "Schwarz während Kanalwechsel"
-
-#~ msgid "Brightness (-1000..1000) (vdpau)"
-#~ msgstr "Helligkeit (-1000..1000) (vdpau)"
-
-#~ msgid "min"
-#~ msgstr "min"
-
-#~ msgid "max"
-#~ msgstr "max"
-
-#~ msgid "Contrast (0..10000) (vdpau)"
-#~ msgstr "Kontrast (0..10000) (vdpau)"
-
-#~ msgid "Saturation (0..10000) (vdpau)"
-#~ msgstr "Sättigung (0..10000) (vdpau)"
-
-#~ msgid "Hue (-3141..3141) (vdpau)"
-#~ msgstr "Farbton (-3141..3141) (vdpau)"
-
-#~ msgid "Scaling"
-#~ msgstr "Skalierung"
-
-#~ msgid "Deinterlace"
-#~ msgstr "Deinterlace"
-
-#~ msgid "Inverse Telecine (vdpau)"
-#~ msgstr "Inverse Filmübertragung (vdpau)"
-
-#~ msgid "off"
-#~ msgstr "aus"
-
-#~ msgid "Sharpen (-1000..1000) (vdpau)"
-#~ msgstr "Schärfen (-1000..1000) (vdpau)"
-
-#~ msgid "blur max"
-#~ msgstr "Weichzeichnen max."
-
-#~ msgid "sharpen max"
-#~ msgstr "Schärfen max."
-
-#~ msgid "Cut top and bottom (pixel)"
-#~ msgstr "Schneide oben und unten ab (Pixel)"
-
-#~ msgid "Cut left and right (pixel)"
-#~ msgstr "Schneide links und rechts ab (Pixel)"
