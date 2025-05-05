@@ -210,6 +210,26 @@ static inline void Syslog(const int level, const int cat, const char *format, ..
 }
 
 /**
+**	Workaround for av_err2str() not working with C++
+*/
+#ifdef av_err2str
+#undef av_err2str
+static inline const char* av_err2string(int errnum)
+{
+	static char str[3][AV_ERROR_MAX_STRING_SIZE];
+	char buf[AV_ERROR_MAX_STRING_SIZE];
+	static int idx = 0;
+
+	idx = (idx + 1) % 3;
+	av_make_error_string(buf, AV_ERROR_MAX_STRING_SIZE, errnum);
+	snprintf(str[idx], sizeof(str[idx]), buf);
+
+	return str[idx];
+}
+#define av_err2str(err) av_err2string(err)
+#endif
+
+/**
 **	Nice time-stamp string.
 **
 **	@param ts	time stamp
