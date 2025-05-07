@@ -2328,7 +2328,6 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 			Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
 	} else {
 		// create some buffers up to VIDEO_SURFACES_MAX + 2
-		int maxfb = 0;
 get_buffer:
 		buf = &render->bufs[render->enqueue_buffer];
 		if (render->buffers < VIDEO_SURFACES_MAX + 2) {
@@ -2338,11 +2337,6 @@ get_buffer:
 				// a new buffer arrives in Frame2Display
 				// after that destroy, we should be able to setup 0, 1, 2, ..., VIDEO_SURFACES_MAX + 2 framebuffers
 				render->enqueue_buffer = (render->enqueue_buffer + 1) % (VIDEO_SURFACES_MAX + 2);
-
-				// if we want to run into an endless loop here, something is wrong!
-				maxfb++;
-				if (maxfb > VIDEO_SURFACES_MAX + 2)
-					Fatal("EnqueueFB: SHOULD NOT HAPPEN! could not get a free FB!");
 
 				goto get_buffer;
 			}
