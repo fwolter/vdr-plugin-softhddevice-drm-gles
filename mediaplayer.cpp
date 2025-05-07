@@ -34,7 +34,6 @@ using std::ifstream;
 #include <vdr/videodir.h>
 
 #include "mediaplayer.h"
-#include "misc.h"
 
 extern "C"
 {
@@ -44,6 +43,8 @@ extern "C"
 #include "softhddev.h"
 #include "audio.h"
 }
+
+#include "misc.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //	cPlayer Mediaplayer
