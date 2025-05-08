@@ -315,6 +315,7 @@ extern void VideoSetClock(VideoRender *, int64_t);
     /// Display handler.
 extern void VideoThreadWakeup(VideoRender *, int, int);
 extern void VideoThreadExit(void);
+extern int VideoDecodeThreadRunning(void);
 
 extern void VideoInit(VideoRender *);	///< Setup video module.
 extern void VideoExit(VideoRender *);		///< Cleanup and exit video module.

@@ -87,6 +87,8 @@ struct __video_stream__
     volatile char TrickSpeed;		///< flag trickspeed stream
     volatile char StreamFreezed;	///< stream freezed
     int interlaced;			///< is this an interlaced stream?
+    int StreamWait;			///< we should wait for decoding next frame
+					///< 0: no need to wait, 1: wait requested, 2: wating
 
     AVPacket PacketRb[VIDEO_PACKET_MAX];	///< PES packet ring buffer
     int PacketWrite;			///< ring buffer write pointer
@@ -1077,6 +1079,23 @@ static void VideoStreamClose(VideoStream * stream)
 */
 void ClearVideo(VideoStream * stream)
 {
+	// ClearVideo does not come from Play() or SetPlayMode() (closing_stream_requested)
+	// but from Clear() (or StillPicture) which is directly from VDR
+	// Wait for the clear, until the decode thread finished a decoding process
+	// The problem here is, that the reopen workaround deletes the VideoCtx for a moment,
+	// which of course is a problem for VideoDecodeInput in the separate thread, because
+	// that one wants VideoCtx....
+	if (!stream->ClosingStream) {
+		stream->StreamWait = 1;
+		while (stream->StreamWait == 1) {
+			// don't wait, if no thread is running, which should set stream->wait = 2
+			// otherwise we run into an endless loop here
+			if (!VideoDecodeThreadRunning())
+				stream->StreamWait = 2;
+			usleep(10000);
+		}
+	}
+
 	AVPacket *avpkt;
 	Debug("ClearVideo() packets %d", atomic_read(&stream->PacketsFilled));
 	pthread_mutex_lock(&stream->PktsLockMutex);
@@ -1094,6 +1113,9 @@ void ClearVideo(VideoStream * stream)
 		stream->Decoder->FlushBuffers();
 	}
 	pthread_mutex_unlock(&stream->PktsLockMutex);
+
+	// no need to wait in decoding thread anymore
+	stream->StreamWait = 0;
 }
 
 int closing_stream_requested(VideoStream *stream)
@@ -1132,6 +1154,11 @@ int VideoDecodeInput(VideoStream * stream)
 
 	if (closing_stream_requested(stream))
 		return -1;
+
+	if (stream->StreamWait) {
+		stream->StreamWait = 2; // signalise, the turn has finished and we are waiting
+		return -1;
+	}
 
 	if (MyVideoStream->StreamFreezed) {		// stream freezed
 //		Info("VideoDecodeInput: stream->Freezed");

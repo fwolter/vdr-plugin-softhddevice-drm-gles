@@ -2164,6 +2164,10 @@ static void *DecodeHandlerThread(void *arg)
 	pthread_exit((void *)pthread_self());
 }
 
+int VideoDecodeThreadRunning(void)
+{
+	return DecodeThread;
+}
 
 ///
 ///	Exit and cleanup video threads.
