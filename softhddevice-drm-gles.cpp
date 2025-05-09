@@ -707,6 +707,7 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 #endif
     int old_Statistics = Statistics;
     int old_Logging = Logging;
+    int old_LogDefault = LogDefault;
     int old_Audio = Audio;
     int old_AudioFilter = AudioFilter;
     int old_AudioEq = AudioEq;
@@ -728,6 +729,7 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 #endif
 #endif
 			old_Statistics != Statistics || old_Logging != Logging ||
+			old_LogDefault != LogDefault ||
 			old_AudioPassthroughDefault != AudioPassthroughDefault) {
 			Create();			// update menu
 		}
@@ -844,6 +846,9 @@ void cMenuSetupSoft::Store(void)
     if (LogState) {
 	SetupStore("LogLevel", ConfigLog);
 	SetLogLevel(ConfigLog);
+    } else {
+	SetupStore("LogLevel", -ConfigLog);
+	SetLogLevel(0);
     }
 
     // FIXME: can handle more audio state changes here

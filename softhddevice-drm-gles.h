@@ -51,7 +51,7 @@ char ConfigWritePngs;			///< config write pngs from OSD
 static char ConfigHideMainMenuEntry;	///< config hide main menu entry
 
 static char LogState;			///< flag logging on/off
-static char ConfigLog;			///< loglevel config
+static int ConfigLog;			///< loglevel config
 
 static int ConfigVideoAudioDelay;	///< config audio delay
 static char ConfigAudioPassthrough;	///< config audio pass-through mask
