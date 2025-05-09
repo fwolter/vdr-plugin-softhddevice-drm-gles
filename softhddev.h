@@ -121,6 +121,9 @@ extern "C"
     /// Set audio passthrough mask
     extern void SetPassthrough(int);
 
+    /// Set loglevel
+    extern void SetLogLevel(int);
+
 #ifdef __cplusplus
 }
 #endif

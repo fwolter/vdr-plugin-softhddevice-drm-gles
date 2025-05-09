@@ -61,6 +61,7 @@ extern "C"
 #define L_GRAB             (1 << 13)
 
 typedef unsigned char uchar;
+extern int DebugLogLevel;
 
 /**
 **	Show error.
@@ -112,49 +113,6 @@ static inline void Syslog(const int, const int, const char *format, ...)
 */
 static inline void Syslog(const int level, const int cat, const char *format, ...)
 {
-	int DebugLogLevel = 0;
-#ifdef DEBUG
-	DebugLogLevel |= L_DEBUG;
-#endif
-#ifdef AV_SYNC_DEBUG
-	DebugLogLevel |= L_AV_SYNC;
-#endif
-#ifdef SOUND_DEBUG
-	DebugLogLevel |= L_SOUND;
-#endif
-#ifdef OSD_DEBUG
-	DebugLogLevel |= L_OSD;
-#endif
-#ifdef DRM_DEBUG
-	DebugLogLevel |= L_DRM;
-#endif
-#ifdef CODEC_DEBUG
-	DebugLogLevel |= L_CODEC;
-#endif
-#ifdef STILL_DEBUG
-	DebugLogLevel |= L_STILL;
-#endif
-#ifdef TRICK_DEBUG
-	DebugLogLevel |= L_TRICK;
-#endif
-#ifdef MEDIA_DEBUG
-	DebugLogLevel |= L_MEDIA;
-#endif
-#ifdef GL_DEBUG
-	DebugLogLevel |= L_OPENGL;
-#endif
-#ifdef GL_DEBUG_TIME
-	DebugLogLevel |= L_OPENGL_TIME;
-#endif
-#ifdef GL_DEBUG_TIME_ALL
-	DebugLogLevel |= L_OPENGL_TIME_ALL;
-#endif
-#ifdef PACKET_DEBUG
-	DebugLogLevel |= L_PACKET;
-#endif
-#ifdef GRAB_DEBUG
-	DebugLogLevel |= L_GRAB;
-#endif
 	va_list ap;
 	char fmt[256];
 	char prefix[20] = "";

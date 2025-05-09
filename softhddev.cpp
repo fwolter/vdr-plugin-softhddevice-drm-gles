@@ -112,6 +112,7 @@ static cAudioDecoder *MyAudioDecoder;	///< audio decoder
 static enum AVCodecID AudioCodecID;	///< current codec id
 static int AudioChannelID;		///< current audio channel id
 static int AudioPassthrough;
+int DebugLogLevel;
 //static VideoStream *AudioSyncStream;	///< video stream for audio/video sync
 
     /// Minimum free space in audio buffer 8 packets for 8 channels
@@ -1916,6 +1917,47 @@ void SetPassthrough(int mask)
 	AudioSetPassthrough(mask);
 	if (MyAudioDecoder)
 		MyAudioDecoder->SetPassthrough(mask);
+}
+
+/**
+**	Set log level
+*/
+void SetLogLevel(int loglevel)
+{
+	DebugLogLevel = loglevel;
+
+	if (!loglevel)
+		return;
+
+	char prefix[256] = "Set loglevels:";
+	if (loglevel & L_DEBUG)
+		strcat(prefix, " standard debugs,");
+	if (loglevel & L_AV_SYNC)
+		strcat(prefix, " AV-Sync,");
+	if (loglevel & L_SOUND)
+		strcat(prefix, " sound,");
+	if (loglevel & L_OSD)
+		strcat(prefix, " osd,");
+	if (loglevel & L_DRM)
+		strcat(prefix, " drm");
+	if (loglevel & L_CODEC)
+		strcat(prefix, " codec,");
+	if (loglevel & L_STILL)
+		strcat(prefix, " stillpicture,");
+	if (loglevel & L_TRICK)
+		strcat(prefix, " trickspeed,");
+	if (loglevel & L_MEDIA)
+		strcat(prefix, " mediaplayer,");
+	if ((loglevel & L_OPENGL) ||
+	    (loglevel & L_OPENGL_TIME) ||
+	    (loglevel & L_OPENGL_TIME_ALL))
+		strcat(prefix, " OpenGL OSD,");
+	if (loglevel & L_PACKET)
+		strcat(prefix, " packet tracking,");
+	if (loglevel & L_GRAB)
+		strcat(prefix, " grabbing");
+
+	Info("%s", prefix);
 }
 
 /**

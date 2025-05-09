@@ -568,6 +568,45 @@ void cMenuSetupSoft::Create(void)
 #endif
 #endif
     //
+    //	logging
+    //
+    Add(CollapsedItem(tr("Logging"), Logging));
+
+    if (Logging) {
+	Add(new cMenuEditBoolItem(tr("Logging default"),
+		&LogDefault, trVDR("off"), trVDR("on")));
+	if (LogDefault) {
+		Add(new cMenuEditBoolItem(tr("\040\040Standard debug logs"),
+			&LogDebug, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040AV Sync debug logs"),
+			&LogAVSync, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040Sound debug logs"),
+			&LogSound, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040OSD debug logs"),
+			&LogOSD, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040DRM debug logs"),
+			&LogDRM, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040Codec debug logs"),
+			&LogCodec, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040Stillpicture debug logs"),
+			&LogStill, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040Trickspeed debug logs"),
+			&LogTrick, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040Mediaplayer debug logs"),
+			&LogMedia, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040OpenGL OSD debug logs"),
+			&LogGL, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040OpenGL OSD time measurement"),
+			&LogGLTime, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040OpenGL OSD time measurement (extensive)"),
+			&LogGLTimeAll, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040Packet tracking logs"),
+			&LogPacket, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("\040\040Grabbing debug logs"),
+			&LogGrab, trVDR("no"), trVDR("yes")));
+	}
+    }
+    //
     //	audio
     //
     Add(CollapsedItem(tr("Audio"), Audio));
@@ -668,6 +707,7 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 #endif
 #endif
     int old_Statistics = Statistics;
+    int old_Logging = Logging;
     int old_Audio = Audio;
     int old_AudioFilter = AudioFilter;
     int old_AudioEq = AudioEq;
@@ -688,7 +728,7 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 			old_DebugMenu != DebugMenu ||
 #endif
 #endif
-			old_Statistics != Statistics ||
+			old_Statistics != Statistics || old_Logging != Logging ||
 			old_AudioPassthroughDefault != AudioPassthroughDefault) {
 			Create();			// update menu
 		}
@@ -717,6 +757,25 @@ cMenuSetupSoft::cMenuSetupSoft(void)
 #endif
     Statistics = 0;
     HideMainMenuEntry = ConfigHideMainMenuEntry;
+    //
+    //	logging
+    //
+    Logging = 0;
+    LogDefault = LogState;
+    LogDebug = ConfigLog & L_DEBUG;
+    LogAVSync = ConfigLog & L_AV_SYNC;
+    LogSound = ConfigLog & L_SOUND;
+    LogOSD = ConfigLog & L_OSD;
+    LogDRM = ConfigLog & L_DRM;
+    LogCodec = ConfigLog & L_CODEC;
+    LogStill = ConfigLog & L_STILL;
+    LogTrick = ConfigLog & L_TRICK;
+    LogMedia = ConfigLog & L_MEDIA;
+    LogGL = ConfigLog & L_OPENGL;
+    LogGLTime = ConfigLog & L_OPENGL_TIME;
+    LogGLTimeAll = ConfigLog & L_OPENGL_TIME_ALL;
+    LogPacket = ConfigLog & L_PACKET;
+    LogGrab = ConfigLog & L_GRAB;
     //
     //	audio
     //
@@ -766,6 +825,27 @@ void cMenuSetupSoft::Store(void)
     SetupStore("HideMainMenuEntry", ConfigHideMainMenuEntry = HideMainMenuEntry);
     SetupStore("AudioDelay", ConfigVideoAudioDelay = AudioDelay);
     VideoSetAudioDelay(ConfigVideoAudioDelay);
+
+    ConfigLog =
+	(LogDebug ? L_DEBUG : 0) |
+	(LogAVSync ? L_AV_SYNC : 0) |
+	(LogSound ? L_SOUND : 0) |
+	(LogOSD ? L_OSD : 0) |
+	(LogDRM ? L_DRM : 0) |
+	(LogCodec ? L_CODEC : 0) |
+	(LogStill ? L_STILL : 0) |
+	(LogTrick ? L_TRICK : 0) |
+	(LogMedia ? L_MEDIA : 0) |
+	(LogGL ? L_OPENGL : 0) |
+	(LogGLTime ? L_OPENGL_TIME : 0) |
+	(LogGLTimeAll ? L_OPENGL_TIME_ALL : 0) |
+	(LogPacket ? L_PACKET : 0) |
+	(LogGrab ? L_GRAB : 0);
+    LogState = LogDefault;
+    if (LogState) {
+	SetupStore("LogLevel", ConfigLog);
+	SetLogLevel(ConfigLog);
+    }
 
     // FIXME: can handle more audio state changes here
     // downmix changed reset audio, to get change direct
@@ -1376,6 +1456,17 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 #endif
     if (!strcasecmp(name, "HideMainMenuEntry")) {
 	ConfigHideMainMenuEntry = atoi(value);
+	return true;
+    }
+    if (!strcasecmp(name, "LogLevel")) {
+	int i = atoi(value);
+	LogState = i > 0;
+	ConfigLog = abs(i);
+	if (LogState) {
+	    SetLogLevel(ConfigLog);
+	} else {
+	    SetLogLevel(0);
+	}
 	return true;
     }
     if (!strcasecmp(name, "AudioDelay")) {

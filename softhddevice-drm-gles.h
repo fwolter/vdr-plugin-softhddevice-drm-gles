@@ -49,6 +49,10 @@ char ConfigWritePngs;			///< config write pngs from OSD
 #endif
 #endif
 static char ConfigHideMainMenuEntry;	///< config hide main menu entry
+
+static char LogState;			///< flag logging on/off
+static char ConfigLog;			///< loglevel config
+
 static int ConfigVideoAudioDelay;	///< config audio delay
 static char ConfigAudioPassthrough;	///< config audio pass-through mask
 static char AudioPassthroughState;	///< flag audio pass-through on/off
@@ -171,6 +175,23 @@ class cMenuSetupSoft:public cMenuSetupPage
 #endif
     int Statistics;
     int HideMainMenuEntry;
+
+    int Logging;
+    int LogDefault;
+    int LogDebug;
+    int LogAVSync;
+    int LogSound;
+    int LogOSD;
+    int LogDRM;
+    int LogCodec;
+    int LogStill;
+    int LogTrick;
+    int LogMedia;
+    int LogGL;
+    int LogGLTime;
+    int LogGLTimeAll;
+    int LogPacket;
+    int LogGrab;
 
     int Audio;
     int AudioDelay;
