@@ -2215,11 +2215,11 @@ void cOglThread::Action(void) {
     stalled = false;
 
     Info("OpenGL context initialized");
-#ifdef GL_DEBUG_TIME
+
     uint64_t start_flush = 0;
     uint64_t end_flush = 0;
     int time_reset = 0;
-#endif
+
     while(Running()) {
 
         if (commands.empty()) {
@@ -2231,25 +2231,21 @@ void cOglThread::Action(void) {
         cOglCmd* cmd = commands.front();
         commands.pop();
         Unlock();
-#ifdef GL_DEBUG_TIME
+
         uint64_t start = cTimeMs::Now();
         if (strcmp(cmd->Description(), "InitFramebuffer") == 0 || time_reset) {
             start_flush = cTimeMs::Now();
             time_reset = 0;
         }
-#endif
-        cmd->Execute();
-#ifdef GL_DEBUG_TIME_ALL
-        Debug2(L_OPENGL_TIME_ALL, "\"%-*s\", %dms, %d commands left, time %" PRIu64 "", 15, cmd->Description(), (int)(cTimeMs::Now() - start), (int)(commands.size()), cTimeMs::Now());
-#endif
 
-#ifdef GL_DEBUG_TIME
+        cmd->Execute();
+        Debug2(L_OPENGL_TIME_ALL, "\"%-*s\", %dms, %d commands left, time %" PRIu64 "", 15, cmd->Description(), (int)(cTimeMs::Now() - start), (int)(commands.size()), cTimeMs::Now());
+
         if (strcmp(cmd->Description(), "Copy buffer to OutputFramebuffer") == 0) {
             end_flush = cTimeMs::Now();
             time_reset = 1;
             Debug2(L_OPENGL_TIME, "OSD Flush %dms, time %" PRIu64 "", (int)(end_flush - start_flush), cTimeMs::Now());
         }
-#endif
         delete cmd;
         if (stalled && commands.size() < OGL_CMDQUEUE_SIZE / 2)
             stalled = false;

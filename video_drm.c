@@ -2264,11 +2264,9 @@ VideoRender *VideoNewRender(VideoStream * stream)
 void VideoDelRender(VideoRender * render)
 {
     if (render) {
-#ifdef DEBUG
 		if (!pthread_equal(pthread_self(), DecodeThread)) {
 			Debug("video: should only be called from inside the thread");
 		}
-#endif
 		free(render->lastframe);
 		free(render);
 		return;

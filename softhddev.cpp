@@ -1939,7 +1939,7 @@ void SetLogLevel(int loglevel)
 	if (loglevel & L_OSD)
 		strcat(prefix, " osd,");
 	if (loglevel & L_DRM)
-		strcat(prefix, " drm");
+		strcat(prefix, " drm,");
 	if (loglevel & L_CODEC)
 		strcat(prefix, " codec,");
 	if (loglevel & L_STILL)

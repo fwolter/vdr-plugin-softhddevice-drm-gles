@@ -1172,7 +1172,7 @@ static void AlsaNoopCallback( __attribute__ ((unused))
 */
 static void AlsaInit(void)
 {
-#ifdef DEBUG
+#ifdef ALSA_DEBUG
     (void)AlsaNoopCallback;
 #else
     // disable display of alsa error messages

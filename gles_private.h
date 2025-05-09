@@ -46,23 +46,15 @@ void eglReleaseContext(void);
 int writeImage(char* filename, int width, int height, void *buffer, char* title);
 #endif
 
-#ifdef GL_DEBUG
 #define GL_CHECK(stmt) do { \
     stmt; \
     glCheckError(#stmt, __FILE__, __LINE__); \
     } while (0)
-#else
-#define GL_CHECK(stmt) stmt
-#endif
 
-#ifdef GL_DEBUG
 #define EGL_CHECK(stmt) do { \
     stmt; \
     eglCheckError(#stmt, __FILE__, __LINE__); \
     } while (0)
-#else
-#define EGL_CHECK(stmt) stmt
-#endif
 
 
 #ifdef __cplusplus

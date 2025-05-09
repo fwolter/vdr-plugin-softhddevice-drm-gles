@@ -157,7 +157,6 @@ void cSoftOsd::Flush(void)
 	cBitmap *bitmap;
 	int i;
 
-#ifdef OSD_DEBUG
 	static char warned;
 
 	if (!warned) {
@@ -165,7 +164,7 @@ void cSoftOsd::Flush(void)
 		__FUNCTION__);
 	    warned = 1;
 	}
-#endif
+
 	// draw all bitmaps
 	for (i = 0; (bitmap = GetBitmap(i)); ++i) {
 	    uint8_t *argb;
@@ -237,11 +236,11 @@ void cSoftOsd::Flush(void)
 		    y2 = y1 + h - 1;
 		}
 	    }
-#ifdef DEBUG
+
 	    if (w > bitmap->Width() || h > bitmap->Height()) {
-		Fatal(": dirty area too big");
+		Debug2(L_OSD, ": dirty area too big");
 	    }
-#endif
+
 	    argb = (uint8_t *) malloc(w * h * sizeof(uint32_t));
 	    for (y = y1; y <= y2; ++y) {
 		for (x = x1; x <= x2; ++x) {
