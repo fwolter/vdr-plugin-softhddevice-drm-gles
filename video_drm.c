@@ -2600,7 +2600,8 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 		}
 	} else if (frame->format == AV_PIX_FMT_YUV420P) {
 		filter_descr = "scale";
-		render->Filter_Trick = 1;
+		if (fd->flags & FRAME_FLAG_TRICKSPEED)
+			render->Filter_Trick = 1;
 	}
 #if LIBAVFILTER_VERSION_INT < AV_VERSION_INT(7,16,100)
 	avfilter_register_all();
