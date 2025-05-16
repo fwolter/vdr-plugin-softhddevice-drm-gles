@@ -1871,23 +1871,6 @@ static int check_pausing_with_sync(VideoRender *render, int *skip_video) {
 }
 
 ///
-///	Check if we have changes on the osd (if there is no video)
-///
-///	retval 0	no new osd to render
-///	retval 1	we have osd, render it, (skip the video)
-///
-///
-static int check_osd(VideoRender *render, int *skip_video) {
-	if (render->buf_osd && render->buf_osd->dirty) {
-		Debug2(L_DRM, "Frame2Display: no video but osd, skip video");
-		*skip_video = 1;
-		return 1;
-	}
-
-	return 0;
-}
-
-///
 ///	Draw a video frame.
 ///
 //	retval 0	modesetting and commit was done, need to process outstanding DRM events
@@ -1899,20 +1882,28 @@ static int Frame2Display(VideoRender * render)
 	struct drm_buf *buf = NULL;
 	AVFrame *frame = NULL;
 	int skip_video = 0;
+	int timeout; // ms
 
 	// early skips
 	if (check_closing(render, &skip_video, &buf))
 		goto page_flip;
 
 dequeue:
+	timeout = 25; // ms
 	// wait for a frame in the ringbuffer
 	while (!atomic_read(&render->FramesFilled)) {
 		if (check_closing(render, &skip_video, &buf) ||
-		    check_pausing(render, &skip_video) ||
-		    check_osd(render, &skip_video))
+		    check_pausing(render, &skip_video))
 			goto page_flip;
 
-		usleep(10000);
+		// wait max. 25ms in case we have an osd
+		if (render->buf_osd && render->buf_osd->dirty && !timeout--) {
+			skip_video = 1;
+			Debug2(L_DRM, "Frame2Display: no video but osd, skip video");
+			goto page_flip;
+		}
+
+		usleep(1000);
 	}
 
 	if (check_pausing_with_sync(render, &skip_video))
