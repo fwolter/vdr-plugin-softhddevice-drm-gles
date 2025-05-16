@@ -171,6 +171,7 @@ struct _Drm_Render_
 	int Filter_Bug;
 	int Filter_Trick;		///< FilterHandlerThread handles trickframes
 	int Filter_Frames;
+	int FilterDeintDisabled;	///< Deinterlacer is disabled via setup
 	int startgrab;			///< flag for triggering grabbing
 	int grabvideoready;		///< flag for finished video grabbing
 	int grabosdready;		///< flag for finished osd grabbing

@@ -605,6 +605,17 @@ void cMenuSetupSoft::Create(void)
 			&LogGrab, trVDR("no"), trVDR("yes")));
 	}
     }
+
+    //
+    //	video
+    //
+    Add(CollapsedItem(tr("Video"), VideoMenu));
+
+    if (VideoMenu) {
+	Add(new cMenuEditBoolItem(tr("Disable Deinterlacer"),
+		&DisableDeint, trVDR("no"), trVDR("yes")));
+    }
+
     //
     //	audio
     //
@@ -709,6 +720,7 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
     int old_Logging = Logging;
     int old_LogDefault = LogDefault;
     int old_Audio = Audio;
+    int old_VideoMenu = VideoMenu;
     int old_AudioFilter = AudioFilter;
     int old_AudioEq = AudioEq;
     int old_AudioNormalize = AudioNormalize;
@@ -723,6 +735,7 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 			old_Audio != Audio || old_AudioFilter != AudioFilter ||
 			old_AudioEq != AudioEq || old_AudioNormalize != AudioNormalize ||
 			old_AudioCompression != AudioCompression ||
+			old_VideoMenu != VideoMenu ||
 #ifdef USE_GLES
 #ifdef WRITE_PNG
 			old_DebugMenu != DebugMenu ||
@@ -777,6 +790,11 @@ cMenuSetupSoft::cMenuSetupSoft(void)
     LogGLTimeAll = ConfigLog & L_OPENGL_TIME_ALL;
     LogPacket = ConfigLog & L_PACKET;
     LogGrab = ConfigLog & L_GRAB;
+    //
+    //	video
+    //
+    VideoMenu = 0;
+    DisableDeint = ConfigDisableDeint;
     //
     //	audio
     //
@@ -850,6 +868,10 @@ void cMenuSetupSoft::Store(void)
 	SetupStore("LogLevel", -ConfigLog);
 	SetLogLevel(0);
     }
+
+    SetupStore("DisableDeint", ConfigDisableDeint = DisableDeint);
+    if (ConfigDisableDeint)
+	Debug("Disable deinterlacer!");
 
     // FIXME: can handle more audio state changes here
     // downmix changed reset audio, to get change direct
@@ -1471,6 +1493,10 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 	} else {
 	    SetLogLevel(0);
 	}
+	return true;
+    }
+    if (!strcasecmp(name, "DisableDeint")) {
+	ConfigDisableDeint = atoi(value);
 	return true;
     }
     if (!strcasecmp(name, "AudioDelay")) {

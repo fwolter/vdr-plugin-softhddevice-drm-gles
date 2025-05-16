@@ -53,6 +53,8 @@ static char ConfigHideMainMenuEntry;	///< config hide main menu entry
 static char LogState;			///< flag logging on/off
 static int ConfigLog;			///< loglevel config
 
+char ConfigDisableDeint;		///< config disable deinterlacer
+
 static int ConfigVideoAudioDelay;	///< config audio delay
 static char ConfigAudioPassthrough;	///< config audio pass-through mask
 static char AudioPassthroughState;	///< flag audio pass-through on/off
@@ -192,6 +194,9 @@ class cMenuSetupSoft:public cMenuSetupPage
     int LogGLTimeAll;
     int LogPacket;
     int LogGrab;
+
+    int VideoMenu;
+    int DisableDeint;
 
     int Audio;
     int AudioDelay;

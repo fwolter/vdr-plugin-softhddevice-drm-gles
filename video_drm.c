@@ -89,6 +89,8 @@ static pthread_t GrabbingThread;
 static pthread_t DisplayThread;
 static pthread_mutex_t DisplayQueue;
 
+extern int ConfigDisableDeint;
+
 //----------------------------------------------------------------------------
 //	Helper functions
 //----------------------------------------------------------------------------
@@ -1447,6 +1449,7 @@ dequeue:
 	render->Flushing = 0;
 	render->Closing = 0;
 	render->FilterClosing = 0;
+	render->FilterDeintDisabled = ConfigDisableDeint;
 	pthread_mutex_unlock(&WaitCleanMutex);
 
 	Debug("CleanDisplayThread: DRM cleaned.");
@@ -2249,6 +2252,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	render->Flushing = 0;
 	render->FlushLast = 0;
 	render->FilterClosing = 0;
+	render->FilterDeintDisabled = ConfigDisableDeint;
 	render->enqueue_buffer = 0;
 	render->lastframe = calloc(1, sizeof(struct lastFrame));
 	VideoResume(render);
@@ -2578,6 +2582,12 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	if (video_ctx->codec_id == AV_CODEC_ID_HEVC)
 		interlaced = 0;
 
+	if (render->FilterDeintDisabled) {
+		if (interlaced)
+			Debug2(L_CODEC, "VideoFilterInit: Deinterlacer wanted, but disabled in setup!");
+		interlaced = 0;
+	}
+
 	FrameData *fd;
 	if (!frame->opaque_ref) {
 		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
@@ -2748,7 +2758,7 @@ int VideoRenderFrame(VideoRender * render,
 		SetInterlacedStream(interlaced);
 
 	if (frame->format == AV_PIX_FMT_YUV420P ||
-	   (frame->format == AV_PIX_FMT_DRM_PRIME && interlaced && !(render->HardwareQuirks & QUIRK_NO_HW_DEINT))) {
+	   (frame->format == AV_PIX_FMT_DRM_PRIME && interlaced && !((render->HardwareQuirks & QUIRK_NO_HW_DEINT) || render->FilterDeintDisabled))) {
 		// use deinterlace/scale filter
 		// AV_PIX_FMT_YUV420P, interlaced -> software deinterlacer (bwdif filter)
 		// AV_PIX_FMT_YUV420P, progressive -> scale filter to get NV12 frames
