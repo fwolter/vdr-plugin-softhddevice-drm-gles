@@ -37,13 +37,16 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "softhddevice-drm-gles.h"
+#include "softhddevice.h"
+#include "misc.h"
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/timestamp.h>
 
 #include "iatomic.h"			// portable atomic_t
-#include "misc.h"
 #include "softhddev.h"
 #include "audio.h"
 #include "video.h"
@@ -51,6 +54,30 @@ extern "C" {
 #include "codec_video.h"
 #include "buf2rgb.h"
 }
+
+/*
+#define __STDC_CONSTANT_MACROS		///< needed for ffmpeg UINT64_C
+
+#include <string>
+using std::string;
+#include <fstream>
+using std::ifstream;
+
+#include <vdr/player.h>
+#include <vdr/plugin.h>
+//#include <vdr/dvbspu.h>
+
+#include "softhddevice-drm-gles.h"
+#include "softhddevice.h"
+#include "mediaplayer.h"
+#include "misc.h"
+
+#ifdef USE_GLES
+#include "openglosd.h"
+#endif
+*/
+
+
 
 //////////////////////////////////////////////////////////////////////////////
 //	Variables
@@ -136,20 +163,20 @@ void PrintStreamData(const uint8_t *data, int size)
 **
 **	@returns 0 or 1
 */
-static inline int PesHasLength(const uint8_t *p)
-{
-  return p[4] | p[5];
-}
+//static inline int PesHasLength(const uint8_t *p)
+//{
+//  return p[4] | p[5];
+//}
 
 /**
 **	Read the PES packet length from PES header.
 **
 **	@returns length
 */
-static inline int PesLength(const uint8_t *p)
-{
-  return 6 + p[4] * 256 + p[5];
-}
+//static inline int PesLength(const uint8_t *p)
+//{
+//  return 6 + p[4] * 256 + p[5];
+//}
 
 //////////////////////////////////////////////////////////////////////////////
 //	Audio codec parser
@@ -528,263 +555,6 @@ static int AdtsCheck(const uint8_t * data, int size)
     return 0;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-//	PES Demux
-//////////////////////////////////////////////////////////////////////////////
-
-
-/**
-**	Play audio packet.
-**
-**	@param data	data of exactly one complete PES packet
-**	@param size	size of PES packet
-**	@param id	PES packet type
-*/
-int PlayAudio(const uint8_t * data, int size, uint8_t id)
-{
-	int n;
-	const uint8_t *p;
-	AVRational timebase;
-	timebase.den = 90000;
-	timebase.num = 1;
-
-	AudioAvPkt->pts = AV_NOPTS_VALUE;
-
-	if (MyVideoStream->StreamFreezed) {	// stream is freezed, don't accept new audio data
-		Debug("PlayAudio: StreamFreezed");
-		return 0;
-	}
-
-	if (SkipAudio) {	// skip audio
-		Debug("PlayAudio: skip audio");
-		return size;
-	}
-
-	// hard limit buffer full: don't overrun audio buffers on replay
-	// stream freezed
-	if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE){
-//		Debug("PlayAudio: Buffer is Full (%d|%d)!", AudioFreeBytes(), AUDIO_MIN_BUFFER_FREE);
-		return 0;
-	}
-
-	if (NewAudioStream) {
-		// this clears the audio ringbuffer indirect, open and setup does it
-		Debug("PlayAudio: NewAudioStream");
-		MyAudioDecoder->Close();
-//		AudioFlushBuffers();
-//		AudioSetBufferTime(ConfigAudioBufferTime);		// ???
-		AudioCodecID = AV_CODEC_ID_NONE;
-		AudioChannelID = -1;
-		NewAudioStream = 0;
-	}
-	// PES header 0x00 0x00 0x01 ID
-	// ID 0xBD 0xC0-0xCF
-	// must be a PES start code
-	if (size < 9 || !data || data[0] || data[1] || data[2] != 0x01) {
-		Error("invalid PES audio packet");
-		return size;
-	}
-	n = data[8];			// header size
-
-	if (size < 9 + n + 4) {		// wrong size
-		if (size == 9 + n) {
-			Warning("empty audio packet");
-		} else {
-			Error("invalid audio packet %d bytes", size);
-		}
-		Info("PlayAudio: wrong size");
-		return size;
-	}
-
-	if (data[7] & 0x80 && n >= 5) {
-		AudioAvPkt->pts =
-			(int64_t) (data[9] & 0x0E) << 29 | data[10] << 22 | (data[11] &
-			0xFE) << 14 | data[12] << 7 | (data[13] & 0xFE) >> 1;
-		//Debug("audio: pts %#012" PRIx64 "\n", AudioAvPkt->pts);
-	} else {
-		Info("PlayAudio: No PTS!");
-	}
-
-	p = data + 9 + n;
-	n = size - 9 - n;			// skip pes header
-	if (n + AudioAvPkt->stream_index > AudioAvPkt->size) {
-		Error("audio buffer too small needed %d avail %d",
-			n + AudioAvPkt->stream_index, AudioAvPkt->size);
-		AudioAvPkt->stream_index = 0;
-	}
-
-	if (AudioChannelID != id) {		// id changed audio track changed
-		AudioChannelID = id;
-		AudioCodecID = AV_CODEC_ID_NONE;
-		Debug("audio/demux: new channel id");
-	}
-	// Private stream + LPCM ID
-	if ((id & 0xF0) == 0xA0) {
-		if (n < 7) {
-			Error("invalid LPCM audio packet %d bytes", size);
-			return size;
-		}
-/*		if (AudioCodecID != AV_CODEC_ID_PCM_DVD) {
-	    static int samplerates[] = { 48000, 96000, 44100, 32000 };
-	    int samplerate;
-	    int channels;
-	    int bits_per_sample;
-
-	    Debug("%s: LPCM %d sr:%d bits:%d chan:%d\n",
-		__FUNCTION__, id, p[5] >> 4, (((p[5] >> 6) & 0x3) + 4) * 4,
-		(p[5] & 0x7) + 1);
-	    MyAudioDecoder->Close();
-
-	    bits_per_sample = (((p[5] >> 6) & 0x3) + 4) * 4;
-	    if (bits_per_sample != 16) {
-		Error(_
-		    ("LPCM %d bits per sample aren't supported"),
-		    bits_per_sample);
-		// FIXME: handle unsupported formats.
-	    }
-	    samplerate = samplerates[p[5] >> 4];
-	    channels = (p[5] & 0x7) + 1;
-
-	    // FIXME: ConfigAudioBufferTime + x
-//	    AudioSetBufferTime(400);
-//	    AudioSetup(&samplerate, &channels, 0);
-	    if (samplerate != samplerates[p[5] >> 4]) {
-		Error("LPCM %d sample-rate is unsupported",
-		    samplerates[p[5] >> 4]);
-		// FIXME: support resample
-	    }
-	    if (channels != (p[5] & 0x7) + 1) {
-		Error("LPCM %d channels are unsupported",
-		    (p[5] & 0x7) + 1);
-		// FIXME: support resample
-	    }
-	    //MyAudioDecoder->Open(AV_CODEC_ID_PCM_DVD);
-	    AudioCodecID = AV_CODEC_ID_PCM_DVD;
-	}
-
-	if (AudioAvPkt->pts != (int64_t) AV_NOPTS_VALUE) {
-//	    AudioSetClock(AudioAvPkt->pts);
-	    AudioAvPkt->pts = AV_NOPTS_VALUE;
-	}
-	swab(p + 7, AudioAvPkt->data, n - 7);
-	Audiofilter(AudioAvPkt->data, n - 7, NULL);		// Das muss in ein AVFrame gepackt werden!!!
-*/
-	return size;
-	}
-	// DVD track header
-	if ((id & 0xF0) == 0x80 && (p[0] & 0xF0) == 0x80) {
-		p += 4;
-		n -= 4;				// skip track header
-//		if (AudioCodecID == AV_CODEC_ID_NONE) {
-//			// FIXME: ConfigAudioBufferTime + x
-//			AudioSetBufferTime(400);
-//		}
-	}
-	// append new packet, to partial old data
-	memcpy(AudioAvPkt->data + AudioAvPkt->stream_index, p, n);
-	AudioAvPkt->stream_index += n;
-
-	n = AudioAvPkt->stream_index;
-	p = AudioAvPkt->data;
-	while (n >= 5) {
-		int r;
-		enum AVCodecID codec_id;
-
-		// 4 bytes 0xFFExxxxx Mpeg audio
-		// 3 bytes 0x56Exxx AAC LATM audio
-		// 5 bytes 0x0B77xxxxxx AC-3 audio
-		// 6 bytes 0x0B77xxxxxxxx E-AC-3 audio
-		// 7/9 bytes 0xFFFxxxxxxxxxxx ADTS audio
-		// PCM audio can't be found
-		r = 0;
-		codec_id = AV_CODEC_ID_NONE;	// keep compiler happy
-		if (id != 0xbd && FastMpegCheck(p)) {
-			r = MpegCheck(p, n);
-			codec_id = AV_CODEC_ID_MP2;
-		}
-		if (id != 0xbd && !r && FastLatmCheck(p)) {
-			r = LatmCheck(p, n);
-			codec_id = AV_CODEC_ID_AAC_LATM;
-		}
-		if ((id == 0xbd || (id & 0xF0) == 0x80) && !r && FastAc3Check(p)) {
-			r = Ac3Check(p, n);
-			codec_id = AV_CODEC_ID_AC3;
-			if (r > 0 && p[5] > (10 << 3)) {
-				codec_id = AV_CODEC_ID_EAC3;
-			}
-			/* faster ac3 detection at end of pes packet (no improvemnts)
-			if (AudioCodecID == codec_id && -r - 2 == n) {
-				r = n;
-			}
-			*/
-		}
-		if (id != 0xbd && !r && FastAdtsCheck(p)) {
-			r = AdtsCheck(p, n);
-			codec_id = AV_CODEC_ID_AAC;
-		}
-		if (r < 0) {			// need more bytes
-			break;
-		}
-		if (r > 0) {
-			AVPacket *avpkt;
-
-			// new codec id, close and open new
-			if (AudioCodecID != codec_id) {
-				MyAudioDecoder->Close();
-				MyAudioDecoder->Open(codec_id, NULL, &timebase);
-				AudioCodecID = codec_id;
-			}
-			avpkt = av_packet_alloc();
-			if (avpkt == NULL) {
-				Error("avpkt allocation failed");
-				continue;
-			};
-			avpkt->data = (uint8_t *)p;
-			avpkt->size = r;
-			avpkt->pts = AudioAvPkt->pts;
-			MyAudioDecoder->Decode(avpkt);
-			AudioAvPkt->pts = AV_NOPTS_VALUE;
-			av_packet_free(&avpkt);
-			p += r;
-			n -= r;
-			continue;
-		}
-		++p;
-		--n;
-	}
-
-	// copy remaining bytes to start of packet
-	if (n) {
-		memmove(AudioAvPkt->data, p, n);
-	}
-	AudioAvPkt->stream_index = n;
-
-	return size;
-}
-
-/**
-**	Clears all audio data from the decoder and ringbufffer.
-*/
-void ClearAudio(void)
-{
-	if (!SkipAudio) {
-		Debug("ClearAudio()");
-		MyAudioDecoder->FlushBuffers();
-		AudioFlushBuffers();
-		NewAudioStream = 1;
-	}
-}
-
-/**
-**	Set volume of audio device.
-**
-**	@param volume	VDR volume (0 .. 255)
-*/
-void SetVolumeDevice(int volume)
-{
-    AudioSetVolume((volume * 1000) / 255);
-}
-
 /**
 ***	Resets channel ID (restarts audio).
 **/
@@ -1077,6 +847,19 @@ static void VideoStreamClose(VideoStream * stream)
 }
 
 /**
+**	Clears all audio data from the decoder and ringbufffer.
+*/
+void ClearAudio(void)
+{
+	if (!SkipAudio) {
+		Debug("ClearAudio()");
+		MyAudioDecoder->FlushBuffers();
+		AudioFlushBuffers();
+		NewAudioStream = 1;
+	}
+}
+
+/**
 **	Clears all video data from the device.
 */
 void ClearVideo(VideoStream * stream)
@@ -1274,268 +1057,16 @@ int VideoGetPackets(void)
     return atomic_read(&MyVideoStream->PacketsFilled);
 }
 
-/**
-**	Play video packet.
-**
-**	@param data		data of exactly one complete PES packet
-**	@param size		size of PES packet
-**
-**	@return number of bytes used, 0 if internal buffer are full.
-**
-**	@note vdr sends incomplete packets, va-api h264 decoder only
-**	supports complete packets.
-**	We buffer here until we receive an complete PES Packet, which
-**	is no problem, the audio is always far behind us.
-**	cTsToPes::GetPes splits the packets.
-*/
-int PlayVideo(const uint8_t * data, int size)
-{
-	VideoStream * stream = MyVideoStream;
-	int64_t pts = AV_NOPTS_VALUE;
-	int i, n;
-
-	if (MyVideoStream->StreamFreezed) {
-		return 0;
-	}
-
-	// must be a PES video start code
-	if (size < 9 || !data || data[0] || data[1] || data[2] != 0x01 || data[3] >> 4 != 0x0e) {
-		return size;
-	}
-
-	// hard limit buffer full: needed for replay
-	if (atomic_read(&stream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
-		return 0;
-	}
-
-	// get pts
-	if (data[7] & 0x80) {
-		pts = (int64_t) (data[9] & 0x0E) << 29 | data[10] << 22 | (data[11] &
-			0xFE) << 14 | data[12] << 7 | (data[13] & 0xFE) >> 1;
-	}
-
-	n = PesHeadLength(data);	// PES header size
-
-	for (i = 0; (i < 2) && (i + 4 < size); i++) {
-		// ES start code 0x00 0x00 0x01
-		if (!data[i + n] && !data[i + n + 1] && data[i + n + 2] == 0x01) {
-			if (stream->CodecID == AV_CODEC_ID_NONE) {
-				if (data[i + n + 3] == 0xb3) {
-				// MPEG2 I-Frame
-					Debug("PlayVideo: mpeg2 detected");
-					Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
-					       data[i + n],
-					       data[i + n + 1],
-					       data[i + n + 2],
-					       data[i + n + 3],
-					       data[i + n + 4],
-					       data[i + n + 5],
-					       data[i + n + 6],
-					       data[i + n + 7],
-					       data[i + n + 8],
-					       data[i + n + 9],
-					       data[i + n + 10]);
-					stream->CodecID = AV_CODEC_ID_MPEG2VIDEO;
-					stream->trickpkts = 1;
-					goto newstream;
-				} else if (data[i + n + 3] == 0x09 && (data[i + n + 4] == 0x10 || data[i + n + 4] == 0xF0 || data[i + n + 10] == 0x64)) {
-				// H264 I-Frame
-					Debug("PlayVideo: H264 detected");
-					Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
-					       data[i + n],
-					       data[i + n + 1],
-					       data[i + n + 2],
-					       data[i + n + 3],
-					       data[i + n + 4],
-					       data[i + n + 5],
-					       data[i + n + 6],
-					       data[i + n + 7],
-					       data[i + n + 8],
-					       data[i + n + 9],
-					       data[i + n + 10]);
-					stream->CodecID = AV_CODEC_ID_H264;
-					stream->trickpkts = 2;
-					goto newstream;
-				} else if (data[i + n + 3] == 0x46 && (data[i + n + 5] == 0x10 || data[i + n + 5] == 0x50 || data[i + n + 10] == 0x40)) {
-				// HEVC I-Frame
-					Debug("PlayVideo: hevc detected");
-					Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
-					       data[i + n],
-					       data[i + n + 1],
-					       data[i + n + 2],
-					       data[i + n + 3],
-					       data[i + n + 4],
-					       data[i + n + 5],
-					       data[i + n + 6],
-					       data[i + n + 7],
-					       data[i + n + 8],
-					       data[i + n + 9],
-					       data[i + n + 10]);
-					stream->CodecID = AV_CODEC_ID_HEVC;
-					stream->trickpkts = 2;
-newstream:
-					stream->NewStream = 1;
-					stream->timebase.den = 90000;
-					stream->timebase.num = 1;
-					VideoEnqueue(stream, pts, data + i + n, size - i - n);
-				}
-			} else {
-				VideoEnqueue(stream, pts, data + i + n, size - i - n);
-			}
-			return size;
-		}
-	}
-
-	// this happens when vdr sends incomplete packets and no stream is started
-	if (stream->CodecID == AV_CODEC_ID_NONE) {
-		return size;
-	}
-
-	// complete last frame
-	VideoEnqueue(stream, pts, data + n, size - n);
-	return size;
-}
-
 
 /**
-**	Display the given I-frame as a still picture.
-**
-**	@param data	pes frame data
-**	@param size	number of bytes in frame
+**	Call rgb to jpeg for C Plugin.
 */
-void StillPicture(const uint8_t * data, int size)
+extern "C" uint8_t * CreateJpeg(uint8_t * image, int *size, int quality,
+    int width, int height)
 {
-	Debug2(L_STILL, "StillPicture");
-	AVPacket *avpkt;
-	AVFrame *frame;
-
-	const uchar * pos;
-	int size_rest;
-	enum AVCodecID codec = AV_CODEC_ID_NONE;
-	int i;
-	int pes_length;
-	int head_length;
-	int context = 0;
-
-	avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketWrite];
-	avpkt->size = 0;
-	avpkt->pts = AV_NOPTS_VALUE;
-	pos = data;
-	size_rest = size;
-
-	while (size_rest >= 6 ) {
-		if (pos[3] >> 4 == 0x0e) {	// PES video start code
-			pes_length = PesHasLength(pos) ? PesLength(pos) : size;
-			head_length = PesHeadLength(pos);
-		} else {	// ES video start code
-			pes_length = size;
-			head_length = 0;
-		}
-
-		if (codec == AV_CODEC_ID_NONE) {
-			for (i = 0; (i < 2); i++) {
-				// ES start code 0x00 0x00 0x01
-				if (!pos[i + head_length] && !pos[i + head_length + 1] &&
-					pos[i + head_length + 2] == 0x01) {
-
-					// AV_CODEC_ID_MPEG2VIDEO 0x00 0x00 0x01 0xb3
-					if (pos[i + head_length + 3] == 0xb3) {
-						codec = AV_CODEC_ID_MPEG2VIDEO;
-						break;
-					}
-					// AV_CODEC_ID_H264 0x00 0x00 0x01 0x09
-					if (pos[i + head_length + 3] == 0x09) {
-						codec = AV_CODEC_ID_H264;
-						break;
-					}
-					// AV_CODEC_ID_HEVC 0x00 0x00 0x01 0x46
-					if (pos[i + head_length + 3] == 0x46) {
-						codec = AV_CODEC_ID_HEVC;
-						break;
-					}
-				}
-			}
-		}
-
-		Debug2(L_STILL, "StillPicture: memcpy avpkt.size %d size %d size_rest %d peslength %d headlength %d I %d",
-			avpkt->size, size, size_rest, pes_length, head_length, i);
-		if ((size_t)(avpkt->size + pes_length - head_length - i) >= avpkt->buf->size) {
-			int pkt_size = avpkt->size;
-			Warning("video: packet buffer too small for %d",
-				avpkt->size + pes_length - head_length - i);
-			av_grow_packet(avpkt, pes_length - head_length - i);
-			avpkt->size = pkt_size;
-		}
-
-		memcpy(avpkt->data + avpkt->size, pos + head_length + i, pes_length - head_length - i);
-		avpkt->size += pes_length - head_length - i;
-		size_rest -= pes_length;
-		pos += pes_length;
-		i = 0;
-	}
-	atomic_inc(&MyVideoStream->PacketsFilled);
-
-	MyVideoStream->StreamFreezed = 1;
-	if (MyVideoStream->Decoder->GetContext()) {
-		if ((int)(MyVideoStream->Decoder->GetContext()->codec_id) != codec) {
-			MyVideoStream->Decoder->Close();
-		}
-	}
-	if (!MyVideoStream->Decoder->GetContext()) {
-		if (MyVideoStream->Decoder->Open(codec, NULL, NULL, 0, 0, 0))
-			Fatal("StillPicture: Could not open the decoder!");
-		context = 1;
-	}
-	AudioPause();
-
-	int ret = 0;
-	ret = MyVideoStream->Decoder->SendPacket(avpkt);
-	if (ret)
-		Debug2(L_STILL, "StillPicture: SendPacket(avpkt) returned %d", ret);
-	else
-		Debug2(L_STILL, "StillPicture: avpkt sent");
-
-	// force decoder to enter draining because we only want 1 avpkt to be decoded
-	MyVideoStream->Decoder->SendPacket(NULL);
-
-receive:
-	ret = MyVideoStream->Decoder->ReceiveFrame(1, &frame);
-	if (!ret) {
-		// frame received, render it and try another one (should end up with AVERROR_EOF)
-		Debug2(L_STILL, "StillPicture: frame received");
-		while (VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->GetContext(), frame, FRAME_FLAG_STILLPICTURE)) {
-			if (MyVideoStream->ClosingStream) {
-				av_frame_free(&frame);
-				break;
-			}
-		}
-		goto receive;
-	} else if (ret == AVERROR_EOF) {
-		// AVERROR_EOF, flush needed
-		if (MyVideoStream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
-			if (MyVideoStream->Decoder->ReopenCodec(codec, NULL, NULL, 0))
-				Fatal("StillPicture: Could not reopen the decoder (flush buffers)!");
-		} else {
-			MyVideoStream->Decoder->FlushBuffers();
-		}
-	} else {
-		// sth went wrong or AVERROR(EAGAIN)
-		Debug2(L_STILL, "StillPicture: Receive Frame returned %d, should not happen!", ret);
-	}
-
-	if (context) {
-		MyVideoStream->Decoder->Close();
-		MyVideoStream->CodecID = AV_CODEC_ID_NONE;
-	}
-	ClearAudio();
-	ClearVideo(MyVideoStream);
-	MyVideoStream->StreamFreezed = 0;
-	AudioPlay();
+    return (uint8_t *) RgbToJpeg((uchar *) image, width, height, *size,
+	quality);
 }
-
-
-    /// call VDR support function
-extern "C" uint8_t *CreateJpeg(uint8_t *, int *, int, int, int);
 
 #if defined(USE_JPEG) && JPEG_LIB_VERSION >= 80
 /**
@@ -1589,6 +1120,1112 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
 }
 #endif
 
+
+//////////////////////////////////////////////////////////////////////////////
+//	mediaplayer functions
+//////////////////////////////////////////////////////////////////////////////
+
+void SetAudioCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
+{
+	MyAudioDecoder->Open(codec_id, par, timebase);
+}
+
+void SetVideoCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
+{
+	MyVideoStream->CodecID = codec_id;
+	MyVideoStream->NewStream = 1;
+	MyVideoStream->Par = par;
+	MyVideoStream->timebase.num = timebase->num;
+	MyVideoStream->timebase.den = timebase->den;
+}
+
+int PlayAudioPkts(AVPacket * pkt)
+{
+	if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
+//		Error("PlayAudioPkts: AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
+		return 0;
+	}
+	MyAudioDecoder->Decode(pkt);
+	return 1;
+}
+
+int PlayVideoPkts(AVPacket * pkt)
+{
+	AVPacket *avpkt;
+
+	if (atomic_read(&MyVideoStream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
+		return 0;
+	}
+
+	avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketWrite];
+	MyVideoStream->PacketWrite = (MyVideoStream->PacketWrite + 1) % VIDEO_PACKET_MAX;
+	atomic_inc(&MyVideoStream->PacketsFilled);
+
+	if ((size_t)pkt->size > avpkt->buf->size) {
+		Info("PlayVideoPkts: grow packet buffer size by %d",
+			(int)(pkt->size - avpkt->buf->size + AV_INPUT_BUFFER_PADDING_SIZE));
+		av_grow_packet(avpkt, pkt->size - avpkt->buf->size +
+			AV_INPUT_BUFFER_PADDING_SIZE);
+	}
+
+	memcpy(avpkt->data, pkt->data, pkt->size);
+	avpkt->pts = pkt->pts;
+	avpkt->size = pkt->size;
+	return 1;
+}
+
+void *GetVideoRender()
+{
+	return (void *)(MyVideoStream->Render);
+}
+
+void SetInterlacedStream(int interlaced)
+{
+//	Debug("SetInterlacedStream %d", interlaced);
+	MyVideoStream->interlaced = interlaced;
+}
+
+void SetPassthrough(int mask)
+{
+	AudioPassthrough = mask;
+	AudioSetPassthrough(mask);
+	if (MyAudioDecoder)
+		MyAudioDecoder->SetPassthrough(mask);
+}
+
+/**
+**	Set log level
+*/
+void SetLogLevel(int loglevel)
+{
+	DebugLogLevel = loglevel;
+
+	if (!loglevel)
+		return;
+
+	char prefix[256] = "Set loglevels:";
+	if (loglevel & L_DEBUG)
+		strcat(prefix, " standard debugs,");
+	if (loglevel & L_AV_SYNC)
+		strcat(prefix, " AV-Sync,");
+	if (loglevel & L_SOUND)
+		strcat(prefix, " sound,");
+	if (loglevel & L_OSD)
+		strcat(prefix, " osd,");
+	if (loglevel & L_DRM)
+		strcat(prefix, " drm,");
+	if (loglevel & L_CODEC)
+		strcat(prefix, " codec,");
+	if (loglevel & L_STILL)
+		strcat(prefix, " stillpicture,");
+	if (loglevel & L_TRICK)
+		strcat(prefix, " trickspeed,");
+	if (loglevel & L_MEDIA)
+		strcat(prefix, " mediaplayer,");
+	if ((loglevel & L_OPENGL) ||
+	    (loglevel & L_OPENGL_TIME) ||
+	    (loglevel & L_OPENGL_TIME_ALL))
+		strcat(prefix, " OpenGL OSD,");
+	if (loglevel & L_PACKET)
+		strcat(prefix, " packet tracking,");
+	if (loglevel & L_GRAB)
+		strcat(prefix, " grabbing");
+
+	Info("%s", prefix);
+}
+
+
+/**
+**	Get decoder statistics.
+**
+**	@param[out] duped	duped frames
+**	@param[out] dropped	dropped frames
+**	@param[out] count	number of decoded frames
+*/
+void GetStats(int *duped, int *dropped, int *counter)
+{
+	*duped = 0;
+	*dropped = 0;
+	*counter = 0;
+	if (MyVideoStream->Render) {
+		VideoGetStats(MyVideoStream->Render, duped, dropped, counter);
+	}
+}
+
+
+
+//////////////////////////////////////////////////////////////////////////////
+//	OSD
+//////////////////////////////////////////////////////////////////////////////
+
+/**
+**	Close OSD.
+*/
+void OsdClose(void)
+{
+    VideoOsdClear(MyVideoStream->Render);
+}
+
+/**
+**	Draw an OSD pixmap.
+**
+**	@param xi	x-coordinate in argb image
+**	@param yi	y-coordinate in argb image
+**	@paran height	height in pixel in argb image
+**	@paran width	width in pixel in argb image
+**	@param pitch	pitch of argb image
+**	@param argb	32bit ARGB image data
+**	@param x	x-coordinate on screen of argb image
+**	@param y	y-coordinate on screen of argb image
+*/
+void OsdDrawARGB(int xi, int yi, int height, int width, int pitch,
+	const uint8_t * argb, int x, int y)
+{
+	VideoOsdDrawARGB(MyVideoStream->Render, xi, yi, height, width,
+			pitch, argb, x, y);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//	cDevice
+//////////////////////////////////////////////////////////////////////////////
+
+/**
+**	Constructor device.
+*/
+cSoftHdDevice::cSoftHdDevice(void)
+{
+    Debug("%s:", __FUNCTION__);
+    spuDecoder = NULL;
+}
+
+/**
+**	Destructor device.
+*/
+cSoftHdDevice::~cSoftHdDevice(void)
+{
+    Debug("%s:", __FUNCTION__);
+    delete spuDecoder;
+}
+
+/**
+**	Prepare plugin.
+*/
+void cSoftHdDevice::Start(void)
+{
+    Debug("Start(void):");
+    if (!MyAudioDecoder) {
+	AudioInit(AudioPassthrough);
+	AudioSetBufferTime(ConfigAudioBufferTime);
+	av_new_packet(AudioAvPkt, AUDIO_BUFFER_SIZE);
+	MyAudioDecoder = new cAudioDecoder(AudioPassthrough);
+	AudioCodecID = AV_CODEC_ID_NONE;
+	AudioChannelID = -1;
+
+	if (!MyVideoStream->Decoder) {
+	    MyVideoStream->CodecID = AV_CODEC_ID_NONE;
+	}
+
+	if ((MyVideoStream->Render = VideoNewRender(MyVideoStream))) {
+	    VideoInit(MyVideoStream->Render);
+	    MyVideoStream->Decoder = new cVideoDecoder(MyVideoStream->Render);
+	    VideoPacketInit(MyVideoStream);
+	}
+    }
+}
+
+/**
+**	Stop plugin.
+**
+**	@note stop everything, but don't cleanup, module is still called.
+*/
+void cSoftHdDevice::Stop(void)
+{
+	Debug("Stop(void): nothing to do.");
+}
+
+/**
+**	Exit + cleanup.
+*/
+void cSoftHdDevice::Exit(void)
+{
+    Debug("SoftHdDeviceExit(void):");
+    AudioExit();
+    if (MyAudioDecoder) {
+	MyAudioDecoder->Close();
+	delete MyAudioDecoder;
+    }
+    NewAudioStream = 0;
+    av_packet_unref(AudioAvPkt);
+
+    VideoExit(MyVideoStream->Render);
+    VideoStreamClose(MyVideoStream);
+}
+
+/**
+**	Informs a device that it will be the primary device.
+**
+**	@param on	flag if becoming or loosing primary
+*/
+void cSoftHdDevice::MakePrimaryDevice(bool on)
+{
+	Debug("%s: %d", __FUNCTION__, on);
+	if (!on) {
+		Exit();
+	} else {
+		Start();
+	}
+
+	cDevice::MakePrimaryDevice(on);
+	if (on) {
+		new cSoftOsdProvider(this);
+	}
+}
+
+/**
+**	Get the device SPU decoder.
+**
+**	@returns a pointer to the device's SPU decoder (or NULL, if this
+**	device doesn't have an SPU decoder)
+*/
+cSpuDecoder *cSoftHdDevice::GetSpuDecoder(void)
+{
+    Debug("%s:", __FUNCTION__);
+    if (!spuDecoder && IsPrimaryDevice()) {
+	spuDecoder = new cDvbSpuDecoder();
+    }
+    return spuDecoder;
+}
+
+/**
+**	Tells whether this device has a MPEG decoder.
+*/
+bool cSoftHdDevice::HasDecoder(void) const
+{
+    return true;
+}
+
+/**
+**	Returns true if this device can currently start a replay session.
+*/
+bool cSoftHdDevice::CanReplay(void) const
+{
+    Debug("%s:", __FUNCTION__);
+    return true;
+}
+
+/**
+**	Sets the device into the given play mode.
+**
+**	@param play_mode	new play mode (Audio/Video/External...)
+*/
+bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
+{
+	Debug("SetPlayMode: play_mode %d", play_mode);
+	Debug("%s: %d", __FUNCTION__, play_mode);
+
+	switch (play_mode) {
+	case 0:			// none audio/video
+		MyVideoStream->TrickSpeed = 0;
+		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
+			pthread_mutex_lock(&MyVideoStream->WaitCloseMutex);
+			MyVideoStream->ClosingStream = 1;
+			while (MyVideoStream->ClosingStream)
+				pthread_cond_wait(&MyVideoStream->WaitCloseCondition, &MyVideoStream->WaitCloseMutex);
+			pthread_mutex_unlock(&MyVideoStream->WaitCloseMutex);
+		}
+		VideoSetClosing(MyVideoStream->Render, 1);
+		SkipAudio = 0;
+		AudioPlay();
+		ClearAudio();	// flush all AUDIO buffers
+		if (MyAudioDecoder && AudioCodecID != AV_CODEC_ID_NONE) {
+			NewAudioStream = 1;
+		}
+		MyVideoStream->interlaced = 0; // probably not necessary
+		MyVideoStream->StreamFreezed = 0;
+		break;
+	case 1:			// audio/video
+		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
+		//Play(); Play is a vdr command!!!
+		break;
+	case 2:			// audio only
+		VideoThreadExit();
+		break;
+	case 3:			// audio only (black screen)
+		Debug("softhddev: FIXME: audio only, silence video errors");
+		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
+		//Play();
+		break;
+	case 4:			// video only
+		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
+		//Play();
+		break;
+	default:
+		Error("SetPlayMode: playmode not supported %d", play_mode);
+		return 0;
+		break;
+	}
+
+	return 1;
+}
+
+/**
+**	Gets the current System Time Counter, which can be used to
+**	synchronize audio, video and subtitles.
+*/
+int64_t cSoftHdDevice::GetSTC(void)
+{
+//    Debug("%s:", __FUNCTION__);
+    if (MyVideoStream->Render) {
+	return VideoGetClock(MyVideoStream->Render);
+    }
+    // could happen during dettached
+    Warning("softhddev: %s called without hw decoder", __FUNCTION__);
+    return AV_NOPTS_VALUE;
+}
+
+/**
+**	Set trick play speed.
+**
+**	Every single frame shall then be displayed the given number of
+**	times.
+**
+**	@param speed	trick speed
+**	@param forward	flag forward direction
+*/
+void cSoftHdDevice::TrickSpeed(int speed, bool forward)
+{
+    Debug("%s: %d %d", __FUNCTION__, speed, forward);
+    Debug("TrickSpeed: speed %d %s",
+		speed, forward ? "forward" : "backward");
+
+    Debug("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
+
+    VideoSetClosing(MyVideoStream->Render, 0);
+    if (MyVideoStream->StreamFreezed) {
+	Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", MyVideoStream->StreamFreezed, SkipAudio);
+	MyVideoStream->StreamFreezed = 0;
+	ClearAudio();
+	SkipAudio = 0;
+    }
+
+    MyVideoStream->TrickSpeed = 1;
+    VideoTrickSpeed(MyVideoStream->Render, speed, forward);
+}
+
+/**
+**	Clears all video and audio data from the device.
+*/
+void cSoftHdDevice::Clear(void)
+{
+    Debug("%s:", __FUNCTION__);
+    cDevice::Clear();
+
+    Debug("Clear(void)");
+    ClearVideo(MyVideoStream);
+    VideoSetClosing(MyVideoStream->Render, 0);
+    ClearAudio();
+}
+
+/**
+**	Sets the device into play mode (after a previous trick mode)
+*/
+void cSoftHdDevice::Play(void)
+{
+    Debug("%s:", __FUNCTION__);
+    cDevice::Play();
+
+    Debug("Play(void)");
+    if (MyVideoStream->TrickSpeed && MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
+	pthread_mutex_lock(&MyVideoStream->WaitCloseMutex);
+	MyVideoStream->ClosingStream = 1;
+	while (MyVideoStream->ClosingStream)
+	    pthread_cond_wait(&MyVideoStream->WaitCloseCondition, &MyVideoStream->WaitCloseMutex);
+	pthread_mutex_unlock(&MyVideoStream->WaitCloseMutex);
+	VideoSetClosing(MyVideoStream->Render, 0);
+    }
+    MyVideoStream->TrickSpeed = 0;
+    SkipAudio = 0;
+    MyVideoStream->StreamFreezed = 0;
+    AudioPlay();
+    VideoPlay(MyVideoStream->Render);
+}
+
+/**
+**	Puts the device into "freeze frame" mode.
+*/
+void cSoftHdDevice::Freeze(void)
+{
+    Debug("%s:", __FUNCTION__);
+    cDevice::Freeze();
+
+    Debug("Freeze(void)");
+    MyVideoStream->StreamFreezed = 1;
+    AudioPause();
+    VideoPause(MyVideoStream->Render);
+}
+
+/**
+**	Turns off audio while replaying.
+*/
+void cSoftHdDevice::Mute(void)
+{
+    Debug("%s:", __FUNCTION__);
+    cDevice::Mute();
+
+    Debug("Mute(void)");
+    SkipAudio = 1;
+}
+
+/**
+**	Display the given I-frame as a still picture.
+**
+**	@param data	pes or ts data of a frame
+**	@param length	length of data area
+*/
+void cSoftHdDevice::StillPicture(const uchar * data, int size)
+{
+    if (data[0] == 0x47) {		// ts sync
+	cDevice::StillPicture(data, size);
+	return;
+    }
+
+    Debug("%s: %s %p %d", __FUNCTION__,
+	data[0] == 0x47 ? "ts" : "pes", data, size);
+
+    Debug2(L_STILL, "StillPicture");
+    AVPacket *avpkt;
+    AVFrame *frame;
+
+    const uchar * pos;
+    int size_rest;
+    enum AVCodecID codec = AV_CODEC_ID_NONE;
+    int i;
+    int pes_length;
+    int head_length;
+    int context = 0;
+
+    avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketWrite];
+    avpkt->size = 0;
+    avpkt->pts = AV_NOPTS_VALUE;
+    pos = data;
+    size_rest = size;
+
+    while (size_rest >= 6 ) {
+	if (pos[3] >> 4 == 0x0e) {	// PES video start code
+	    pes_length = PesHasLength(pos) ? PesLength(pos) : size;
+	    head_length = PesHeadLength(pos);
+	} else {	// ES video start code
+	    pes_length = size;
+	    head_length = 0;
+	}
+
+	if (codec == AV_CODEC_ID_NONE) {
+	    for (i = 0; (i < 2); i++) {
+		// ES start code 0x00 0x00 0x01
+		if (!pos[i + head_length] && !pos[i + head_length + 1] &&
+		    pos[i + head_length + 2] == 0x01) {
+
+		    // AV_CODEC_ID_MPEG2VIDEO 0x00 0x00 0x01 0xb3
+		    if (pos[i + head_length + 3] == 0xb3) {
+			codec = AV_CODEC_ID_MPEG2VIDEO;
+			break;
+		    }
+		    // AV_CODEC_ID_H264 0x00 0x00 0x01 0x09
+		    if (pos[i + head_length + 3] == 0x09) {
+			codec = AV_CODEC_ID_H264;
+			break;
+		    }
+		    // AV_CODEC_ID_HEVC 0x00 0x00 0x01 0x46
+		    if (pos[i + head_length + 3] == 0x46) {
+			codec = AV_CODEC_ID_HEVC;
+			break;
+		    }
+		}
+	    }
+	}
+
+	Debug2(L_STILL, "StillPicture: memcpy avpkt.size %d size %d size_rest %d peslength %d headlength %d I %d",
+	    avpkt->size, size, size_rest, pes_length, head_length, i);
+	if ((size_t)(avpkt->size + pes_length - head_length - i) >= avpkt->buf->size) {
+	    int pkt_size = avpkt->size;
+	    Warning("video: packet buffer too small for %d",
+		avpkt->size + pes_length - head_length - i);
+	    av_grow_packet(avpkt, pes_length - head_length - i);
+	    avpkt->size = pkt_size;
+	}
+
+	memcpy(avpkt->data + avpkt->size, pos + head_length + i, pes_length - head_length - i);
+	avpkt->size += pes_length - head_length - i;
+	size_rest -= pes_length;
+	pos += pes_length;
+	i = 0;
+    }
+    atomic_inc(&MyVideoStream->PacketsFilled);
+
+    MyVideoStream->StreamFreezed = 1;
+    if (MyVideoStream->Decoder->GetContext()) {
+	if ((int)(MyVideoStream->Decoder->GetContext()->codec_id) != codec) {
+	    MyVideoStream->Decoder->Close();
+	}
+    }
+    if (!MyVideoStream->Decoder->GetContext()) {
+	if (MyVideoStream->Decoder->Open(codec, NULL, NULL, 0, 0, 0))
+	    Fatal("StillPicture: Could not open the decoder!");
+	context = 1;
+    }
+    AudioPause();
+
+    int ret = 0;
+    ret = MyVideoStream->Decoder->SendPacket(avpkt);
+    if (ret)
+	Debug2(L_STILL, "StillPicture: SendPacket(avpkt) returned %d", ret);
+    else
+	Debug2(L_STILL, "StillPicture: avpkt sent");
+
+    // force decoder to enter draining because we only want 1 avpkt to be decoded
+    MyVideoStream->Decoder->SendPacket(NULL);
+
+receive:
+    ret = MyVideoStream->Decoder->ReceiveFrame(1, &frame);
+    if (!ret) {
+	// frame received, render it and try another one (should end up with AVERROR_EOF)
+	Debug2(L_STILL, "StillPicture: frame received");
+	while (VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->GetContext(), frame, FRAME_FLAG_STILLPICTURE)) {
+	    if (MyVideoStream->ClosingStream) {
+		av_frame_free(&frame);
+		break;
+	    }
+	}
+	goto receive;
+    } else if (ret == AVERROR_EOF) {
+	// AVERROR_EOF, flush needed
+	if (MyVideoStream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+	    if (MyVideoStream->Decoder->ReopenCodec(codec, NULL, NULL, 0))
+		Fatal("StillPicture: Could not reopen the decoder (flush buffers)!");
+	} else {
+	    MyVideoStream->Decoder->FlushBuffers();
+	}
+    } else {
+	// sth went wrong or AVERROR(EAGAIN)
+	Debug2(L_STILL, "StillPicture: Receive Frame returned %d, should not happen!", ret);
+    }
+
+    if (context) {
+	MyVideoStream->Decoder->Close();
+	MyVideoStream->CodecID = AV_CODEC_ID_NONE;
+    }
+    ClearAudio();
+    ClearVideo(MyVideoStream);
+    MyVideoStream->StreamFreezed = 0;
+    AudioPlay();
+}
+
+/**
+**	Check if the device is ready for further action.
+**
+**	This function is useless, the return value is ignored and
+**	all buffers are overrun by vdr.
+**
+**	The dvd plugin is using this correct.
+**
+**	@param poller		file handles (unused)
+**	@param timeout_ms	timeout in ms to become ready
+**
+**	@retval true	if ready
+**	@retval false	if busy
+*/
+bool cSoftHdDevice::Poll(
+    __attribute__ ((unused)) cPoller & poller, int timeout)
+{
+    //Debug("%s: timeout %d", __FUNCTION__, timeout_ms);
+
+    for (;;) {
+	int full;
+	int t;
+	int used;
+	int filled;
+
+//	Debug("Poll: timeout %d", timeout);
+
+	used = AudioUsedBytes();
+	// FIXME: no video!
+	filled = atomic_read(&MyVideoStream->PacketsFilled);
+	// soft limit + hard limit
+	full = (used > AUDIO_MIN_BUFFER_FREE && filled > 3)
+	    || AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE
+	    || filled >= VIDEO_PACKET_MAX - 10;
+
+	if (!full || !timeout) {
+	    return !full;
+	}
+
+	t = 15;
+	if (timeout < t) {
+	    t = timeout;
+	}
+	usleep(t * 1000);		// let display thread work
+	timeout -= t;
+    }
+}
+
+/**
+**	Flush the device output buffers.
+**
+**	@param timeout_ms	timeout in ms to become ready
+*/
+bool cSoftHdDevice::Flush(int timeout)
+{
+    Debug("%s: %d ms", __FUNCTION__, timeout);
+
+    Debug("Flush: timeout %d", timeout);
+    if (atomic_read(&MyVideoStream->PacketsFilled)) {
+	if (timeout) {			// let display thread work
+	    usleep(timeout * 1000);
+	}
+	return !atomic_read(&MyVideoStream->PacketsFilled);
+    }
+    return 1;
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+**	Sets the video display format to the given one (only useful if this
+**	device has an MPEG decoder).
+*/
+void cSoftHdDevice::SetVideoDisplayFormat(eVideoDisplayFormat
+    video_display_format)
+{
+    Debug("%s: %d", __FUNCTION__, video_display_format);
+
+    cDevice::SetVideoDisplayFormat(video_display_format);
+}
+
+/**
+**	Sets the output video format to either 16:9 or 4:3 (only useful
+**	if this device has an MPEG decoder).
+**
+**	Should call SetVideoDisplayFormat.
+**
+**	@param video_format16_9	flag true 16:9.
+*/
+void cSoftHdDevice::SetVideoFormat(bool video_format16_9)
+{
+    Debug("%s: %d", __FUNCTION__, video_format16_9);
+
+    // FIXME: 4:3 / 16:9 video format not supported.
+
+    SetVideoDisplayFormat(eVideoDisplayFormat(Setup.VideoDisplayFormat));
+}
+
+/**
+**	Returns the width, height and video_aspect ratio of the currently
+**	displayed video material.
+**
+**	@note the video_aspect is used to scale the subtitle.
+*/
+void cSoftHdDevice::GetVideoSize(int &width, int &height, double &aspect_ratio)
+{
+    MyVideoStream->Decoder->GetVideoSize(&width, &height, &aspect_ratio);
+//	Debug("GetVideoSize: %d x %d @ %f", *width, *height, *aspect_ratio);
+}
+
+/**
+**	Returns the width, height and pixel_aspect ratio the OSD.
+**
+**	FIXME: Called every second, for nothing (no OSD displayed)?
+*/
+void cSoftHdDevice::GetOsdSize(int &width, int &height, double &pixel_aspect)
+{
+    VideoGetScreenSize(MyVideoStream->Render, &width, &height, &pixel_aspect);
+}
+
+// ----------------------------------------------------------------------------
+
+/**
+**	Play a audio packet.
+**
+**	@param data	data of exactly one complete PES packet
+**	@param size	size of PES packet
+**	@param id	PES packet type
+*/
+int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
+{
+    //Debug("%s: %p %p %d %d", __FUNCTION__, this, data, length, id);
+
+    int n;
+    const uint8_t *p;
+    AVRational timebase;
+    timebase.den = 90000;
+    timebase.num = 1;
+
+    AudioAvPkt->pts = AV_NOPTS_VALUE;
+
+    if (MyVideoStream->StreamFreezed) {	// stream is freezed, don't accept new audio data
+	Debug("PlayAudio: StreamFreezed");
+	return 0;
+    }
+
+    if (SkipAudio) {	// skip audio
+	Debug("PlayAudio: skip audio");
+	return size;
+    }
+
+    // hard limit buffer full: don't overrun audio buffers on replay
+    // stream freezed
+    if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE){
+//	Debug("PlayAudio: Buffer is Full (%d|%d)!", AudioFreeBytes(), AUDIO_MIN_BUFFER_FREE);
+	return 0;
+    }
+
+    if (NewAudioStream) {
+	// this clears the audio ringbuffer indirect, open and setup does it
+	Debug("PlayAudio: NewAudioStream");
+	MyAudioDecoder->Close();
+//	AudioFlushBuffers();
+//	AudioSetBufferTime(ConfigAudioBufferTime);		// ???
+	AudioCodecID = AV_CODEC_ID_NONE;
+	AudioChannelID = -1;
+	NewAudioStream = 0;
+    }
+    // PES header 0x00 0x00 0x01 ID
+    // ID 0xBD 0xC0-0xCF
+    // must be a PES start code
+    if (size < 9 || !data || data[0] || data[1] || data[2] != 0x01) {
+	Error("invalid PES audio packet");
+	return size;
+    }
+    n = data[8];			// header size
+
+    if (size < 9 + n + 4) {		// wrong size
+	if (size == 9 + n) {
+	    Warning("empty audio packet");
+	} else {
+	    Error("invalid audio packet %d bytes", size);
+	}
+	Info("PlayAudio: wrong size");
+	return size;
+    }
+
+    if (data[7] & 0x80 && n >= 5) {
+	AudioAvPkt->pts =
+	    (int64_t) (data[9] & 0x0E) << 29 | data[10] << 22 | (data[11] &
+	    0xFE) << 14 | data[12] << 7 | (data[13] & 0xFE) >> 1;
+	//Debug("audio: pts %#012" PRIx64 "\n", AudioAvPkt->pts);
+    } else {
+	Info("PlayAudio: No PTS!");
+    }
+
+    p = data + 9 + n;
+    n = size - 9 - n;			// skip pes header
+    if (n + AudioAvPkt->stream_index > AudioAvPkt->size) {
+	Error("audio buffer too small needed %d avail %d",
+	    n + AudioAvPkt->stream_index, AudioAvPkt->size);
+	AudioAvPkt->stream_index = 0;
+    }
+
+    if (AudioChannelID != id) {		// id changed audio track changed
+	AudioChannelID = id;
+	AudioCodecID = AV_CODEC_ID_NONE;
+	Debug("audio/demux: new channel id");
+    }
+    // Private stream + LPCM ID
+    if ((id & 0xF0) == 0xA0) {
+	if (n < 7) {
+	    Error("invalid LPCM audio packet %d bytes", size);
+	    return size;
+	}
+/*	if (AudioCodecID != AV_CODEC_ID_PCM_DVD) {
+	    static int samplerates[] = { 48000, 96000, 44100, 32000 };
+	    int samplerate;
+	    int channels;
+	    int bits_per_sample;
+
+	    Debug("%s: LPCM %d sr:%d bits:%d chan:%d\n",
+		__FUNCTION__, id, p[5] >> 4, (((p[5] >> 6) & 0x3) + 4) * 4,
+		(p[5] & 0x7) + 1);
+	    MyAudioDecoder->Close();
+
+	    bits_per_sample = (((p[5] >> 6) & 0x3) + 4) * 4;
+	    if (bits_per_sample != 16) {
+		Error(_
+		    ("LPCM %d bits per sample aren't supported"),
+		    bits_per_sample);
+		// FIXME: handle unsupported formats.
+	    }
+	    samplerate = samplerates[p[5] >> 4];
+	    channels = (p[5] & 0x7) + 1;
+
+	    // FIXME: ConfigAudioBufferTime + x
+//	    AudioSetBufferTime(400);
+//	    AudioSetup(&samplerate, &channels, 0);
+	    if (samplerate != samplerates[p[5] >> 4]) {
+		Error("LPCM %d sample-rate is unsupported",
+		    samplerates[p[5] >> 4]);
+		// FIXME: support resample
+	    }
+	    if (channels != (p[5] & 0x7) + 1) {
+		Error("LPCM %d channels are unsupported",
+		    (p[5] & 0x7) + 1);
+		// FIXME: support resample
+	    }
+	    //MyAudioDecoder->Open(AV_CODEC_ID_PCM_DVD);
+	    AudioCodecID = AV_CODEC_ID_PCM_DVD;
+	}
+
+	if (AudioAvPkt->pts != (int64_t) AV_NOPTS_VALUE) {
+//	    AudioSetClock(AudioAvPkt->pts);
+	    AudioAvPkt->pts = AV_NOPTS_VALUE;
+	}
+	swab(p + 7, AudioAvPkt->data, n - 7);
+	Audiofilter(AudioAvPkt->data, n - 7, NULL);		// Das muss in ein AVFrame gepackt werden!!!
+*/
+	return size;
+    }
+    // DVD track header
+    if ((id & 0xF0) == 0x80 && (p[0] & 0xF0) == 0x80) {
+	p += 4;
+	n -= 4;				// skip track header
+/*
+	if (AudioCodecID == AV_CODEC_ID_NONE) {
+	    // FIXME: ConfigAudioBufferTime + x
+	    AudioSetBufferTime(400);
+	}
+*/
+    }
+    // append new packet, to partial old data
+    memcpy(AudioAvPkt->data + AudioAvPkt->stream_index, p, n);
+    AudioAvPkt->stream_index += n;
+
+    n = AudioAvPkt->stream_index;
+    p = AudioAvPkt->data;
+    while (n >= 5) {
+	int r;
+	enum AVCodecID codec_id;
+
+	// 4 bytes 0xFFExxxxx Mpeg audio
+	// 3 bytes 0x56Exxx AAC LATM audio
+	// 5 bytes 0x0B77xxxxxx AC-3 audio
+	// 6 bytes 0x0B77xxxxxxxx E-AC-3 audio
+	// 7/9 bytes 0xFFFxxxxxxxxxxx ADTS audio
+	// PCM audio can't be found
+	r = 0;
+	codec_id = AV_CODEC_ID_NONE;	// keep compiler happy
+	if (id != 0xbd && FastMpegCheck(p)) {
+	    r = MpegCheck(p, n);
+	    codec_id = AV_CODEC_ID_MP2;
+	}
+	if (id != 0xbd && !r && FastLatmCheck(p)) {
+	    r = LatmCheck(p, n);
+	    codec_id = AV_CODEC_ID_AAC_LATM;
+	}
+	if ((id == 0xbd || (id & 0xF0) == 0x80) && !r && FastAc3Check(p)) {
+	    r = Ac3Check(p, n);
+	    codec_id = AV_CODEC_ID_AC3;
+	    if (r > 0 && p[5] > (10 << 3)) {
+		codec_id = AV_CODEC_ID_EAC3;
+	    }
+	    /* faster ac3 detection at end of pes packet (no improvemnts)
+	    if (AudioCodecID == codec_id && -r - 2 == n) {
+		r = n;
+	    }
+	    */
+	}
+	if (id != 0xbd && !r && FastAdtsCheck(p)) {
+	    r = AdtsCheck(p, n);
+	    codec_id = AV_CODEC_ID_AAC;
+	}
+	if (r < 0) {			// need more bytes
+	    break;
+	}
+	if (r > 0) {
+	    AVPacket *avpkt;
+
+	    // new codec id, close and open new
+	    if (AudioCodecID != codec_id) {
+		MyAudioDecoder->Close();
+		MyAudioDecoder->Open(codec_id, NULL, &timebase);
+		AudioCodecID = codec_id;
+	    }
+	    avpkt = av_packet_alloc();
+	    if (avpkt == NULL) {
+		Error("avpkt allocation failed");
+		continue;
+	    };
+	    avpkt->data = (uint8_t *)p;
+	    avpkt->size = r;
+	    avpkt->pts = AudioAvPkt->pts;
+	    MyAudioDecoder->Decode(avpkt);
+	    AudioAvPkt->pts = AV_NOPTS_VALUE;
+	    av_packet_free(&avpkt);
+	    p += r;
+	    n -= r;
+	    continue;
+	}
+	++p;
+	--n;
+    }
+
+    // copy remaining bytes to start of packet
+    if (n) {
+	memmove(AudioAvPkt->data, p, n);
+    }
+    AudioAvPkt->stream_index = n;
+
+    return size;
+}
+
+void cSoftHdDevice::SetAudioTrackDevice(
+    __attribute__ ((unused)) eTrackType type)
+{
+    //Debug("%s:", __FUNCTION__);
+}
+
+void cSoftHdDevice::SetDigitalAudioDevice( __attribute__ ((unused)) bool on)
+{
+    //Debug("%s: %s", __FUNCTION__, on ? "true" : "false");
+}
+
+void cSoftHdDevice::SetAudioChannelDevice( __attribute__ ((unused))
+    int audio_channel)
+{
+    //Debug("%s: %d", __FUNCTION__, audio_channel);
+}
+
+int cSoftHdDevice::GetAudioChannelDevice(void)
+{
+    //Debug("%s:", __FUNCTION__);
+    return 0;
+}
+
+/**
+**	Sets the audio volume on this device (Volume = 0...255).
+**
+**	@param volume	device volume
+*/
+void cSoftHdDevice::SetVolumeDevice(int volume)
+{
+    Debug("%s: %d", __FUNCTION__, volume);
+
+    AudioSetVolume((volume * 1000) / 255);
+}
+
+/**
+**	Play a video packet.
+**
+**	@param data	exactly one complete PES packet (which is incomplete)
+**	@param size	length of PES packet
+*/
+int cSoftHdDevice::PlayVideo(const uchar * data, int size)
+{
+    //Debug("%s: %p %d", __FUNCTION__, data, length);
+
+    VideoStream * stream = MyVideoStream;
+    int64_t pts = AV_NOPTS_VALUE;
+    int i, n;
+
+    if (MyVideoStream->StreamFreezed) {
+	return 0;
+    }
+
+    // must be a PES video start code
+    if (size < 9 || !data || data[0] || data[1] || data[2] != 0x01 || data[3] >> 4 != 0x0e) {
+	return size;
+    }
+
+    // hard limit buffer full: needed for replay
+    if (atomic_read(&stream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
+	return 0;
+    }
+
+    // get pts
+    if (data[7] & 0x80) {
+	pts = (int64_t) (data[9] & 0x0E) << 29 | data[10] << 22 | (data[11] &
+	       0xFE) << 14 | data[12] << 7 | (data[13] & 0xFE) >> 1;
+    }
+
+    n = PesHeadLength(data);	// PES header size
+
+    for (i = 0; (i < 2) && (i + 4 < size); i++) {
+	// ES start code 0x00 0x00 0x01
+	if (!data[i + n] && !data[i + n + 1] && data[i + n + 2] == 0x01) {
+	    if (stream->CodecID == AV_CODEC_ID_NONE) {
+		if (data[i + n + 3] == 0xb3) {
+		    // MPEG2 I-Frame
+		    Debug("PlayVideo: mpeg2 detected");
+		    Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
+		           data[i + n],
+		           data[i + n + 1],
+		           data[i + n + 2],
+		           data[i + n + 3],
+		           data[i + n + 4],
+		           data[i + n + 5],
+		           data[i + n + 6],
+		           data[i + n + 7],
+		           data[i + n + 8],
+			   data[i + n + 9],
+			   data[i + n + 10]);
+		    stream->CodecID = AV_CODEC_ID_MPEG2VIDEO;
+		    stream->trickpkts = 1;
+		    goto newstream;
+		} else if (data[i + n + 3] == 0x09 && (data[i + n + 4] == 0x10 || data[i + n + 4] == 0xF0 || data[i + n + 10] == 0x64)) {
+		    // H264 I-Frame
+		    Debug("PlayVideo: H264 detected");
+		    Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
+		           data[i + n],
+		           data[i + n + 1],
+		           data[i + n + 2],
+		           data[i + n + 3],
+		           data[i + n + 4],
+		           data[i + n + 5],
+		           data[i + n + 6],
+		           data[i + n + 7],
+		           data[i + n + 8],
+		           data[i + n + 9],
+		           data[i + n + 10]);
+		    stream->CodecID = AV_CODEC_ID_H264;
+		    stream->trickpkts = 2;
+		    goto newstream;
+		} else if (data[i + n + 3] == 0x46 && (data[i + n + 5] == 0x10 || data[i + n + 5] == 0x50 || data[i + n + 10] == 0x40)) {
+		    // HEVC I-Frame
+		    Debug("PlayVideo: hevc detected");
+		    Debug2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
+		           data[i + n],
+		           data[i + n + 1],
+		           data[i + n + 2],
+		           data[i + n + 3],
+		           data[i + n + 4],
+		           data[i + n + 5],
+		           data[i + n + 6],
+		           data[i + n + 7],
+		           data[i + n + 8],
+		           data[i + n + 9],
+		           data[i + n + 10]);
+		    stream->CodecID = AV_CODEC_ID_HEVC;
+		    stream->trickpkts = 2;
+newstream:
+		    stream->NewStream = 1;
+		    stream->timebase.den = 90000;
+		    stream->timebase.num = 1;
+		    VideoEnqueue(stream, pts, data + i + n, size - i - n);
+		}
+	    } else {
+		VideoEnqueue(stream, pts, data + i + n, size - i - n);
+	    }
+	    return size;
+	}
+    }
+
+    // this happens when vdr sends incomplete packets and no stream is started
+    if (stream->CodecID == AV_CODEC_ID_NONE) {
+	return size;
+    }
+
+    // complete last frame
+    VideoEnqueue(stream, pts, data + n, size - n);
+    return size;
+}
+
 /**
 **	Grabs the currently visible screen image.
 **
@@ -1598,26 +2235,39 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
 **	@param width	number of horizontal pixels in the frame
 **	@param height	number of vertical pixels in the frame
 */
-uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
+uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
+    int height)
 {
+    Debug("%s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg,
+	quality, width, height);
+
+    if (!width || !height) {
+	Error("%s: Width or height must be not 0!", __FUNCTION__);
+	return NULL;
+    }
+
+    if (quality < 0) {			// caller should care, but fix it
+	quality = 95;
+    }
+
     Debug2(L_GRAB, "GrabImage: Start grabbing");
     if (VideoGrabInWork(MyVideoStream->Render)) {
-        Debug2(L_GRAB, "GrabImage: waiting for last grab...");
-        return NULL;
+	Debug2(L_GRAB, "GrabImage: waiting for last grab...");
+	return NULL;
     }
 
     VideoTriggerGrab(MyVideoStream->Render);
 
     int timeout = 100;
     while(!VideoGrabReady(MyVideoStream->Render)) {
-        usleep(10000);
-        if (timeout-- <= 0) {
-            // TODO: This is not safe! It can occur when we get stuck in Frame2Display,
-            // if no OSD or video frames are filled. Reset Grabbing after a timeout.
-            Debug2(L_GRAB, "GrabImage: Timeout!");
-            VideoClearGrab(MyVideoStream->Render);
-            return NULL;
-        }
+	usleep(10000);
+	if (timeout-- <= 0) {
+	    // TODO: This is not safe! It can occur when we get stuck in Frame2Display,
+	    // if no OSD or video frames are filled. Reset Grabbing after a timeout.
+	    Debug2(L_GRAB, "GrabImage: Timeout!");
+	    VideoClearGrab(MyVideoStream->Render);
+	    return NULL;
+	}
     }
 
     // get screen dimensions
@@ -1681,438 +2331,32 @@ uint8_t *GrabImage(int *size, int jpeg, int quality, int width, int height)
     // make jpeg or pnm
     uint8_t *grabbedimage;
     if (jpeg) {
-        grabbedimage = CreateJpeg(scaledresult, size, quality, grabwidth, grabheight);
+        grabbedimage = CreateJpeg(scaledresult, &size, quality, grabwidth, grabheight);
     } else {  // add header to raw data
         char buf[64];
         int n = snprintf(buf, sizeof(buf), "P6\n%d\n%d\n255\n", grabwidth, grabheight);
         grabbedimage = (uint8_t *)malloc(scaledsize + n);
         memcpy(grabbedimage, buf, n);
         memcpy(grabbedimage + n, scaledresult, scaledsize);
-        *size = scaledsize + n;
+        size = scaledsize + n;
     }
     free(scaledresult);
-    Debug2(L_GRAB, "GrabImage: finished %s image (%dx%d, quality %d) at %p (size %d)", jpeg ? "jpg" : "pnm", grabwidth, grabheight, jpeg ? quality : 0, grabbedimage, *size);
+    Debug2(L_GRAB, "GrabImage: finished %s image (%dx%d, quality %d) at %p (size %d)", jpeg ? "jpg" : "pnm", grabwidth, grabheight, jpeg ? quality : 0, grabbedimage, size);
     VideoClearGrab(MyVideoStream->Render);
     return grabbedimage;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-//	mediaplayer functions
-//////////////////////////////////////////////////////////////////////////////
-
-void SetAudioCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
-{
-	MyAudioDecoder->Open(codec_id, par, timebase);
-}
-
-void SetVideoCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
-{
-	MyVideoStream->CodecID = codec_id;
-	MyVideoStream->NewStream = 1;
-	MyVideoStream->Par = par;
-	MyVideoStream->timebase.num = timebase->num;
-	MyVideoStream->timebase.den = timebase->den;
-}
-
-int PlayAudioPkts(AVPacket * pkt)
-{
-	if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
-//		Error("PlayAudioPkts: AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
-		return 0;
-	}
-	MyAudioDecoder->Decode(pkt);
-	return 1;
-}
-
-int PlayVideoPkts(AVPacket * pkt)
-{
-	AVPacket *avpkt;
-
-	if (atomic_read(&MyVideoStream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
-		return 0;
-	}
-
-	avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketWrite];
-	MyVideoStream->PacketWrite = (MyVideoStream->PacketWrite + 1) % VIDEO_PACKET_MAX;
-	atomic_inc(&MyVideoStream->PacketsFilled);
-
-	if ((size_t)pkt->size > avpkt->buf->size) {
-		Info("PlayVideoPkts: grow packet buffer size by %d",
-			(int)(pkt->size - avpkt->buf->size + AV_INPUT_BUFFER_PADDING_SIZE));
-		av_grow_packet(avpkt, pkt->size - avpkt->buf->size +
-			AV_INPUT_BUFFER_PADDING_SIZE);
-	}
-
-	memcpy(avpkt->data, pkt->data, pkt->size);
-	avpkt->pts = pkt->pts;
-	avpkt->size = pkt->size;
-	return 1;
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
 /**
-**	Set trick play speed.
+**	Ask the output, if it can scale video.
 **
-**	Every single frame shall then be displayed the given number of
-**	times.
+**	@param rect	requested video window rectangle
 **
-**	@param speed	trick speed
+**	@returns	the real rectangle or cRect::NULL if invalid
 */
-void TrickSpeed(int speed, int forward)
+cRect cSoftHdDevice::CanScaleVideo(const cRect & rect, __attribute__ ((unused)) int alignment)
 {
-	Debug("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
-
-	VideoSetClosing(MyVideoStream->Render, 0);
-	if (MyVideoStream->StreamFreezed) {
-		Debug("TrickSpeed: StreamFreezed %d SkipAudio %d", MyVideoStream->StreamFreezed, SkipAudio);
-		MyVideoStream->StreamFreezed = 0;
-		ClearAudio();
-		SkipAudio = 0;
-	}
-
-	MyVideoStream->TrickSpeed = 1;
-	VideoTrickSpeed(MyVideoStream->Render, speed, forward);
+    return rect;
 }
-
-/**
-**	Clears all video and audio data from the device.
-*/
-void Clear(void)
-{
-	Debug("Clear(void)");
-	ClearVideo(MyVideoStream);
-	VideoSetClosing(MyVideoStream->Render, 0);
-	ClearAudio();
-}
-
-/**
-**	Sets the device into play mode.
-*/
-void Play(void)
-{
-	Debug("Play(void)");
-	if (MyVideoStream->TrickSpeed && MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
-		pthread_mutex_lock(&MyVideoStream->WaitCloseMutex);
-		MyVideoStream->ClosingStream = 1;
-		while (MyVideoStream->ClosingStream)
-			pthread_cond_wait(&MyVideoStream->WaitCloseCondition, &MyVideoStream->WaitCloseMutex);
-		pthread_mutex_unlock(&MyVideoStream->WaitCloseMutex);
-		VideoSetClosing(MyVideoStream->Render, 0);
-	}
-	MyVideoStream->TrickSpeed = 0;
-	SkipAudio = 0;
-	MyVideoStream->StreamFreezed = 0;
-	AudioPlay();
-	VideoPlay(MyVideoStream->Render);
-}
-
-/**
-**	Sets the device into "freeze frame" mode.
-*/
-void Freeze(void)
-{
-	Debug("Freeze(void)");
-	MyVideoStream->StreamFreezed = 1;
-	AudioPause();
-	VideoPause(MyVideoStream->Render);
-}
-
-/**
-**	Turns off audio while replaying.
-*/
-void Mute(void)
-{
-	Debug("Mute(void)");
-	SkipAudio = 1;
-}
-
-/**
-**	Poll if device is ready.  Called by replay.
-**
-**	This function is useless, the return value is ignored and
-**	all buffers are overrun by vdr.
-**
-**	The dvd plugin is using this correct.
-**
-**	@param timeout	timeout to become ready in ms
-**
-**	@retval true	if ready
-**	@retval false	if busy
-*/
-int Poll(int timeout)
-{
-    // poll is only called during replay, flush buffers after replay
-    for (;;) {
-	int full;
-	int t;
-	int used;
-	int filled;
-
-//	Debug("Poll: timeout %d", timeout);
-
-	used = AudioUsedBytes();
-	// FIXME: no video!
-	filled = atomic_read(&MyVideoStream->PacketsFilled);
-	// soft limit + hard limit
-	full = (used > AUDIO_MIN_BUFFER_FREE && filled > 3)
-	    || AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE
-	    || filled >= VIDEO_PACKET_MAX - 10;
-
-	if (!full || !timeout) {
-	    return !full;
-	}
-
-	t = 15;
-	if (timeout < t) {
-	    t = timeout;
-	}
-	usleep(t * 1000);		// let display thread work
-	timeout -= t;
-    }
-}
-
-/**
-**	Flush the device output buffers.
-**
-**	@param timeout	timeout to flush in ms
-*/
-int Flush(int timeout)
-{
-	Debug("Flush: timeout %d", timeout);
-	if (atomic_read(&MyVideoStream->PacketsFilled)) {
-		if (timeout) {			// let display thread work
-			usleep(timeout * 1000);
-		}
-		return !atomic_read(&MyVideoStream->PacketsFilled);
-	}
-	return 1;
-}
-
-void GetScreenSize(int *width, int *height, double *pixel_aspect)
-{
-	VideoGetScreenSize(MyVideoStream->Render, width, height, pixel_aspect);
-}
-
-void GetVideoSize(int *width, int *height, double *aspect_ratio)
-{
-	MyVideoStream->Decoder->GetVideoSize(width, height, aspect_ratio);
-//	Debug("GetVideoSize: %d x %d @ %f", *width, *height, *aspect_ratio);
-}
-
-void *GetVideoRender()
-{
-	return (void *)(MyVideoStream->Render);
-}
-
-void SetInterlacedStream(int interlaced)
-{
-//	Debug("SetInterlacedStream %d", interlaced);
-	MyVideoStream->interlaced = interlaced;
-}
-
-void SetPassthrough(int mask)
-{
-	AudioPassthrough = mask;
-	AudioSetPassthrough(mask);
-	if (MyAudioDecoder)
-		MyAudioDecoder->SetPassthrough(mask);
-}
-
-/**
-**	Set log level
-*/
-void SetLogLevel(int loglevel)
-{
-	DebugLogLevel = loglevel;
-
-	if (!loglevel)
-		return;
-
-	char prefix[256] = "Set loglevels:";
-	if (loglevel & L_DEBUG)
-		strcat(prefix, " standard debugs,");
-	if (loglevel & L_AV_SYNC)
-		strcat(prefix, " AV-Sync,");
-	if (loglevel & L_SOUND)
-		strcat(prefix, " sound,");
-	if (loglevel & L_OSD)
-		strcat(prefix, " osd,");
-	if (loglevel & L_DRM)
-		strcat(prefix, " drm,");
-	if (loglevel & L_CODEC)
-		strcat(prefix, " codec,");
-	if (loglevel & L_STILL)
-		strcat(prefix, " stillpicture,");
-	if (loglevel & L_TRICK)
-		strcat(prefix, " trickspeed,");
-	if (loglevel & L_MEDIA)
-		strcat(prefix, " mediaplayer,");
-	if ((loglevel & L_OPENGL) ||
-	    (loglevel & L_OPENGL_TIME) ||
-	    (loglevel & L_OPENGL_TIME_ALL))
-		strcat(prefix, " OpenGL OSD,");
-	if (loglevel & L_PACKET)
-		strcat(prefix, " packet tracking,");
-	if (loglevel & L_GRAB)
-		strcat(prefix, " grabbing");
-
-	Info("%s", prefix);
-}
-
-/**
-**	Set play mode, called on channel switch.
-**
-**	@param play_mode	play mode (none, video+audio, audio-only, ...)
-*/
-int SetPlayMode(int play_mode)
-{
-	Debug("SetPlayMode: play_mode %d", play_mode);
-
-	switch (play_mode) {
-	case 0:			// none audio/video
-		MyVideoStream->TrickSpeed = 0;
-		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
-			pthread_mutex_lock(&MyVideoStream->WaitCloseMutex);
-			MyVideoStream->ClosingStream = 1;
-			while (MyVideoStream->ClosingStream)
-				pthread_cond_wait(&MyVideoStream->WaitCloseCondition, &MyVideoStream->WaitCloseMutex);
-			pthread_mutex_unlock(&MyVideoStream->WaitCloseMutex);
-		}
-		VideoSetClosing(MyVideoStream->Render, 1);
-		SkipAudio = 0;
-		AudioPlay();
-		ClearAudio();	// flush all AUDIO buffers
-		if (MyAudioDecoder && AudioCodecID != AV_CODEC_ID_NONE) {
-			NewAudioStream = 1;
-		}
-		MyVideoStream->interlaced = 0; // probably not necessary
-		MyVideoStream->StreamFreezed = 0;
-		break;
-	case 1:			// audio/video
-		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
-		//Play(); Play is a vdr command!!!
-		break;
-	case 2:			// audio only
-		VideoThreadExit();
-		break;
-	case 3:			// audio only (black screen)
-		Debug("softhddev: FIXME: audio only, silence video errors");
-		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
-		//Play();
-		break;
-	case 4:			// video only
-		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
-		//Play();
-		break;
-	default:
-		Error("SetPlayMode: playmode not supported %d", play_mode);
-		return 0;
-		break;
-	}
-
-	return 1;
-}
-
-//////////////////////////////////////////////////////////////////////////////
-//	Init/Exit
-//////////////////////////////////////////////////////////////////////////////
-
-/**
-**	Exit + cleanup.
-*/
-void SoftHdDeviceExit(void)
-{
-	Debug("SoftHdDeviceExit(void):");
-    AudioExit();
-    if (MyAudioDecoder) {
-		MyAudioDecoder->Close();
-		delete MyAudioDecoder;
-    }
-    NewAudioStream = 0;
-    av_packet_unref(AudioAvPkt);
-
-    VideoExit(MyVideoStream->Render);
-    VideoStreamClose(MyVideoStream);
-}
-
-
-/**
-**	Prepare plugin.
-**
-**	@retval 0	normal start
-**	@retval 1	suspended start
-**	@retval -1	detached start
-*/
-int Start(void)
-{
-	Debug("Start(void):");
-	if (!MyAudioDecoder) {
-		AudioInit(AudioPassthrough);
-		AudioSetBufferTime(ConfigAudioBufferTime);
-		av_new_packet(AudioAvPkt, AUDIO_BUFFER_SIZE);
-		MyAudioDecoder = new cAudioDecoder(AudioPassthrough);
-		AudioCodecID = AV_CODEC_ID_NONE;
-		AudioChannelID = -1;
-
-		if (!MyVideoStream->Decoder) {
-			MyVideoStream->CodecID = AV_CODEC_ID_NONE;
-		}
-
-		if ((MyVideoStream->Render = VideoNewRender(MyVideoStream))) {
-			VideoInit(MyVideoStream->Render);
-			MyVideoStream->Decoder = new cVideoDecoder(MyVideoStream->Render);
-			VideoPacketInit(MyVideoStream);
-		}
-	}
-
-	return 0;
-}
-
-
-/**
-**	Stop plugin.
-**
-**	@note stop everything, but don't cleanup, module is still called.
-*/
-void Stop(void)
-{
-	Debug("Stop(void): nothing to do.");
-}
-
-
-/**
-**	Gets the current System Time Counter, which can be used to
-**	synchronize audio, video and subtitles.
-*/
-int64_t GetSTC(void)
-{
-	if (MyVideoStream->Render) {
-		return VideoGetClock(MyVideoStream->Render);
-	}
-    // could happen during dettached
-    Warning("softhddev: %s called without hw decoder", __FUNCTION__);
-    return AV_NOPTS_VALUE;
-}
-
-
-/**
-**	Get decoder statistics.
-**
-**	@param[out] duped	duped frames
-**	@param[out] dropped	dropped frames
-**	@param[out] count	number of decoded frames
-*/
-void GetStats(int *duped, int *dropped, int *counter)
-{
-	*duped = 0;
-	*dropped = 0;
-	*counter = 0;
-	if (MyVideoStream->Render) {
-		VideoGetStats(MyVideoStream->Render, duped, dropped, counter);
-	}
-}
-
 
 /**
 **	Scale the currently shown video.
@@ -2122,59 +2366,30 @@ void GetStats(int *duped, int *dropped, int *counter)
 **	@param width	video window width OSD relative
 **	@param height	video window height OSD relative
 */
-void ScaleVideo(int x, int y, int width, int height)
+void cSoftHdDevice::ScaleVideo(const cRect & rect)
 {
-	if (MyVideoStream->Render) {
-		VideoSetOutputPosition(MyVideoStream->Render, x, y, width, height);
-	}
+    Debug2(L_OSD, "OSD %s: %dx%d%+d%+d",
+        __FUNCTION__, rect.Width(), rect.Height(), rect.X(), rect.Y());
+
+    if (MyVideoStream->Render) {
+	VideoSetOutputPosition(MyVideoStream->Render, rect.X(), rect.Y(), rect.Width(), rect.Height());
+    }
 }
 
 /**
 **	Can play IBP frames in fast forward trickspeed
 */
-bool HasIBPTrickSpeed(void)
+bool cSoftHdDevice::HasIBPTrickSpeed(void) const
 {
-	return true;
+	return false;
+//	return true;
 }
 
-
-//////////////////////////////////////////////////////////////////////////////
-//	OSD
-//////////////////////////////////////////////////////////////////////////////
-
-/**
-**	Close OSD.
-*/
-void OsdClose(void)
-{
-    VideoOsdClear(MyVideoStream->Render);
-}
-
-/**
-**	Draw an OSD pixmap.
-**
-**	@param xi	x-coordinate in argb image
-**	@param yi	y-coordinate in argb image
-**	@paran height	height in pixel in argb image
-**	@paran width	width in pixel in argb image
-**	@param pitch	pitch of argb image
-**	@param argb	32bit ARGB image data
-**	@param x	x-coordinate on screen of argb image
-**	@param y	y-coordinate on screen of argb image
-*/
-void OsdDrawARGB(int xi, int yi, int height, int width, int pitch,
-	const uint8_t * argb, int x, int y)
-{
-	VideoOsdDrawARGB(MyVideoStream->Render, xi, yi, height, width,
-			pitch, argb, x, y);
-}
-
-//////////////////////////////////////////////////////////////////////////////
 
 /**
 **	Return command line help string.
 */
-const char *CommandLineHelp(void)
+const char *cSoftHdDevice::CommandLineHelp(void)
 {
     return "  -a device\taudio device (fe. alsa: hw:0,0)\n"
 	"  -p device\taudio device for pass-through (hw:0,1)\n"
@@ -2193,7 +2408,7 @@ const char *CommandLineHelp(void)
 **	@param argc	number of arguments
 **	@param argv	arguments vector
 */
-int ProcessArgs(int argc, char *const argv[])
+int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
 {
     //
     //	Parse arguments.
@@ -2249,4 +2464,3 @@ int ProcessArgs(int argc, char *const argv[])
 
     return 1;
 }
-

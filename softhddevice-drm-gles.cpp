@@ -29,9 +29,10 @@ using std::ifstream;
 
 #include <vdr/player.h>
 #include <vdr/plugin.h>
-#include <vdr/dvbspu.h>
+//#include <vdr/dvbspu.h>
 
 #include "softhddevice-drm-gles.h"
+#include "softhddevice.h"
 #include "mediaplayer.h"
 #include "misc.h"
 
@@ -50,6 +51,36 @@ extern "C"
 }
 
 //////////////////////////////////////////////////////////////////////////////
+//	Variables
+//////////////////////////////////////////////////////////////////////////////
+
+static const char *MAINMENUENTRY = trNOOP("SHD Media Player");
+
+static char ConfigMakePrimary;		///< config primary wanted
+static char ConfigHideMainMenuEntry;	///< config hide main menu entry
+static char LogState;			///< flag logging on/off
+static int ConfigLog;			///< loglevel config
+static int ConfigVideoAudioDelay;	///< config audio delay
+static char ConfigAudioPassthrough;	///< config audio pass-through mask
+static char AudioPassthroughState;	///< flag audio pass-through on/off
+static char ConfigAudioDownmix;		///< config ffmpeg audio downmix
+static char ConfigAudioSoftvol;		///< config use software volume
+static char ConfigAudioNormalize;	///< config use normalize volume
+static int ConfigAudioMaxNormalize;	///< config max normalize factor
+static char ConfigAudioCompression;	///< config use volume compression
+static int ConfigAudioMaxCompression;	///< config max volume compression
+static int ConfigAudioStereoDescent;	///< config reduce stereo loudness
+int ConfigAudioBufferTime;			///< config size ms of audio buffer
+static int ConfigAudioAutoAES;		///< config automatic AES handling
+static int ConfigAudioEq;			///< config equalizer filter 
+static int SetupAudioEqBand[18];	///< config equalizer filter bands
+
+#ifdef USE_GLES
+static int ConfigMaxSizeGPUImageCache = 128;
+extern int DisableOglOsd;
+#endif
+
+int ConfigDisableDeint;
 
 //////////////////////////////////////////////////////////////////////////////
 //	OSD
@@ -92,7 +123,7 @@ void cSoftOsd::SetActive(bool on)
 **	@param top	y-coordinate of osd on display
 **	@param level	level of the osd (smallest is shown)
 */
-cSoftOsd::cSoftOsd(int left, int top, uint level)
+cSoftOsd::cSoftOsd(int left, int top, uint level, cSoftHdDevice *device)
 :cOsd(left, top, level)
 {
     /* FIXME: OsdWidth/OsdHeight not correct!
@@ -100,6 +131,7 @@ cSoftOsd::cSoftOsd(int left, int top, uint level)
     Debug2(L_OSD, "OSD %s: %dx%d%+d%+d, %d", __FUNCTION__, OsdWidth(),
 	OsdHeight(), left, top, level);
 
+    Device = device;
     OsdLevel = level;
 }
 
@@ -220,7 +252,7 @@ void cSoftOsd::Flush(void)
 		    }
 		    ys = 0;
 		}
-		::GetScreenSize(&width, &height, &video_aspect);
+		Device->GetOsdSize(width, height, video_aspect);
 		if (w > width - xs - x1) {
 		    w = width - xs - x1;
 		    if (w <= 0) {
@@ -320,7 +352,7 @@ void cSoftOsd::Flush(void)
 		y = 0;
 	    }
 
-	    ::GetScreenSize(&width, &height, &video_aspect);
+	    Device->GetOsdSize(width, height, video_aspect);
 	    if (w > width - x) {
 		w = width - x;
 	    }
@@ -353,20 +385,20 @@ cOsd *cSoftOsdProvider::CreateOsd(int left, int top, uint level)
 #ifdef USE_GLES
     if (DisableOglOsd) {
         Debug2(L_OSD, "OSD %s: %d, %d, %d, OpenGL disabled, using software rendering", __FUNCTION__, left, top, level);
-        return Osd = new cSoftOsd(left, top, level);
+        return Osd = new cSoftOsd(left, top, level, Device);
     }
 
     if (StartOpenGlThread()) {
         Debug2(L_OSD, "OSD %s: %d, %d, %d, using OpenGL OSD support", __FUNCTION__, left, top, level);
-        return Osd = new cOglOsd(left, top, level, oglThread);
+        return Osd = new cOglOsd(left, top, level, oglThread, Device);
     }
 
     Debug2(L_OSD, "OSD %s: %d, %d, %d, OpenGL failed, using software rendering", __FUNCTION__, left, top, 999);
     DisableOglOsd = 1;
-    return Osd = new cSoftOsd(left, top, 999);
+    return Osd = new cSoftOsd(left, top, 999, Device);
 #else
     Debug2(L_OSD, "OSD %s: %d, %d, %d", __FUNCTION__, left, top, level);
-    return Osd = new cSoftOsd(left, top, level);
+    return Osd = new cSoftOsd(left, top, level, Device);
 #endif
 }
 
@@ -426,16 +458,33 @@ void cSoftOsdProvider::StopOpenGlThread(void) {
     oglThread.reset();
     Info("OpenGL worker thread stopped");
 }
+
+int cSoftOsdProvider::StoreImageData(const cImage &Image)
+{
+    if (StartOpenGlThread()) {
+        int imgHandle = oglThread->StoreImage(Image);
+        return imgHandle;
+    }
+    return 0;
+}
+
+void cSoftOsdProvider::DropImageData(int imgHandle)
+{
+    if (StartOpenGlThread())
+        oglThread->DropImageData(imgHandle);
+}
 #endif
 
 /**
 **	Create cOsdProvider class.
 */
-cSoftOsdProvider::cSoftOsdProvider(void)
+cSoftOsdProvider::cSoftOsdProvider(cSoftHdDevice *device)
 :  cOsdProvider()
 {
     Debug("%s:", __FUNCTION__);
     Debug2(L_OSD, "OSD %s:", __FUNCTION__);
+    Device = device;
+
 #ifdef USE_GLES
     if (!DisableOglOsd)
         StopOpenGlThread();
@@ -756,8 +805,10 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 **
 **	Import global config variables into setup.
 */
-cMenuSetupSoft::cMenuSetupSoft(void)
+cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
 {
+    Device = device;
+
     //
     //	general
     //
@@ -766,7 +817,7 @@ cMenuSetupSoft::cMenuSetupSoft(void)
 #ifdef USE_GLES
 #ifdef WRITE_PNG
     DebugMenu = 0;
-    WritePngs = ConfigWritePngs;
+    WritePngs = Device->GetConfigWritePngs();
 #endif
 #endif
     Statistics = 0;
@@ -838,7 +889,8 @@ void cMenuSetupSoft::Store(void)
     SetupStore("MakePrimary", ConfigMakePrimary = MakePrimary);
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-    SetupStore("WritePngs", ConfigWritePngs = WritePngs);
+    Device->SetConfigWritePngs(WritePngs);
+    SetupStore("WritePngs", Device->GetConfigWritePngs());
 #endif
 #endif
     SetupStore("HideMainMenuEntry", ConfigHideMainMenuEntry = HideMainMenuEntry);
@@ -934,383 +986,15 @@ void cMenuSetupSoft::Store(void)
 #endif
 }
 
-//////////////////////////////////////////////////////////////////////////////
-//	cDevice
-//////////////////////////////////////////////////////////////////////////////
-
-/**
-**	Constructor device.
-*/
-cSoftHdDevice::cSoftHdDevice(void)
-{
-    Debug("%s:", __FUNCTION__);
-    spuDecoder = NULL;
-}
-
-/**
-**	Destructor device.
-*/
-cSoftHdDevice::~cSoftHdDevice(void)
-{
-    Debug("%s:", __FUNCTION__);
-    delete spuDecoder;
-}
-
-/**
-**	Informs a device that it will be the primary device.
-**
-**	@param on	flag if becoming or loosing primary
-*/
-void cSoftHdDevice::MakePrimaryDevice(bool on)
-{
-	Debug("%s: %d", __FUNCTION__, on);
-	if (!on) {
-		::SoftHdDeviceExit();
-	} else {
-		::Start();
-	}
-
-	cDevice::MakePrimaryDevice(on);
-	if (on) {
-		new cSoftOsdProvider();
-	}
-}
-
-
-/**
-**	Get the device SPU decoder.
-**
-**	@returns a pointer to the device's SPU decoder (or NULL, if this
-**	device doesn't have an SPU decoder)
-*/
-cSpuDecoder *cSoftHdDevice::GetSpuDecoder(void)
-{
-    Debug("%s:", __FUNCTION__);
-    if (!spuDecoder && IsPrimaryDevice()) {
-	spuDecoder = new cDvbSpuDecoder();
-    }
-    return spuDecoder;
-}
-
-
-/**
-**	Tells whether this device has a MPEG decoder.
-*/
-bool cSoftHdDevice::HasDecoder(void) const
-{
-    return true;
-}
-
-/**
-**	Returns true if this device can currently start a replay session.
-*/
-bool cSoftHdDevice::CanReplay(void) const
-{
-    Debug("%s:", __FUNCTION__);
-    return true;
-}
-
-/**
-**	Sets the device into the given play mode.
-**
-**	@param play_mode	new play mode (Audio/Video/External...)
-*/
-bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
-{
-	Debug("%s: %d", __FUNCTION__, play_mode);
-	return::SetPlayMode(play_mode);
-}
-
-/**
-**	Gets the current System Time Counter, which can be used to
-**	synchronize audio, video and subtitles.
-*/
-int64_t cSoftHdDevice::GetSTC(void)
-{
-//    Debug("%s:", __FUNCTION__);
-    return::GetSTC();
-}
-
-/**
-**	Set trick play speed.
-**
-**	Every single frame shall then be displayed the given number of
-**	times.
-**
-**	@param speed	trick speed
-**	@param forward	flag forward direction
-*/
-void cSoftHdDevice::TrickSpeed(int speed, bool forward)
-{
-    Debug("%s: %d %d", __FUNCTION__, speed, forward);
-    Debug("TrickSpeed: speed %d %s",
-		speed, forward ? "forward" : "backward");
-    ::TrickSpeed(speed, forward);
-}
-
-/**
-**	Clears all video and audio data from the device.
-*/
-void cSoftHdDevice::Clear(void)
-{
-    Debug("%s:", __FUNCTION__);
-    cDevice::Clear();
-    ::Clear();
-}
-
-/**
-**	Sets the device into play mode (after a previous trick mode)
-*/
-void cSoftHdDevice::Play(void)
-{
-    Debug("%s:", __FUNCTION__);
-    cDevice::Play();
-    ::Play();
-}
-
-/**
-**	Puts the device into "freeze frame" mode.
-*/
-void cSoftHdDevice::Freeze(void)
-{
-    Debug("%s:", __FUNCTION__);
-    cDevice::Freeze();
-    ::Freeze();
-}
-
-/**
-**	Turns off audio while replaying.
-*/
-void cSoftHdDevice::Mute(void)
-{
-    Debug("%s:", __FUNCTION__);
-    cDevice::Mute();
-    ::Mute();
-}
-
-/**
-**	Display the given I-frame as a still picture.
-**
-**	@param data	pes or ts data of a frame
-**	@param length	length of data area
-*/
-void cSoftHdDevice::StillPicture(const uchar * data, int length)
-{
-	if (data[0] == 0x47) {		// ts sync
-		cDevice::StillPicture(data, length);
-		return;
-	}
-
-	Debug("%s: %s %p %d", __FUNCTION__,
-		data[0] == 0x47 ? "ts" : "pes", data, length);
-	::StillPicture(data, length);
-}
-
-/**
-**	Check if the device is ready for further action.
-**
-**	@param poller		file handles (unused)
-**	@param timeout_ms	timeout in ms to become ready
-**
-**	@retval true	if ready
-**	@retval false	if busy
-*/
-bool cSoftHdDevice::Poll(
-    __attribute__ ((unused)) cPoller & poller, int timeout_ms)
-{
-    //Debug("%s: timeout %d", __FUNCTION__, timeout_ms);
-
-    return::Poll(timeout_ms);
-}
-
-/**
-**	Flush the device output buffers.
-**
-**	@param timeout_ms	timeout in ms to become ready
-*/
-bool cSoftHdDevice::Flush(int timeout_ms)
-{
-    Debug("%s: %d ms", __FUNCTION__, timeout_ms);
-    return::Flush(timeout_ms);
-}
-
-// ----------------------------------------------------------------------------
-
-/**
-**	Sets the video display format to the given one (only useful if this
-**	device has an MPEG decoder).
-*/
-void cSoftHdDevice:: SetVideoDisplayFormat(eVideoDisplayFormat
-    video_display_format)
-{
-    Debug("%s: %d", __FUNCTION__, video_display_format);
-
-    cDevice::SetVideoDisplayFormat(video_display_format);
-}
-
-/**
-**	Sets the output video format to either 16:9 or 4:3 (only useful
-**	if this device has an MPEG decoder).
-**
-**	Should call SetVideoDisplayFormat.
-**
-**	@param video_format16_9	flag true 16:9.
-*/
-void cSoftHdDevice::SetVideoFormat(bool video_format16_9)
-{
-    Debug("%s: %d", __FUNCTION__, video_format16_9);
-
-    // FIXME: 4:3 / 16:9 video format not supported.
-
-    SetVideoDisplayFormat(eVideoDisplayFormat(Setup.VideoDisplayFormat));
-}
-
-/**
-**	Returns the width, height and video_aspect ratio of the currently
-**	displayed video material.
-**
-**	@note the video_aspect is used to scale the subtitle.
-*/
-void cSoftHdDevice::GetVideoSize(int &width, int &height, double &video_aspect)
-{
-    ::GetVideoSize(&width, &height, &video_aspect);
-}
-
-/**
-**	Returns the width, height and pixel_aspect ratio the OSD.
-**
-**	FIXME: Called every second, for nothing (no OSD displayed)?
-*/
-void cSoftHdDevice::GetOsdSize(int &width, int &height, double &pixel_aspect)
-{
-    ::GetScreenSize(&width, &height, &pixel_aspect);
-}
-
-// ----------------------------------------------------------------------------
-
-/**
-**	Play a audio packet.
-**
-**	@param data	exactly one complete PES packet (which is incomplete)
-**	@param length	length of PES packet
-**	@param id	type of audio data this packet holds
-*/
-int cSoftHdDevice::PlayAudio(const uchar * data, int length, uchar id)
-{
-    //Debug("%s: %p %p %d %d", __FUNCTION__, this, data, length, id);
-
-    return::PlayAudio(data, length, id);
-}
-
-void cSoftHdDevice::SetAudioTrackDevice(
-    __attribute__ ((unused)) eTrackType type)
-{
-    //Debug("%s:", __FUNCTION__);
-}
-
-void cSoftHdDevice::SetDigitalAudioDevice( __attribute__ ((unused)) bool on)
-{
-    //Debug("%s: %s", __FUNCTION__, on ? "true" : "false");
-}
-
-void cSoftHdDevice::SetAudioChannelDevice( __attribute__ ((unused))
-    int audio_channel)
-{
-    //Debug("%s: %d", __FUNCTION__, audio_channel);
-}
-
-int cSoftHdDevice::GetAudioChannelDevice(void)
-{
-    //Debug("%s:", __FUNCTION__);
-    return 0;
-}
-
-/**
-**	Sets the audio volume on this device (Volume = 0...255).
-**
-**	@param volume	device volume
-*/
-void cSoftHdDevice::SetVolumeDevice(int volume)
-{
-    Debug("%s: %d", __FUNCTION__, volume);
-
-    ::SetVolumeDevice(volume);
-}
-
-// ----------------------------------------------------------------------------
-
-/**
-**	Play a video packet.
-**
-**	@param data		exactly one complete PES packet (which is incomplete)
-**	@param length	length of PES packet
-*/
-int cSoftHdDevice::PlayVideo(const uchar * data, int length)
-{
-    //Debug("%s: %p %d", __FUNCTION__, data, length);
-    return::PlayVideo(data, length);
-}
-
-/**
-**	Grabs the currently visible screen image.
-**
-**	@param size	size of the returned data
-**	@param jpeg	flag true, create JPEG data
-**	@param quality	JPEG quality
-**	@param width	number of horizontal pixels in the frame
-**	@param height	number of vertical pixels in the frame
-*/
-uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
-    int height)
-{
-    Debug("%s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg,
-	quality, width, height);
-
-    if (!width || !height) {
-	Error("%s: Width or height must be not 0!", __FUNCTION__);
-	return NULL;
-    }
-
-    if (quality < 0) {			// caller should care, but fix it
-	quality = 95;
-    }
-
-    return::GrabImage(&size, jpeg, quality, width, height);
-}
-
-/**
-**	Ask the output, if it can scale video.
-**
-**	@param rect	requested video window rectangle
-**
-**	@returns	the real rectangle or cRect::NULL if invalid
-*/
-cRect cSoftHdDevice::CanScaleVideo(const cRect & rect, __attribute__ ((unused)) int alignment)
-{
-    return rect;
-}
-
-/**
-**	Scale the currently shown video.
-**
-**	@param rect	video window rectangle
-*/
-void cSoftHdDevice::ScaleVideo(const cRect & rect)
-{
-    Debug2(L_OSD, "OSD %s: %dx%d%+d%+d",
-        __FUNCTION__, rect.Width(), rect.Height(), rect.X(), rect.Y());
-    ::ScaleVideo(rect.X(), rect.Y(), rect.Width(), rect.Height());
-}
-
 /**
 **	Call rgb to jpeg for C Plugin.
 */
-extern "C" uint8_t * CreateJpeg(uint8_t * image, int *size, int quality,
-    int width, int height)
-{
-    return (uint8_t *) RgbToJpeg((uchar *) image, width, height, *size,
-	quality);
-}
+//extern "C" uint8_t * CreateJpeg(uint8_t * image, int *size, int quality,
+//    int width, int height)
+//{
+//    return (uint8_t *) RgbToJpeg((uchar *) image, width, height, *size,
+//	quality);
+//}
 
 //////////////////////////////////////////////////////////////////////////////
 //	cPlugin
@@ -1324,7 +1008,9 @@ extern "C" uint8_t * CreateJpeg(uint8_t * image, int *size, int quality,
 */
 cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 {
-    //Debug("%s:", __FUNCTION__);
+    Debug("%s:", __FUNCTION__);
+
+    Device = new cSoftHdDevice();
 }
 
 /**
@@ -1332,9 +1018,10 @@ cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 */
 cPluginSoftHdDevice::~cPluginSoftHdDevice(void)
 {
-    //Debug("%s:", __FUNCTION__);
+    Debug("%s:", __FUNCTION__);
 
-    ::SoftHdDeviceExit();
+    Device->Exit();
+    delete Device;
 }
 
 /**
@@ -1364,7 +1051,7 @@ const char *cPluginSoftHdDevice::Description(void)
 */
 const char *cPluginSoftHdDevice::CommandLineHelp(void)
 {
-    return::CommandLineHelp();
+    return Device->CommandLineHelp();
 }
 
 /**
@@ -1372,9 +1059,9 @@ const char *cPluginSoftHdDevice::CommandLineHelp(void)
 */
 bool cPluginSoftHdDevice::ProcessArgs(int argc, char *argv[])
 {
-    //Debug("%s:", __FUNCTION__);
+    Debug("%s:", __FUNCTION__);
 
-    return::ProcessArgs(argc, argv);
+    return Device->ProcessArgs(argc, argv);
 }
 
 /**
@@ -1386,9 +1073,7 @@ bool cPluginSoftHdDevice::ProcessArgs(int argc, char *argv[])
 */
 bool cPluginSoftHdDevice::Initialize(void)
 {
-    //Debug("%s:", __FUNCTION__);
-
-    MyDevice = new cSoftHdDevice();
+    Debug("%s:", __FUNCTION__);
 
     return true;
 }
@@ -1398,19 +1083,19 @@ bool cPluginSoftHdDevice::Initialize(void)
 */
 bool cPluginSoftHdDevice::Start(void)
 {
-	//Debug("%s:", __FUNCTION__);
+	Debug("%s:", __FUNCTION__);
 
-	if (!MyDevice->IsPrimaryDevice()) {
+	if (!Device->IsPrimaryDevice()) {
 		Info("softhddevice %d is not the primary device!",
-			MyDevice->DeviceNumber());
+			Device->DeviceNumber());
 		if (ConfigMakePrimary) {
 			// Must be done in the main thread
 			Debug("makeing softhddevice %d the primary device!",
-				MyDevice->DeviceNumber());
-			DoMakePrimary = MyDevice->DeviceNumber() + 1;
+				Device->DeviceNumber());
+			DoMakePrimary = Device->DeviceNumber() + 1;
 		}
 	}
-	::Start();
+	Device->Start();
 
     return true;
 }
@@ -1423,7 +1108,7 @@ void cPluginSoftHdDevice::Stop(void)
 {
     //Debug("%s:", __FUNCTION__);
 
-    ::Stop();
+    Device->Stop();
 }
 
 /**
@@ -1443,7 +1128,7 @@ cOsdObject *cPluginSoftHdDevice::MainMenuAction(void)
 {
     //Debug("%s:", __FUNCTION__);
 
-    return new cSoftHdMenu("SoftHdDevice");
+    return new cSoftHdMenu("SoftHdDevice", Device);
 }
 
 /**
@@ -1453,7 +1138,7 @@ cMenuSetupPage *cPluginSoftHdDevice::SetupMenu(void)
 {
     //Debug("%s:", __FUNCTION__);
 
-    return new cMenuSetupSoft;
+    return new cMenuSetupSoft(Device);
 }
 
 /**
@@ -1475,7 +1160,7 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 #ifdef USE_GLES
 #ifdef WRITE_PNG
     if (!strcasecmp(name, "WritePngs")) {
-	ConfigWritePngs = atoi(value);
+	Device->SetConfigWritePngs(atoi(value));
 	return true;
     }
 #endif
@@ -1697,7 +1382,7 @@ cString cPluginSoftHdDevice::SVDRPCommand(const char *command,
 {
 	if (!strcasecmp(command, "PLAY")) {
 		Debug2(L_MEDIA, "SVDRPCommand: %s %s", command, option);
-		cControl::Launch(new cSoftHdControl(option));
+		cControl::Launch(new cSoftHdControl(option, Device));
 		return "PLAY url";
 	}
 

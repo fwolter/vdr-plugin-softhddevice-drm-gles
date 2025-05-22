@@ -324,9 +324,5 @@ extern void VideoExit(VideoRender *);		///< Cleanup and exit video module.
 
 extern int VideoCodecMode(VideoRender *);
 
-#ifdef USE_GLES
-extern int DisableOglOsd;
-#endif
-
 /// @}
 #endif

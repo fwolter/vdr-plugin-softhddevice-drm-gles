@@ -90,6 +90,9 @@ static pthread_t DisplayThread;
 static pthread_mutex_t DisplayQueue;
 
 extern int ConfigDisableDeint;
+#ifdef USE_GLES
+int DisableOglOsd;
+#endif
 
 //----------------------------------------------------------------------------
 //	Helper functions
@@ -431,6 +434,7 @@ EGLConfig get_config(void)
     }
 
     Fatal("no matching gbm config found");
+    return NULL;
 }
 
 PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display = NULL;
@@ -967,7 +971,7 @@ find_mode:
 	// init gbm
 	int w, h;
 	double pixel_aspect;
-	GetScreenSize(&w, &h, &pixel_aspect);
+	VideoGetScreenSize(render, &w, &h, &pixel_aspect);
 
 	if (init_gbm(render, w, h, DRM_FORMAT_ARGB8888, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING)) {
 		Error("FindDevice: failed to init gbm device and surface!");

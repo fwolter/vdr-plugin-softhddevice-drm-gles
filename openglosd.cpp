@@ -14,7 +14,6 @@
 
 #ifdef WRITE_PNG
 #include <png.h>
-extern int ConfigWritePngs;
 #endif
 
 /* This is needed for the GLES2 GL_CLAMP_TO_BORDER workaround */
@@ -1212,7 +1211,7 @@ bool cOglCmdDeleteFb::Execute(void) {
 }
 
 //------------------ cOglCmdRenderFbToBufferFb --------------------
-cOglCmdRenderFbToBufferFb::cOglCmdRenderFbToBufferFb(cOglFb *fb, cOglFb *buffer, GLint x, GLint y, GLint transparency, GLint drawPortX, GLint drawPortY, GLint dirtyX, GLint dirtyTop, GLint dirtyWidth, GLint dirtyHeight, bool alphablending) : cOglCmd(fb) {
+cOglCmdRenderFbToBufferFb::cOglCmdRenderFbToBufferFb(cOglFb *fb, cOglFb *buffer, GLint x, GLint y, GLint transparency, GLint drawPortX, GLint drawPortY, GLint dirtyX, GLint dirtyTop, GLint dirtyWidth, GLint dirtyHeight, bool alphablending, cSoftHdDevice *device) : cOglCmd(fb) {
     this->dirtyX = dirtyX;
     this->dirtyTop = dirtyTop;
     this->dirtyWidth = dirtyWidth;
@@ -1225,6 +1224,7 @@ cOglCmdRenderFbToBufferFb::cOglCmdRenderFbToBufferFb(cOglFb *fb, cOglFb *buffer,
     this->transparency = (alphablending ? transparency : ALPHA_OPAQUE);
     this->bcolor = BORDERCOLOR;
     this->alphablending = alphablending;
+    Device = device;
 }
 
 bool cOglCmdRenderFbToBufferFb::Execute(void) {
@@ -1275,7 +1275,7 @@ bool cOglCmdRenderFbToBufferFb::Execute(void) {
 
 #ifdef WRITE_PNG
     // Read back bFb framebuffer
-//    if (ConfigWritePngs)
+//    if (Device->GetConfigWritePngs())
 //       writePng(0, 0, buffer->Width(), buffer->Height(), false);
 #endif
     if (!alphablending)
@@ -1286,12 +1286,13 @@ bool cOglCmdRenderFbToBufferFb::Execute(void) {
 }
 
 //------------------ cOglCmdCopyBufferToOutputFb --------------------
-cOglCmdCopyBufferToOutputFb::cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputFb *oFb, GLint x, GLint y, int active) : cOglCmd(fb) {
+cOglCmdCopyBufferToOutputFb::cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputFb *oFb, GLint x, GLint y, int active, cSoftHdDevice *device) : cOglCmd(fb) {
     this->oFb = oFb;
     this->x = (GLfloat)x;
     this->y = (GLfloat)y;
     this->bcolor = BORDERCOLOR;
     this->active = active;
+    Device = device;
 }
 
 bool cOglCmdCopyBufferToOutputFb::Execute(void) {
@@ -1343,7 +1344,7 @@ bool cOglCmdCopyBufferToOutputFb::Execute(void) {
 
 #ifdef WRITE_PNG
     // Read back oFb framebuffer
-    if (ConfigWritePngs)
+    if (Device->GetConfigWritePngs())
         writePng(0, 0, oFb->Width(), oFb->Height(), true);
 #endif
     oFb->Unbind();
@@ -2723,7 +2724,8 @@ void cOglPixmap::DrawGridRect(const cRect &Rect, int offset, int size, tColor cl
 ******************************************************************************/
 cOglOutputFb *cOglOsd::oFb = NULL;
 
-cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglThread) : cOsd(Left, Top, Level) {
+cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglThread, cSoftHdDevice *device) : cOsd(Left, Top, Level) {
+    Device = device;
     this->oglThread = oglThread;
     bFb = NULL;
     if (Level == 10)
@@ -2735,7 +2737,8 @@ cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglT
     double pixel_aspect;
     dirtyViewport = new cRect();
 
-    GetScreenSize(&osdWidth, &osdHeight, &pixel_aspect);
+    VideoRender *render = (VideoRender *)GetVideoRender();
+    VideoGetScreenSize(render, &osdWidth, &osdHeight, &pixel_aspect);
     Debug2(L_OSD, "New Osd %p osdLeft %d osdTop %d screenWidth %d screenHeight %d", this, Left, Top, osdWidth, osdHeight);
 
     maxPixmapSize.Set(oglThread->MaxTextureSize(), oglThread->MaxTextureSize());
@@ -2756,7 +2759,7 @@ cOglOsd::~cOglOsd() {
     oglThread->DoCmd(new cOglCmdFill(bFb, clrTransparent));
 
     SetActive(false); // OsdClose() in cOglCmdCopyBufferToOutputFb()
-    oglThread->DoCmd(new cOglCmdCopyBufferToOutputFb(bFb, oFb, Left(), Top(), 0));
+    oglThread->DoCmd(new cOglCmdCopyBufferToOutputFb(bFb, oFb, Left(), Top(), 0, Device));
     oglThread->DoCmd(new cOglCmdDeleteFb(bFb));
     delete dirtyViewport;
 }
@@ -2885,7 +2888,8 @@ void cOglOsd::Flush(void) {
                                                             dirtyViewport->Top(),
                                                             dirtyViewport->Width(),
                                                             dirtyViewport->Height(),
-                                                            alphablending));
+                                                            alphablending,
+                                                            Device));
         }
     }
     //copy buffer to output framebuffer
@@ -2893,7 +2897,7 @@ void cOglOsd::Flush(void) {
 
     oglThread->DoCmd(new cOglCmdCopyBufferToOutputFb(bFb, oFb,
                                                      Left() + (isSubtitleOsd ? oglPixmaps[0]->ViewPort().X() : 0),
-                                                     Top() + (isSubtitleOsd ? oglPixmaps[0]->ViewPort().Y() : 0), 1));
+                                                     Top() + (isSubtitleOsd ? oglPixmaps[0]->ViewPort().Y() : 0), 1, Device));
 }
 
 void cOglOsd::DrawScaledBitmap(int x, int y, const cBitmap &Bitmap, double FactorX, double FactorY, bool AntiAlias) {

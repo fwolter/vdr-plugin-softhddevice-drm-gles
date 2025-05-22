@@ -34,6 +34,7 @@ using std::ifstream;
 #include <vdr/videodir.h>
 
 #include "mediaplayer.h"
+#include "softhddevice.h"
 
 extern "C"
 {
@@ -50,7 +51,7 @@ extern "C"
 //	cPlayer Mediaplayer
 //////////////////////////////////////////////////////////////////////////////
 
-cSoftHdPlayer::cSoftHdPlayer(const char *Url)
+cSoftHdPlayer::cSoftHdPlayer(const char *Url, cSoftHdDevice *device)
 :cPlayer (pmAudioVideo)
 {
 //	pPlayer= this;
@@ -64,6 +65,7 @@ cSoftHdPlayer::cSoftHdPlayer(const char *Url)
 	}
 	Pause = 0;
 	Random = 0;
+	Device = device;
 //	Debug2(L_MEDIA, "cSoftHdPlayer: Player gestartet.");
 }
 
@@ -267,12 +269,12 @@ repeat:
 			av_seek_frame(format, format->streams[jump_stream_index]->index,
 				packet.pts + (int64_t)(Jump /		// - BufferOffset
 				av_q2d(format->streams[jump_stream_index]->time_base)), 0);
-			Clear();
+			Device->Clear();
 			Jump = 0;
 		}
 
 		if (StopPlay)
-			Clear();
+			Device->Clear();
 
 		av_packet_unref(&packet);
 	}
@@ -302,13 +304,14 @@ cSoftHdPlayer *cSoftHdControl::pPlayer = NULL;
 /**
 **	Player control constructor.
 */
-cSoftHdControl::cSoftHdControl(const char *Url)
-:cControl(pPlayer = new cSoftHdPlayer(Url))
+cSoftHdControl::cSoftHdControl(const char *Url, cSoftHdDevice *device)
+:cControl(pPlayer = new cSoftHdPlayer(Url, device))
 {
 //	Debug2(L_MEDIA, "cSoftHdControl: Player gestartet.");
 	pControl = this;
 	Close = 0;
 	pOsd = NULL;
+	Device = device;
 }
 
 /**
@@ -374,7 +377,7 @@ eOSState cSoftHdControl::ProcessKey(eKeys key)
 		case kPlay:
 			if (pPlayer->Pause) {
 				pPlayer->Pause = 0;
-				Play();
+				Device->Play();
 			}
 			break;
 
@@ -394,10 +397,10 @@ eOSState cSoftHdControl::ProcessKey(eKeys key)
 		case kPause:
 			if (pPlayer->Pause) {
 				pPlayer->Pause = 0;
-				Play();
+				Device->Play();
 			} else {
 				pPlayer->Pause = 1;
-				Freeze();
+				Device->Freeze();
 			}
 			break;
 
@@ -421,12 +424,13 @@ cSoftHdMenu *cSoftHdMenu::pSoftHdMenu = NULL;
 /**
 **	Soft device menu constructor.
 */
-cSoftHdMenu::cSoftHdMenu(const char *title, int c0, int c1, int c2, int c3,
-    int c4)
+cSoftHdMenu::cSoftHdMenu(const char *title, cSoftHdDevice *device,
+			 int c0, int c1, int c2, int c3, int c4)
 :cOsdMenu(title, c0, c1, c2, c3, c4)
 {
 	pSoftHdMenu = this;
 	Playlist.clear();
+	Device = device;
 
 	if (cSoftHdControl::Control() && cSoftHdControl::Control()->Player()->FirstEntry) {
 		Debug2(L_MEDIA, "cSoftHdMenu: pointer to cSoftHdControl exist.");
@@ -723,7 +727,7 @@ void cSoftHdMenu::PlayMedia(const char *name)
 {
 	string aim = Path + "/" + name;
 	if (!cSoftHdControl::Control()) {
-		cControl::Launch(new cSoftHdControl(aim.c_str()));
+		cControl::Launch(new cSoftHdControl(aim.c_str(), Device));
 	} else {
 		Error("PlayMedia can't start %s",aim.c_str());
 	}

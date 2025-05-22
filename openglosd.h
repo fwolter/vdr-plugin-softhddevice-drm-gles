@@ -40,6 +40,8 @@ extern "C"
 #include "softhddev.h"
 }
 
+#include "softhddevice.h"
+
 struct sOglImage {
     GLuint texture;
     GLint width;
@@ -357,8 +359,9 @@ private:
     GLint dirtyWidth;
     GLint dirtyHeight;
     bool alphablending;
+    cSoftHdDevice *Device;
 public:
-    cOglCmdRenderFbToBufferFb(cOglFb *fb, cOglFb *buffer, GLint x, GLint y, GLint transparency, GLint drawPortX, GLint drawPortY, GLint dirtyX, GLint dirtyTop, GLint dirtyWidth, GLint dirtyHeight, bool alphablending);
+    cOglCmdRenderFbToBufferFb(cOglFb *fb, cOglFb *buffer, GLint x, GLint y, GLint transparency, GLint drawPortX, GLint drawPortY, GLint dirtyX, GLint dirtyTop, GLint dirtyWidth, GLint dirtyHeight, bool alphablending, cSoftHdDevice *device);
     virtual ~cOglCmdRenderFbToBufferFb(void) {};
     virtual const char* Description(void) { return "Render Framebuffer to Buffer"; }
     virtual bool Execute(void);
@@ -370,8 +373,9 @@ private:
     GLfloat x, y;
     GLint bcolor;
     int active;
+    cSoftHdDevice *Device;
 public:
-    cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputFb *oFb, GLint x, GLint y, int active);
+    cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputFb *oFb, GLint x, GLint y, int active, cSoftHdDevice *device);
     virtual ~cOglCmdCopyBufferToOutputFb(void) {};
     virtual const char* Description(void) { return "Copy buffer to OutputFramebuffer"; }
     virtual bool Execute(void);
@@ -597,9 +601,10 @@ private:
     bool isSubtitleOsd;
     cSize maxPixmapSize;
     cRect *dirtyViewport;
+    cSoftHdDevice *Device;
 protected:
 public:
-    cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglThread);
+    cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglThread, cSoftHdDevice *device);
     virtual ~cOglOsd();
     virtual eOsdError SetAreas(const tArea *Areas, int NumAreas);
     virtual cPixmap *CreatePixmap(int Layer, const cRect &ViewPort, const cRect &DrawPort = cRect::Null);

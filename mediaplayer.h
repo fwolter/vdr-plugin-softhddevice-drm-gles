@@ -19,6 +19,8 @@
 ///
 //////////////////////////////////////////////////////////////////////////////
 
+#include "softhddevice.h"
+
 	struct PLEntry {
 		string Path;
 		string File;
@@ -41,11 +43,12 @@ private:
 	void ReadPL(const char *);
 	char *Source;
 	int Entries;
+	cSoftHdDevice *Device;
 protected:
 	virtual void Activate(bool On);
 	virtual void Action(void);
 public:
-	cSoftHdPlayer(const char *);
+	cSoftHdPlayer(const char *, cSoftHdDevice *);
 	virtual ~ cSoftHdPlayer();
 	struct PLEntry *FirstEntry;
 	struct PLEntry *CurrentEntry;
@@ -75,8 +78,9 @@ private:
 	static cSoftHdControl *pControl;
 	static cSoftHdPlayer *pPlayer;
 	cSkinDisplayReplay *pOsd;
+	cSoftHdDevice *Device;
 public:
-	cSoftHdControl(const char *);		///< control constructor
+	cSoftHdControl(const char *, cSoftHdDevice *);		///< control constructor
 	virtual ~cSoftHdControl();		///< control destructor
 	virtual void Hide(void);		///< hide control
 	virtual cOsdObject *GetInfo(void) { return NULL; }
@@ -105,8 +109,9 @@ private:
 	string Path;
 	string LastItem;
 	string Playlist;
+	cSoftHdDevice *Device;
 public:
-	cSoftHdMenu(const char *, int = 0, int = 0, int = 0, int = 0, int = 0);
+	cSoftHdMenu(const char *, cSoftHdDevice *, int = 0, int = 0, int = 0, int = 0, int = 0);
 	virtual ~ cSoftHdMenu();
 	void PlayListMenu(void);
 	virtual eOSState ProcessKey(eKeys);

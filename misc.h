@@ -63,15 +63,20 @@ extern "C"
 typedef unsigned char uchar;
 extern int DebugLogLevel;
 
+//Error("1,2,3");
+
+
 /**
 **	Show error.
 */
-#define Error(fmt...) (void)( (SysLogLevel > 0) ? Syslog(LOG_ERR, 0, fmt) : (void)0 )
+//#define Error(fmt...) (void)( (SysLogLevel > 0) ? Syslog(LOG_ERR, 0, fmt) : (void)0 )
+#define Error(fmt...) { if (SysLogLevel > 0) { Syslog(LOG_ERR, 0, fmt); } }
 
 /**
 **	Show fatal error.
 */
-#define Fatal(fmt...) do { Error(fmt); abort(); } while (0)
+//#define Fatal(fmt...) do { Error(fmt); abort(); } while (0)
+#define Fatal(fmt...) { if (SysLogLevel > 0) { Syslog(LOG_ERR, 0, fmt);	abort(); } }
 
 /**
 **	Show warning.

@@ -20,6 +20,9 @@
 ///
 //////////////////////////////////////////////////////////////////////////////
 
+#ifndef __SOFTHDDEVICE_DRM_GLES_H
+#define __SOFTHDDEVICE_DRM_GLES_H
+
     /// vdr-plugin version number.
     /// Makefile extracts the version number for generating the file name
     /// for the distribution archive.
@@ -29,52 +32,48 @@ static const char *const VERSION = "0.4.9";
 #include "openglosd.h"
 #endif
 
+#include "softhddevice.h"
+
     /// vdr-plugin description.
 static const char *const DESCRIPTION =
 trNOOP("A software and GPU emulated HD device");
 
     /// vdr-plugin text of main menu entry
-static const char *MAINMENUENTRY = trNOOP("SHD Media Player");
-
-    /// single instance of softhddevice plugin device.
-static class cSoftHdDevice *MyDevice;
+//static const char *MAINMENUENTRY = trNOOP("SHD Media Player");
 
 //////////////////////////////////////////////////////////////////////////////
 
-static char ConfigMakePrimary;		///< config primary wanted
-#ifdef USE_GLES
-int DisableOglOsd;			///< disable OpenGL Osd (command line parameter)
-#ifdef WRITE_PNG
-char ConfigWritePngs;			///< config write pngs from OSD
-#endif
-#endif
-static char ConfigHideMainMenuEntry;	///< config hide main menu entry
+//static char ConfigMakePrimary;		///< config primary wanted
+//#ifdef USE_GLES
+//int DisableOglOsd;			///< disable OpenGL Osd (command line parameter)
+//#endif
+//static char ConfigHideMainMenuEntry;	///< config hide main menu entry
 
-static char LogState;			///< flag logging on/off
-static int ConfigLog;			///< loglevel config
+//static char LogState;			///< flag logging on/off
+//static int ConfigLog;			///< loglevel config
 
-char ConfigDisableDeint;		///< config disable deinterlacer
+//char ConfigDisableDeint;		///< config disable deinterlacer
 
-static int ConfigVideoAudioDelay;	///< config audio delay
-static char ConfigAudioPassthrough;	///< config audio pass-through mask
-static char AudioPassthroughState;	///< flag audio pass-through on/off
-static char ConfigAudioDownmix;		///< config ffmpeg audio downmix
-static char ConfigAudioSoftvol;		///< config use software volume
-static char ConfigAudioNormalize;	///< config use normalize volume
-static int ConfigAudioMaxNormalize;	///< config max normalize factor
-static char ConfigAudioCompression;	///< config use volume compression
-static int ConfigAudioMaxCompression;	///< config max volume compression
-static int ConfigAudioStereoDescent;	///< config reduce stereo loudness
-int ConfigAudioBufferTime;			///< config size ms of audio buffer
-static int ConfigAudioAutoAES;		///< config automatic AES handling
-static int ConfigAudioEq;			///< config equalizer filter 
-static int SetupAudioEqBand[18];	///< config equalizer filter bands
+//static int ConfigVideoAudioDelay;	///< config audio delay
+//static char ConfigAudioPassthrough;	///< config audio pass-through mask
+//static char AudioPassthroughState;	///< flag audio pass-through on/off
+//static char ConfigAudioDownmix;		///< config ffmpeg audio downmix
+//static char ConfigAudioSoftvol;		///< config use software volume
+//static char ConfigAudioNormalize;	///< config use normalize volume
+//static int ConfigAudioMaxNormalize;	///< config max normalize factor
+//static char ConfigAudioCompression;	///< config use volume compression
+//static int ConfigAudioMaxCompression;	///< config max volume compression
+//static int ConfigAudioStereoDescent;	///< config reduce stereo loudness
+//int ConfigAudioBufferTime;			///< config size ms of audio buffer
+//static int ConfigAudioAutoAES;		///< config automatic AES handling
+//static int ConfigAudioEq;			///< config equalizer filter 
+//static int SetupAudioEqBand[18];	///< config equalizer filter bands
 
 static volatile int DoMakePrimary;	///< switch primary device to this
 
-#ifdef USE_GLES
-static int ConfigMaxSizeGPUImageCache = 128;
-#endif
+//#ifdef USE_GLES
+//static int ConfigMaxSizeGPUImageCache = 128;
+//#endif
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -88,19 +87,19 @@ static int ConfigMaxSizeGPUImageCache = 128;
 class cSoftOsd:public cOsd
 {
   public:
-    static volatile char Dirty;		///< flag force redraw everything
+    char Dirty;		///< flag force redraw everything
     int OsdLevel;			///< current osd level FIXME: remove
 
-     cSoftOsd(int, int, uint);		///< osd constructor
-     virtual ~ cSoftOsd(void);		///< osd destructor
+    cSoftOsd(int, int, uint, cSoftHdDevice *);	///< osd constructor
+    virtual ~ cSoftOsd(void);		///< osd destructor
     /// set the sub-areas to the given areas
     virtual eOsdError SetAreas(const tArea *, int);
     virtual void Flush(void);		///< commits all data to the hardware
     virtual void SetActive(bool);	///< sets OSD to be the active one
+
+  private:
+    cSoftHdDevice *Device;
 };
-
-volatile char cSoftOsd::Dirty;		///< flag force redraw everything
-
 
 //////////////////////////////////////////////////////////////////////////////
 //	OSD provider
@@ -112,10 +111,10 @@ volatile char cSoftOsd::Dirty;		///< flag force redraw everything
 class cSoftOsdProvider:public cOsdProvider
 {
   private:
-    static cOsd *Osd;			///< single OSD
+    cOsd *Osd;			///< single OSD
 #ifdef USE_GLES
-    static std::shared_ptr<cOglThread> oglThread;
-    static bool StartOpenGlThread(void);
+    std::shared_ptr<cOglThread> oglThread;
+    bool StartOpenGlThread(void);
   protected:
     virtual int StoreImageData(const cImage &Image);
     virtual void DropImageData(int ImageHandle);
@@ -123,35 +122,16 @@ class cSoftOsdProvider:public cOsdProvider
   public:
     virtual cOsd * CreateOsd(int, int, uint);
     virtual bool ProvidesTrueColor(void);
-    cSoftOsdProvider(void);		///< OSD provider constructor
+    cSoftOsdProvider(cSoftHdDevice *);		///< OSD provider constructor
 #ifdef USE_GLES
-    static void StopOpenGlThread(void);
-    static const cImage *GetImageData(int ImageHandle);
-    static void OsdSizeChanged(void);
+    void StopOpenGlThread(void);
+    const cImage *GetImageData(int ImageHandle);
+    void OsdSizeChanged(void);
 #endif
     virtual ~cSoftOsdProvider();	///< OSD provider destructor
+  private:
+    cSoftHdDevice *Device;
 };
-
-cOsd *cSoftOsdProvider::Osd;		///< single osd
-
-#ifdef USE_GLES
-std::shared_ptr<cOglThread> cSoftOsdProvider::oglThread;	// openGL worker Thread
-
-int cSoftOsdProvider::StoreImageData(const cImage &Image)
-{
-    if (StartOpenGlThread()) {
-        int imgHandle = oglThread->StoreImage(Image);
-        return imgHandle;
-    }
-    return 0;
-}
-
-void cSoftOsdProvider::DropImageData(int imgHandle)
-{
-    if (StartOpenGlThread())
-        oglThread->DropImageData(imgHandle);
-}
-#endif
 
 //////////////////////////////////////////////////////////////////////////////
 //	cMenuSetupPage
@@ -225,65 +205,14 @@ class cMenuSetupSoft:public cMenuSetupPage
 
     /// @}
   private:
-     inline cOsdItem * CollapsedItem(const char *, int &, const char * = NULL);
+    inline cOsdItem * CollapsedItem(const char *, int &, const char * = NULL);
     void Create(void);			// create sub-menu
+    cSoftHdDevice *Device;
   protected:
-     virtual void Store(void);
+    virtual void Store(void);
   public:
-     cMenuSetupSoft(void);
+    cMenuSetupSoft(cSoftHdDevice *);
     virtual eOSState ProcessKey(eKeys);	// handle input
-};
-
-//////////////////////////////////////////////////////////////////////////////
-//	cDevice
-//////////////////////////////////////////////////////////////////////////////
-
-class cSoftHdDevice:public cDevice
-{
-  public:
-    cSoftHdDevice(void);
-    virtual ~ cSoftHdDevice(void);
-
-    virtual cString DeviceName(void) const { return "softhddevice-drm-gles"; }
-
-    virtual bool HasDecoder(void) const;
-    virtual bool CanReplay(void) const;
-    virtual bool SetPlayMode(ePlayMode);
-    virtual void TrickSpeed(int, bool);
-    virtual void Clear(void);
-    virtual void Play(void);
-    virtual void Freeze(void);
-    virtual void Mute(void);
-    virtual void StillPicture(const uchar *, int);
-    virtual bool Poll(cPoller &, int = 0);
-    virtual bool Flush(int = 0);
-    virtual int64_t GetSTC(void);
-    virtual cRect CanScaleVideo(const cRect &, int taCenter);
-    virtual void ScaleVideo(const cRect & = cRect::Null);
-    virtual void SetVideoDisplayFormat(eVideoDisplayFormat);
-    virtual void SetVideoFormat(bool);
-    virtual void GetVideoSize(int &, int &, double &);
-    virtual void GetOsdSize(int &, int &, double &);
-    virtual int PlayVideo(const uchar *, int);
-    virtual int PlayAudio(const uchar *, int, uchar);
-    virtual void SetAudioChannelDevice(int);
-    virtual int GetAudioChannelDevice(void);
-    virtual void SetDigitalAudioDevice(bool);
-    virtual void SetAudioTrackDevice(eTrackType);
-    virtual void SetVolumeDevice(int);
-
-// Image Grab facilities
-
-    virtual uchar *GrabImage(int &, bool, int, int, int);
-
-// SPU facilities
-  private:
-    cDvbSpuDecoder * spuDecoder;
-  public:
-    virtual cSpuDecoder * GetSpuDecoder(void);
-
-  protected:
-    virtual void MakePrimaryDevice(bool);
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -309,5 +238,8 @@ class cPluginSoftHdDevice:public cPlugin
     virtual bool Service(const char *, void * = NULL);
     virtual const char **SVDRPHelpPages(void);
     virtual cString SVDRPCommand(const char *, const char *, int &);
+  private:
+    cSoftHdDevice *Device;
 };
 
+#endif
