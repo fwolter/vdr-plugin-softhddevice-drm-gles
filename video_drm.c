@@ -89,11 +89,6 @@ static pthread_t GrabbingThread;
 static pthread_t DisplayThread;
 static pthread_mutex_t DisplayQueue;
 
-extern int ConfigDisableDeint;
-#ifdef USE_GLES
-int DisableOglOsd;
-#endif
-
 //----------------------------------------------------------------------------
 //	Helper functions
 //----------------------------------------------------------------------------
@@ -965,7 +960,7 @@ find_mode:
 		render->use_zpos);
 
 #ifdef USE_GLES
-	if (DisableOglOsd)
+	if (render->DisableOglOsd)
 		return 0;
 
 	// init gbm
@@ -1472,7 +1467,7 @@ dequeue:
 	render->Flushing = 0;
 	render->Closing = 0;
 	render->FilterClosing = 0;
-	render->FilterDeintDisabled = ConfigDisableDeint;
+	render->FilterDeintDisabled = render->ConfigFilterDeintDisabled;
 	pthread_mutex_unlock(&WaitCleanMutex);
 
 	Debug("CleanDisplayThread: DRM cleaned.");
@@ -2060,7 +2055,7 @@ static void *DisplayHandlerThread(void * arg)
 void VideoOsdClear(VideoRender * render)
 {
 #ifdef USE_GLES
-	if (DisableOglOsd) {
+	if (render->DisableOglOsd) {
 		memset((void *)render->buf_osd->plane[0], 0,
 			(size_t)(render->buf_osd->pitch[0] * render->buf_osd->height));
 	} else {
@@ -2116,7 +2111,7 @@ void VideoOsdDrawARGB(VideoRender * render, int xi, int yi,
 		const uint8_t * argb, int x, int y)
 {
 #ifdef USE_GLES
-	if (DisableOglOsd) {
+	if (render->DisableOglOsd) {
 		Debug2(L_OSD, "VideoOsdDrawARGB width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d",
 		       width, height, pitch, argb, x, y, render->buf_osd->pitch[0], xi, yi);
 		for (int i = 0; i < height; ++i) {
@@ -2270,7 +2265,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	render->Flushing = 0;
 	render->FlushLast = 0;
 	render->FilterClosing = 0;
-	render->FilterDeintDisabled = ConfigDisableDeint;
+	render->FilterDeintDisabled = render->ConfigFilterDeintDisabled;
 	render->enqueue_buffer = 0;
 	render->lastframe = calloc(1, sizeof(struct lastFrame));
 	VideoResume(render);
@@ -3262,7 +3257,7 @@ void VideoInit(VideoRender * render)
 		Fatal("VideoOsdInit: SetupFB FB OSD failed!");
 	}
 #else
-	if (DisableOglOsd) {
+	if (render->DisableOglOsd) {
 		if (!render->buf_osd)
 			render->buf_osd = calloc(1, sizeof(struct drm_buf));
 		render->buf_osd->pix_fmt = DRM_FORMAT_ARGB8888;
@@ -3325,7 +3320,7 @@ void VideoInit(VideoRender * render)
 
 	SetPlane(ModeReq, render->planes[OSD_PLANE]);
 #else
-	if (DisableOglOsd) {
+	if (render->DisableOglOsd) {
 		render->planes[OSD_PLANE]->properties.crtc_id = render->crtc_id;
 		render->planes[OSD_PLANE]->properties.fb_id = render->buf_osd->fb_id;
 		render->planes[OSD_PLANE]->properties.crtc_x = 0;
@@ -3409,7 +3404,7 @@ void VideoExit(VideoRender * render)
 
 		DestroyFB(render->fd_drm, &render->buf_black);
 #ifdef USE_GLES
-		if (DisableOglOsd) {
+		if (render->DisableOglOsd) {
 			if (render->buf_osd) {
 				DestroyFB(render->fd_drm, render->buf_osd);
 				free(render->buf_osd);
@@ -3455,4 +3450,14 @@ void VideoSetOutputPosition(VideoRender *render, int x, int y, int width, int he
 int VideoCodecMode(VideoRender * render)
 {
 	return render->CodecMode;
+}
+
+void VideoSetDisableDeint(VideoRender * render, int disable)
+{
+	render->ConfigFilterDeintDisabled = disable;
+}
+
+void VideoSetDisableOglOsd(VideoRender * render)
+{
+	render->DisableOglOsd = 1;
 }

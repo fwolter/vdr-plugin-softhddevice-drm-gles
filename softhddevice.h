@@ -93,6 +93,36 @@ class cSoftHdDevice:public cDevice
     char GetConfigWritePngs(void) { return ConfigWritePngs; };
 #endif
 #endif
+
+// Menu config variables
+  public:
+    int ConfigVideoAudioDelay;		///< config audio delay
+    char ConfigAudioPassthrough;	///< config audio pass-through mask
+    char AudioPassthroughState;		///< flag audio-passthrough on/off
+    char ConfigAudioDownmix;		///< config ffmpeg audio downmix
+    char ConfigAudioSoftvol;		///< config use software volume
+    char ConfigAudioNormalize;		///< config use normalize volume
+    int ConfigAudioMaxNormalize;	///< config max normalize factor
+    char ConfigAudioCompression;	///< config use volume compression
+    int ConfigAudioMaxCompression;	///< config max volume compression
+    int ConfigAudioStereoDescent;	///< config reduce stereo loudness
+    int ConfigAudioBufferTime;			///< config size ms of audio buffer
+    int ConfigAudioAutoAES;		///< config automatic AES handling
+    int ConfigAudioEq;			///< config equalizer filter 
+    int SetupAudioEqBand[18];		///< config equalizer filter bands
+
+    char ConfigMakePrimary;		///< config primary wanted
+    char ConfigHideMainMenuEntry;	///< config hide main menu entry
+    char LogState;			///< flag logging on/off
+    int ConfigLog;			///< loglevel config
+
+    int ConfigDisableDeint;		///< disable deinterlacer
+    void SetDisableDeint(void);
+#ifdef USE_GLES
+    int ConfigMaxSizeGPUImageCache = 128;
+    int ConfigDisableOglOsd;
+    void SetDisableOglOsd(void);
+#endif
 };
 
 #endif

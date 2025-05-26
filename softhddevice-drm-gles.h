@@ -23,66 +23,33 @@
 #ifndef __SOFTHDDEVICE_DRM_GLES_H
 #define __SOFTHDDEVICE_DRM_GLES_H
 
-    /// vdr-plugin version number.
-    /// Makefile extracts the version number for generating the file name
-    /// for the distribution archive.
-static const char *const VERSION = "0.4.9";
-
 #ifdef USE_GLES
 #include "openglosd.h"
 #endif
 
 #include "softhddevice.h"
 
+//////////////////////////////////////////////////////////////////////////////
+//	Static Variables
+//////////////////////////////////////////////////////////////////////////////
+
+    /// vdr-plugin version number.
+    /// Makefile extracts the version number for generating the file name
+    /// for the distribution archive.
+static const char *const VERSION = "0.4.9";
+
     /// vdr-plugin description.
-static const char *const DESCRIPTION =
-trNOOP("A software and GPU emulated HD device");
+static const char *const DESCRIPTION = trNOOP("A software and GPU emulated HD device");
 
-    /// vdr-plugin text of main menu entry
-//static const char *MAINMENUENTRY = trNOOP("SHD Media Player");
-
-//////////////////////////////////////////////////////////////////////////////
-
-//static char ConfigMakePrimary;		///< config primary wanted
-//#ifdef USE_GLES
-//int DisableOglOsd;			///< disable OpenGL Osd (command line parameter)
-//#endif
-//static char ConfigHideMainMenuEntry;	///< config hide main menu entry
-
-//static char LogState;			///< flag logging on/off
-//static int ConfigLog;			///< loglevel config
-
-//char ConfigDisableDeint;		///< config disable deinterlacer
-
-//static int ConfigVideoAudioDelay;	///< config audio delay
-//static char ConfigAudioPassthrough;	///< config audio pass-through mask
-//static char AudioPassthroughState;	///< flag audio pass-through on/off
-//static char ConfigAudioDownmix;		///< config ffmpeg audio downmix
-//static char ConfigAudioSoftvol;		///< config use software volume
-//static char ConfigAudioNormalize;	///< config use normalize volume
-//static int ConfigAudioMaxNormalize;	///< config max normalize factor
-//static char ConfigAudioCompression;	///< config use volume compression
-//static int ConfigAudioMaxCompression;	///< config max volume compression
-//static int ConfigAudioStereoDescent;	///< config reduce stereo loudness
-//int ConfigAudioBufferTime;			///< config size ms of audio buffer
-//static int ConfigAudioAutoAES;		///< config automatic AES handling
-//static int ConfigAudioEq;			///< config equalizer filter 
-//static int SetupAudioEqBand[18];	///< config equalizer filter bands
-
-static volatile int DoMakePrimary;	///< switch primary device to this
-
-//#ifdef USE_GLES
-//static int ConfigMaxSizeGPUImageCache = 128;
-//#endif
-
-//////////////////////////////////////////////////////////////////////////////
+    /// what is displayed in the main menu
+static const char *const MAINMENUENTRY = trNOOP("SHD Media Player");
 
 //////////////////////////////////////////////////////////////////////////////
 //	OSD
 //////////////////////////////////////////////////////////////////////////////
 
 /**
-**	Soft device plugin OSD class.
+**	cSoftOsd - SoftHdDevice plugin software OSD class
 */
 class cSoftOsd:public cOsd
 {
@@ -106,7 +73,7 @@ class cSoftOsd:public cOsd
 //////////////////////////////////////////////////////////////////////////////
 
 /**
-**	Soft device plugin OSD provider class.
+**	cSoftOsdProvider - SoftHdDevice plugin OSD provider class
 */
 class cSoftOsdProvider:public cOsdProvider
 {
@@ -134,11 +101,11 @@ class cSoftOsdProvider:public cOsdProvider
 };
 
 //////////////////////////////////////////////////////////////////////////////
-//	cMenuSetupPage
+//	Menu
 //////////////////////////////////////////////////////////////////////////////
 
 /**
-**	Soft device plugin menu setup page class.
+**	cMenuSetupSoft - SoftHdDevice plugin menu setup page class
 */
 class cMenuSetupSoft:public cMenuSetupPage
 {
@@ -216,9 +183,12 @@ class cMenuSetupSoft:public cMenuSetupPage
 };
 
 //////////////////////////////////////////////////////////////////////////////
-//	cPlugin
+//	Plugin
 //////////////////////////////////////////////////////////////////////////////
 
+/**
+**	cPluginSoftHdDevice - SoftHdDevice plugin class
+*/
 class cPluginSoftHdDevice:public cPlugin
 {
   public:
@@ -240,6 +210,7 @@ class cPluginSoftHdDevice:public cPlugin
     virtual cString SVDRPCommand(const char *, const char *, int &);
   private:
     cSoftHdDevice *Device;
+    int DoMakePrimary;	///< switch primary device to this
 };
 
 #endif

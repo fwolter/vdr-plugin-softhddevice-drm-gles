@@ -55,40 +55,6 @@ extern "C" {
 #include "buf2rgb.h"
 }
 
-/*
-#define __STDC_CONSTANT_MACROS		///< needed for ffmpeg UINT64_C
-
-#include <string>
-using std::string;
-#include <fstream>
-using std::ifstream;
-
-#include <vdr/player.h>
-#include <vdr/plugin.h>
-//#include <vdr/dvbspu.h>
-
-#include "softhddevice-drm-gles.h"
-#include "softhddevice.h"
-#include "mediaplayer.h"
-#include "misc.h"
-
-#ifdef USE_GLES
-#include "openglosd.h"
-#endif
-*/
-
-
-
-//////////////////////////////////////////////////////////////////////////////
-//	Variables
-//////////////////////////////////////////////////////////////////////////////
-
-extern int ConfigAudioBufferTime;	///< config size ms of audio buffer
-#ifdef USE_GLES
-extern int DisableOglOsd;		///< disable OpenGL OSD (command line parameter)
-#endif
-
-
 //////////////////////////////////////////////////////////////////////////////
 //	Video
 //////////////////////////////////////////////////////////////////////////////
@@ -140,7 +106,6 @@ static enum AVCodecID AudioCodecID;	///< current codec id
 static int AudioChannelID;		///< current audio channel id
 static int AudioPassthrough;
 int DebugLogLevel;
-//static VideoStream *AudioSyncStream;	///< video stream for audio/video sync
 
     /// Minimum free space in audio buffer 8 packets for 8 channels
 #define AUDIO_MIN_BUFFER_FREE (3072 * 8 * 8)
@@ -157,26 +122,6 @@ void PrintStreamData(const uint8_t *data, int size)
 		data[18], data[19], data[20], data[21], data[22], data[23], data[24], data[25], data[26],
 		data[27], data[28], data[29], data[30], data[31], data[32], data[33], data[34], size);
 }
-
-/**
-**	Read if there a PES packet length in PES header.
-**
-**	@returns 0 or 1
-*/
-//static inline int PesHasLength(const uint8_t *p)
-//{
-//  return p[4] | p[5];
-//}
-
-/**
-**	Read the PES packet length from PES header.
-**
-**	@returns length
-*/
-//static inline int PesLength(const uint8_t *p)
-//{
-//  return 6 + p[4] * 256 + p[5];
-//}
 
 //////////////////////////////////////////////////////////////////////////////
 //	Audio codec parser
@@ -1326,6 +1271,9 @@ void cSoftHdDevice::Start(void)
 	}
 
 	if ((MyVideoStream->Render = VideoNewRender(MyVideoStream))) {
+	    if (ConfigDisableOglOsd)
+		VideoSetDisableOglOsd(MyVideoStream->Render);
+	    VideoSetDisableDeint(MyVideoStream->Render, ConfigDisableDeint);
 	    VideoInit(MyVideoStream->Render);
 	    MyVideoStream->Decoder = new cVideoDecoder(MyVideoStream->Render);
 	    VideoPacketInit(MyVideoStream);
@@ -2435,7 +2383,7 @@ int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
 #ifdef USE_GLES
 	    case 'w':			// workarounds
 		if (!strcasecmp("disable-ogl-osd", optarg)) {
-		    DisableOglOsd = 1;
+		    SetDisableOglOsd();
 		} else {
 		    fprintf(stderr, _("Workaround '%s' unsupported\n"),
 			optarg);
@@ -2463,4 +2411,17 @@ int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
     }
 
     return 1;
+}
+
+void cSoftHdDevice::SetDisableDeint(void)
+{
+	if (MyVideoStream->Render)
+		VideoSetDisableDeint(MyVideoStream->Render, ConfigDisableDeint);
+}
+
+void cSoftHdDevice::SetDisableOglOsd(void)
+{
+	ConfigDisableOglOsd = 1;
+	if (MyVideoStream->Render)
+		VideoSetDisableOglOsd(MyVideoStream->Render);
 }

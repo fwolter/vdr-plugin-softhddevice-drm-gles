@@ -172,7 +172,9 @@ struct _Drm_Render_
 	int Filter_Trick;		///< FilterHandlerThread handles trickframes
 	int Filter_Still;		///< FilterHandlerThread handles trickframes
 	int Filter_Frames;
-	int FilterDeintDisabled;	///< Deinterlacer is disabled via setup
+	int FilterDeintDisabled;	///< Deinterlacer disabled flag
+	int ConfigFilterDeintDisabled;	///< Deinterlacer is disabled set via setup
+	int DisableOglOsd;		///< ogl osd disabled flag
 	int startgrab;			///< flag for triggering grabbing
 	int grabvideoready;		///< flag for finished video grabbing
 	int grabosdready;		///< flag for finished osd grabbing
@@ -323,6 +325,8 @@ extern void VideoInit(VideoRender *);	///< Setup video module.
 extern void VideoExit(VideoRender *);		///< Cleanup and exit video module.
 
 extern int VideoCodecMode(VideoRender *);
+extern void VideoSetDisableDeint(VideoRender *, int);
+extern void VideoSetDisableOglOsd(VideoRender *);
 
 /// @}
 #endif
