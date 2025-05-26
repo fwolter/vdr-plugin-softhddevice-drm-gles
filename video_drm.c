@@ -1310,7 +1310,7 @@ static void *GrabHandlerThread(void *arg)
 {
 	VideoRender * render = (VideoRender *)arg;
 
-	Debug2(L_GRAB, "video: grabbing thread started");
+	Debug2(L_GRAB, "GrabHandlerThread: thread started");
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
@@ -1340,7 +1340,7 @@ static void *GrabHandlerThread(void *arg)
 		free(osdbuf);
 	}
 
-	Debug2(L_GRAB, "video: grabbing thread ended");
+	Debug2(L_GRAB, "GrabHandlerThread: thread ended");
 	pthread_exit((void *)pthread_self());
 }
 
@@ -1554,7 +1554,7 @@ static int VideoDrmCommit(VideoRender *render, struct drm_buf *buf, int skip_vid
 	dirty += 2;
 
 	if (render->startgrab) {
-		Debug2(L_DRM, "Frame2Display: Trigger video grab arrived");
+		Debug2(L_GRAB, "Frame2Display: Trigger video grab arrived");
 		VideoCloneBuf(&render->grabvideo->buf, buf);
 		// should be the size on screen
 		render->grabvideo->x = DispX + (DispWidth - PicWidth) / 2;
@@ -1597,7 +1597,7 @@ skip_video:
 
 	if (render->startgrab) {
 		if (render->buf_osd && render->OsdShown) {
-			Debug2(L_DRM, "Frame2Display: Trigger osd grab arrived");
+			Debug2(L_GRAB, "Frame2Display: Trigger osd grab arrived");
 			VideoCloneBuf(&render->grabosd->buf, render->buf_osd);
 			// should be the size on screen
 			render->grabosd->x = 0;
