@@ -24,6 +24,11 @@
 
 #include <vdr/dvbspu.h>
 
+extern "C"
+{
+#include <libavcodec/avcodec.h>
+}
+
 //////////////////////////////////////////////////////////////////////////////
 //	cDevice
 //////////////////////////////////////////////////////////////////////////////
@@ -123,6 +128,24 @@ class cSoftHdDevice:public cDevice
     int ConfigDisableOglOsd;
     void SetDisableOglOsd(void);
 #endif
+
+// OSD
+    void OsdClose(void);
+    void OsdDrawARGB(int, int, int, int, int, const uint8_t *, int, int);
+
+// Audio
+    void SetPassthrough(int);	///< Set audio passthrough mask
+    void ResetChannelId(void);
+
+// Logging, statistics
+    void SetLogLevel(int);
+    void GetStats(int *, int *, int *);
+
+// Mediaplayer
+    void SetAudioCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
+    void SetVideoCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
+    int PlayAudioPkts(AVPacket *);
+    int PlayVideoPkts(AVPacket *);
 };
 
 #endif

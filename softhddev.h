@@ -38,28 +38,12 @@ extern "C"
 //----------------------------------------------------------------------------
 //	Prototypes
 //----------------------------------------------------------------------------
-    /// C plugin close osd
-    extern void OsdClose(void);
-    /// C plugin draw osd pixmap
-    extern void OsdDrawARGB(int, int, int, int, int, const uint8_t *, int,
-		int);
-
-    /// C plugin play media file
-    extern void SetAudioCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
-    extern void SetVideoCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
-    extern int PlayAudioPkts(AVPacket *);
-    extern int PlayVideoPkts(AVPacket *);
-
-    /// C plugin reset channel id (restarts audio)
-    extern void ResetChannelId(void);
 
     /// Decode video input buffers.
     extern int VideoDecodeInput(VideoStream *);
     /// Get number of input buffers.
     extern int VideoGetPackets(void);
 
-    /// Get decoder statistics
-    extern void GetStats(int *, int *, int *);
     /// Get parsed width and height
     extern void ParseResolutionH264(int *, int *);
 
@@ -67,12 +51,6 @@ extern "C"
     extern void *GetVideoRender(void);
     /// Set interlaced stream flag
     extern void SetInterlacedStream(int);
-
-    /// Set audio passthrough mask
-    extern void SetPassthrough(int);
-
-    /// Set loglevel
-    extern void SetLogLevel(int);
 
 #ifdef __cplusplus
 }

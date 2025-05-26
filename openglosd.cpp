@@ -1338,9 +1338,9 @@ bool cOglCmdCopyBufferToOutputFb::Execute(void) {
     GL_CHECK(glFinish());
     // eglSwapBuffers and gbm_surface_lock_front_buffer in OsdDrawARGB()
     if (active)
-        OsdDrawARGB(0, 0, oFb->Width(), oFb->Height(), 0, 0, 0, 0);
+        Device->OsdDrawARGB(0, 0, oFb->Width(), oFb->Height(), 0, 0, 0, 0);
     else
-        OsdClose();
+        Device->OsdClose();
 
 #ifdef WRITE_PNG
     // Read back oFb framebuffer

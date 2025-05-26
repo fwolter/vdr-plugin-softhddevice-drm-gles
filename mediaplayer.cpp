@@ -212,7 +212,7 @@ void cSoftHdPlayer::Player(const char *url)
 
 	for (unsigned int i = 0; i < format->nb_streams; i++) {
 		if (format->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-			SetAudioCodec(format->streams[i]->codecpar->codec_id,
+			Device->SetAudioCodec(format->streams[i]->codecpar->codec_id,
 				format->streams[i]->codecpar, &format->streams[i]->time_base);
 			audio_stream_index = jump_stream_index = i;
 			break;
@@ -225,7 +225,7 @@ void cSoftHdPlayer::Player(const char *url)
 	if (video_stream_index < 0) {
 		Debug2(L_MEDIA, "Player: stream does not seem to contain video");
 	} else {
-		 SetVideoCodec(video_codec->id,
+		Device->SetVideoCodec(video_codec->id,
 			format->streams[video_stream_index]->codecpar,
 			&format->streams[video_stream_index]->time_base);
 		jump_stream_index = video_stream_index;
@@ -239,7 +239,7 @@ void cSoftHdPlayer::Player(const char *url)
 		if (err == 0) {
 repeat:
 			if (audio_stream_index == packet.stream_index) {
-				if (!PlayAudioPkts(&packet)) {
+				if (!Device->PlayAudioPkts(&packet)) {
 					usleep(packet.duration * AV_TIME_BASE *
 						av_q2d(format->streams[audio_stream_index]->time_base));
 					goto repeat;
@@ -248,7 +248,7 @@ repeat:
 			}
 
 			if (video_stream_index == packet.stream_index) {
-				if (!PlayVideoPkts(&packet)) {
+				if (!Device->PlayVideoPkts(&packet)) {
 					usleep(packet.duration * AV_TIME_BASE *
 						av_q2d(format->streams[video_stream_index]->time_base));
 					goto repeat;

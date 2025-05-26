@@ -77,7 +77,7 @@ void cSoftOsd::SetActive(bool on)
 	    Flush();
 	}
     } else {
-	OsdClose();
+	Device->OsdClose();
     }
 }
 
@@ -132,7 +132,7 @@ eOsdError cSoftOsd::SetAreas(const tArea * areas, int n)
 	}
     }
     if (Active()) {
-	OsdClose();
+	Device->OsdClose();
 	Dirty = 1;
     }
     return cOsd::SetAreas(areas, n);
@@ -249,7 +249,7 @@ void cSoftOsd::Flush(void)
 	    }
 	    Debug2(L_OSD, "OSD %s: draw %dx%d%+d%+d bm", __FUNCTION__, w, h,
 		xs + x1, ys + y1);
-	    OsdDrawARGB(0, 0, w, h, w * sizeof(uint32_t), argb, xs + x1,
+	    Device->OsdDrawARGB(0, 0, w, h, w * sizeof(uint32_t), argb, xs + x1,
 		ys + y1);
 
 	    bitmap->Clean();
@@ -329,7 +329,7 @@ void cSoftOsd::Flush(void)
 	}
 	Debug2(L_OSD, "OSD %s: draw %dx%d%+d%+d*%d -> %+d%+d %p",
 	    __FUNCTION__, w, h, xp, yp, stride, x, y, pm->Data());
-	OsdDrawARGB(xp, yp, w, h, stride, pm->Data(), x, y);
+	Device->OsdDrawARGB(xp, yp, w, h, stride, pm->Data(), x, y);
 
 	DestroyPixmap(pm);
     }
@@ -554,7 +554,7 @@ void cMenuSetupSoft::Create(void)
 	int duped;
 	int dropped;
 	int counter;
-	GetStats(&duped, &dropped, &counter);
+	Device->GetStats(&duped, &dropped, &counter);
 	Add(new cOsdItem(cString::sprintf(tr
 		(" Frames duped(%d) dropped(%d) total(%d)"),
 		duped, dropped, counter), osUnknown, false));
@@ -882,10 +882,10 @@ void cMenuSetupSoft::Store(void)
     Device->LogState = LogDefault;
     if (Device->LogState) {
 	SetupStore("LogLevel", Device->ConfigLog);
-	SetLogLevel(Device->ConfigLog);
+	Device->SetLogLevel(Device->ConfigLog);
     } else {
 	SetupStore("LogLevel", -Device->ConfigLog);
-	SetLogLevel(0);
+	Device->SetLogLevel(0);
     }
 
     SetupStore("DisableDeint", Device->ConfigDisableDeint = DisableDeint);
@@ -897,7 +897,7 @@ void cMenuSetupSoft::Store(void)
     // FIXME: can handle more audio state changes here
     // downmix changed reset audio, to get change direct
     if (Device->ConfigAudioDownmix != AudioDownmix) {
-	ResetChannelId();
+	Device->ResetChannelId();
     }
     Device->ConfigAudioPassthrough = (AudioPassthroughPCM ? CodecPCM : 0)
 	| (AudioPassthroughAC3 ? CodecAC3 : 0)
@@ -906,10 +906,10 @@ void cMenuSetupSoft::Store(void)
     Device->AudioPassthroughState = AudioPassthroughDefault;
     if (Device->AudioPassthroughState) {
 	SetupStore("AudioPassthrough", Device->ConfigAudioPassthrough);
-	SetPassthrough(Device->ConfigAudioPassthrough);
+	Device->SetPassthrough(Device->ConfigAudioPassthrough);
     } else {
 	SetupStore("AudioPassthrough", -Device->ConfigAudioPassthrough);
-	SetPassthrough(0);
+	Device->SetPassthrough(0);
     }
     SetupStore("AudioDownmix", Device->ConfigAudioDownmix = AudioDownmix);
     AudioSetDownmix(Device->ConfigAudioDownmix);
@@ -1144,9 +1144,9 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 	Device->LogState = i > 0;
 	Device->ConfigLog = abs(i);
 	if (Device->LogState) {
-	    SetLogLevel(Device->ConfigLog);
+	    Device->SetLogLevel(Device->ConfigLog);
 	} else {
-	    SetLogLevel(0);
+	    Device->SetLogLevel(0);
 	}
 	return true;
     }
@@ -1166,9 +1166,9 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 	Device->AudioPassthroughState = i > 0;
 	Device->ConfigAudioPassthrough = abs(i);
 	if (Device->AudioPassthroughState) {
-	    SetPassthrough(Device->ConfigAudioPassthrough);
+	    Device->SetPassthrough(Device->ConfigAudioPassthrough);
 	} else {
-	    SetPassthrough(0);
+	    Device->SetPassthrough(0);
 	}
 	return true;
     }

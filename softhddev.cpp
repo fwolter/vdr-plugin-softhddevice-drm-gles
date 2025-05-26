@@ -500,16 +500,6 @@ static int AdtsCheck(const uint8_t * data, int size)
     return 0;
 }
 
-/**
-***	Resets channel ID (restarts audio).
-**/
-void ResetChannelId(void)
-{
-    Debug("ResetChannelId:");
-    AudioChannelID = -1;
-    Debug("audio/demux: reset channel id");
-}
-
 //////////////////////////////////////////////////////////////////////////////
 //	Video
 //////////////////////////////////////////////////////////////////////////////
@@ -1065,60 +1055,6 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
 }
 #endif
 
-
-//////////////////////////////////////////////////////////////////////////////
-//	mediaplayer functions
-//////////////////////////////////////////////////////////////////////////////
-
-void SetAudioCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
-{
-	MyAudioDecoder->Open(codec_id, par, timebase);
-}
-
-void SetVideoCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
-{
-	MyVideoStream->CodecID = codec_id;
-	MyVideoStream->NewStream = 1;
-	MyVideoStream->Par = par;
-	MyVideoStream->timebase.num = timebase->num;
-	MyVideoStream->timebase.den = timebase->den;
-}
-
-int PlayAudioPkts(AVPacket * pkt)
-{
-	if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
-//		Error("PlayAudioPkts: AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
-		return 0;
-	}
-	MyAudioDecoder->Decode(pkt);
-	return 1;
-}
-
-int PlayVideoPkts(AVPacket * pkt)
-{
-	AVPacket *avpkt;
-
-	if (atomic_read(&MyVideoStream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
-		return 0;
-	}
-
-	avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketWrite];
-	MyVideoStream->PacketWrite = (MyVideoStream->PacketWrite + 1) % VIDEO_PACKET_MAX;
-	atomic_inc(&MyVideoStream->PacketsFilled);
-
-	if ((size_t)pkt->size > avpkt->buf->size) {
-		Info("PlayVideoPkts: grow packet buffer size by %d",
-			(int)(pkt->size - avpkt->buf->size + AV_INPUT_BUFFER_PADDING_SIZE));
-		av_grow_packet(avpkt, pkt->size - avpkt->buf->size +
-			AV_INPUT_BUFFER_PADDING_SIZE);
-	}
-
-	memcpy(avpkt->data, pkt->data, pkt->size);
-	avpkt->pts = pkt->pts;
-	avpkt->size = pkt->size;
-	return 1;
-}
-
 void *GetVideoRender()
 {
 	return (void *)(MyVideoStream->Render);
@@ -1130,105 +1066,6 @@ void SetInterlacedStream(int interlaced)
 	MyVideoStream->interlaced = interlaced;
 }
 
-void SetPassthrough(int mask)
-{
-	AudioPassthrough = mask;
-	AudioSetPassthrough(mask);
-	if (MyAudioDecoder)
-		MyAudioDecoder->SetPassthrough(mask);
-}
-
-/**
-**	Set log level
-*/
-void SetLogLevel(int loglevel)
-{
-	DebugLogLevel = loglevel;
-
-	if (!loglevel)
-		return;
-
-	char prefix[256] = "Set loglevels:";
-	if (loglevel & L_DEBUG)
-		strcat(prefix, " standard debugs,");
-	if (loglevel & L_AV_SYNC)
-		strcat(prefix, " AV-Sync,");
-	if (loglevel & L_SOUND)
-		strcat(prefix, " sound,");
-	if (loglevel & L_OSD)
-		strcat(prefix, " osd,");
-	if (loglevel & L_DRM)
-		strcat(prefix, " drm,");
-	if (loglevel & L_CODEC)
-		strcat(prefix, " codec,");
-	if (loglevel & L_STILL)
-		strcat(prefix, " stillpicture,");
-	if (loglevel & L_TRICK)
-		strcat(prefix, " trickspeed,");
-	if (loglevel & L_MEDIA)
-		strcat(prefix, " mediaplayer,");
-	if ((loglevel & L_OPENGL) ||
-	    (loglevel & L_OPENGL_TIME) ||
-	    (loglevel & L_OPENGL_TIME_ALL))
-		strcat(prefix, " OpenGL OSD,");
-	if (loglevel & L_PACKET)
-		strcat(prefix, " packet tracking,");
-	if (loglevel & L_GRAB)
-		strcat(prefix, " grabbing");
-
-	Info("%s", prefix);
-}
-
-
-/**
-**	Get decoder statistics.
-**
-**	@param[out] duped	duped frames
-**	@param[out] dropped	dropped frames
-**	@param[out] count	number of decoded frames
-*/
-void GetStats(int *duped, int *dropped, int *counter)
-{
-	*duped = 0;
-	*dropped = 0;
-	*counter = 0;
-	if (MyVideoStream->Render) {
-		VideoGetStats(MyVideoStream->Render, duped, dropped, counter);
-	}
-}
-
-
-
-//////////////////////////////////////////////////////////////////////////////
-//	OSD
-//////////////////////////////////////////////////////////////////////////////
-
-/**
-**	Close OSD.
-*/
-void OsdClose(void)
-{
-    VideoOsdClear(MyVideoStream->Render);
-}
-
-/**
-**	Draw an OSD pixmap.
-**
-**	@param xi	x-coordinate in argb image
-**	@param yi	y-coordinate in argb image
-**	@paran height	height in pixel in argb image
-**	@paran width	width in pixel in argb image
-**	@param pitch	pitch of argb image
-**	@param argb	32bit ARGB image data
-**	@param x	x-coordinate on screen of argb image
-**	@param y	y-coordinate on screen of argb image
-*/
-void OsdDrawARGB(int xi, int yi, int height, int width, int pitch,
-	const uint8_t * argb, int x, int y)
-{
-	VideoOsdDrawARGB(MyVideoStream->Render, xi, yi, height, width,
-			pitch, argb, x, y);
-}
 
 //////////////////////////////////////////////////////////////////////////////
 //	cDevice
@@ -2424,4 +2261,164 @@ void cSoftHdDevice::SetDisableOglOsd(void)
 	ConfigDisableOglOsd = 1;
 	if (MyVideoStream->Render)
 		VideoSetDisableOglOsd(MyVideoStream->Render);
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//	OSD
+//////////////////////////////////////////////////////////////////////////////
+
+/**
+**	Close OSD.
+*/
+void cSoftHdDevice::OsdClose(void)
+{
+    VideoOsdClear(MyVideoStream->Render);
+}
+
+/**
+**	Draw an OSD pixmap.
+**
+**	@param xi	x-coordinate in argb image
+**	@param yi	y-coordinate in argb image
+**	@paran height	height in pixel in argb image
+**	@paran width	width in pixel in argb image
+**	@param pitch	pitch of argb image
+**	@param argb	32bit ARGB image data
+**	@param x	x-coordinate on screen of argb image
+**	@param y	y-coordinate on screen of argb image
+*/
+void cSoftHdDevice::OsdDrawARGB(int xi, int yi, int height, int width, int pitch,
+	const uint8_t * argb, int x, int y)
+{
+	VideoOsdDrawARGB(MyVideoStream->Render, xi, yi, height, width,
+			pitch, argb, x, y);
+}
+
+void cSoftHdDevice::SetPassthrough(int mask)
+{
+	AudioPassthrough = mask;
+	AudioSetPassthrough(mask);
+	if (MyAudioDecoder)
+		MyAudioDecoder->SetPassthrough(mask);
+}
+
+/**
+**	Resets channel ID (restarts audio).
+*/
+void cSoftHdDevice::ResetChannelId(void)
+{
+    Debug("ResetChannelId:");
+    AudioChannelID = -1;
+    Debug("audio/demux: reset channel id");
+}
+
+/**
+**	Set log level
+*/
+void cSoftHdDevice::SetLogLevel(int loglevel)
+{
+	DebugLogLevel = loglevel;
+
+	if (!loglevel)
+		return;
+
+	char prefix[256] = "Set loglevels:";
+	if (loglevel & L_DEBUG)
+		strcat(prefix, " standard debugs,");
+	if (loglevel & L_AV_SYNC)
+		strcat(prefix, " AV-Sync,");
+	if (loglevel & L_SOUND)
+		strcat(prefix, " sound,");
+	if (loglevel & L_OSD)
+		strcat(prefix, " osd,");
+	if (loglevel & L_DRM)
+		strcat(prefix, " drm,");
+	if (loglevel & L_CODEC)
+		strcat(prefix, " codec,");
+	if (loglevel & L_STILL)
+		strcat(prefix, " stillpicture,");
+	if (loglevel & L_TRICK)
+		strcat(prefix, " trickspeed,");
+	if (loglevel & L_MEDIA)
+		strcat(prefix, " mediaplayer,");
+	if ((loglevel & L_OPENGL) ||
+	    (loglevel & L_OPENGL_TIME) ||
+	    (loglevel & L_OPENGL_TIME_ALL))
+		strcat(prefix, " OpenGL OSD,");
+	if (loglevel & L_PACKET)
+		strcat(prefix, " packet tracking,");
+	if (loglevel & L_GRAB)
+		strcat(prefix, " grabbing");
+
+	Info("%s", prefix);
+}
+
+/**
+**	Get decoder statistics.
+**
+**	@param[out] duped	duped frames
+**	@param[out] dropped	dropped frames
+**	@param[out] count	number of decoded frames
+*/
+void cSoftHdDevice::GetStats(int *duped, int *dropped, int *counter)
+{
+	*duped = 0;
+	*dropped = 0;
+	*counter = 0;
+	if (MyVideoStream->Render) {
+		VideoGetStats(MyVideoStream->Render, duped, dropped, counter);
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////
+//	mediaplayer functions
+//////////////////////////////////////////////////////////////////////////////
+
+void cSoftHdDevice::SetAudioCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
+{
+	MyAudioDecoder->Open(codec_id, par, timebase);
+}
+
+void cSoftHdDevice::SetVideoCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
+{
+	MyVideoStream->CodecID = codec_id;
+	MyVideoStream->NewStream = 1;
+	MyVideoStream->Par = par;
+	MyVideoStream->timebase.num = timebase->num;
+	MyVideoStream->timebase.den = timebase->den;
+}
+
+int cSoftHdDevice::PlayAudioPkts(AVPacket * pkt)
+{
+	if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
+//		Error("PlayAudioPkts: AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
+		return 0;
+	}
+	MyAudioDecoder->Decode(pkt);
+	return 1;
+}
+
+int cSoftHdDevice::PlayVideoPkts(AVPacket * pkt)
+{
+	AVPacket *avpkt;
+
+	if (atomic_read(&MyVideoStream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
+		return 0;
+	}
+
+	avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketWrite];
+	MyVideoStream->PacketWrite = (MyVideoStream->PacketWrite + 1) % VIDEO_PACKET_MAX;
+	atomic_inc(&MyVideoStream->PacketsFilled);
+
+	if ((size_t)pkt->size > avpkt->buf->size) {
+		Info("PlayVideoPkts: grow packet buffer size by %d",
+			(int)(pkt->size - avpkt->buf->size + AV_INPUT_BUFFER_PADDING_SIZE));
+		av_grow_packet(avpkt, pkt->size - avpkt->buf->size +
+			AV_INPUT_BUFFER_PADDING_SIZE);
+	}
+
+	memcpy(avpkt->data, pkt->data, pkt->size);
+	avpkt->pts = pkt->pts;
+	avpkt->size = pkt->size;
+	return 1;
 }
