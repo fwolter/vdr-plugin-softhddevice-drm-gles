@@ -1247,8 +1247,13 @@ static void *AudioPlayHandlerThread(void *dummy)
 				return PTHREAD_CANCELED;
 			}
 
-			// try to play some samples
-			AlsaPlayer();
+			if (AudioRingBuffer->UsedBytes()) {
+				// try to play some samples
+				AlsaPlayer();
+			} else {
+				Debug2(L_SOUND, "AudioPlayHandlerThread: ring buffer is empty, HwSampleRate %d", HwSampleRate);
+				usleep(5000);
+			}
 
 			// FIXME: check AudioPaused ...Thread()
 			if (AudioPaused)
@@ -1256,7 +1261,7 @@ static void *AudioPlayHandlerThread(void *dummy)
 
 			if (AlsaPlayerStop)
 				break;
-		} while (AudioRingBuffer->UsedBytes());
+		} while (HwSampleRate);
 	}
 	return dummy;
 }
