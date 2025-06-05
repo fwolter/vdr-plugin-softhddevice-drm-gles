@@ -64,6 +64,10 @@
 
 #define QUIRK_CODEC_SKIP_NUM_FRAMES	2 ///< skip QUIRK_CODEC_SKIP_NUM_FRAMES, in case QUIRK_CODEC_SKIP_FIRST_FRAMES is set
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 //----------------------------------------------------------------------------
 //	Typedefs
 //----------------------------------------------------------------------------
@@ -327,6 +331,11 @@ extern void VideoExit(VideoRender *);		///< Cleanup and exit video module.
 extern int VideoCodecMode(VideoRender *);
 extern void VideoSetDisableDeint(VideoRender *, int);
 extern void VideoSetDisableOglOsd(VideoRender *);
+
+#ifdef __cplusplus
+}
+#endif
+
 
 /// @}
 #endif

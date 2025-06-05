@@ -48,6 +48,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <drm_fourcc.h>
+
+extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/hwcontext_drm.h>
 #include <libavutil/pixdesc.h>
@@ -65,6 +67,7 @@
 #include "audio.h"
 #include "drm.h"
 #include "buf2rgb.h"
+}
 
 //----------------------------------------------------------------------------
 //	Variables
@@ -235,20 +238,20 @@ void SetPlane(drmModeAtomicReqPtr ModeReq, struct plane *plane)
 void DumpPlaneProperties(struct plane *plane)
 {
 	Info("DumpPlaneProperties (plane_id = %d):", plane->plane_id);
-	Info("  CRTC ID: %"PRIu64"", plane->properties.crtc_id);
-	Info("  FB ID  : %"PRIu64"", plane->properties.fb_id);
-	Info("  CRTC X : %"PRIu64"", plane->properties.crtc_x);
-	Info("  CRTC Y : %"PRIu64"", plane->properties.crtc_y);
-	Info("  CRTC W : %"PRIu64"", plane->properties.crtc_w);
-	Info("  CRTC H : %"PRIu64"", plane->properties.crtc_h);
-	Info("  SRC X  : %"PRIu64"", plane->properties.src_x);
-	Info("  SRC Y  : %"PRIu64"", plane->properties.src_y);
-	Info("  SRC W  : %"PRIu64"", plane->properties.src_w);
-	Info("  SRC H  : %"PRIu64"", plane->properties.src_h);
-	Info("  ZPOS   : %"PRIu64"", plane->properties.zpos);
+	Info("  CRTC ID: %" PRIu64 "", plane->properties.crtc_id);
+	Info("  FB ID  : %" PRIu64 "", plane->properties.fb_id);
+	Info("  CRTC X : %" PRIu64 "", plane->properties.crtc_x);
+	Info("  CRTC Y : %" PRIu64 "", plane->properties.crtc_y);
+	Info("  CRTC W : %" PRIu64 "", plane->properties.crtc_w);
+	Info("  CRTC H : %" PRIu64 "", plane->properties.crtc_h);
+	Info("  SRC X  : %" PRIu64 "", plane->properties.src_x);
+	Info("  SRC Y  : %" PRIu64 "", plane->properties.src_y);
+	Info("  SRC W  : %" PRIu64 "", plane->properties.src_w);
+	Info("  SRC H  : %" PRIu64 "", plane->properties.src_h);
+	Info("  ZPOS   : %" PRIu64 "", plane->properties.zpos);
 }
 
-size_t ReadLineFromFile(char *buf, size_t size, char * file)
+size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 {
 	FILE *fd = NULL;
 	size_t character;
@@ -409,7 +412,7 @@ EGLConfig get_config(void)
 
     Debug2(L_OPENGL, "%d EGL configs found", count);
 
-    configs = malloc(count * sizeof(*configs));
+    configs = (EGLConfig *)malloc(count * sizeof(*configs));
     if (!configs)
         Fatal("can't allocate space for EGL configs");
 
@@ -445,7 +448,7 @@ static void get_properties(int fd, int plane_id, struct plane *plane)
 			plane_id, strerror(errno));
 		return;
 	}
-	plane->props_info = calloc(plane->props->count_props, sizeof(*plane->props_info)); \
+	plane->props_info = (drmModePropertyRes **)calloc(plane->props->count_props, sizeof(*plane->props_info)); \
 	for (i = 0; i < plane->props->count_props; i++) {
 		plane->props_info[i] = drmModeGetProperty(fd, plane->props->props[i]);
 	}
@@ -787,14 +790,18 @@ find_mode:
 
 	// allocate local plane structs
 	for (i = 0; i < MAX_PLANES; i++) {
-		render->planes[i] = calloc(1, sizeof(struct plane));
+		render->planes[i] = (struct plane *)calloc(1, sizeof(struct plane));
 	}
 
 	// test and list the local plane structs
-	struct plane best_primary_video_plane = { .plane_id = 0}; // is the NV12 capable primary plane with the lowest plane_id
-	struct plane best_overlay_video_plane = { .plane_id = 0}; // is the NV12 capable overlay plane with the lowest plane_id
-	struct plane best_primary_osd_plane = { .plane_id = 0};   // is the AR24 capable primary plane with the highest plane_id
-	struct plane best_overlay_osd_plane = { .plane_id = 0};   // is the AR24 capable overlay plane with the highest plane_id
+	struct plane best_primary_video_plane; // is the NV12 capable primary plane with the lowest plane_id
+	best_primary_video_plane.plane_id = 0;
+	struct plane best_overlay_video_plane; // is the NV12 capable overlay plane with the lowest plane_id
+	best_overlay_video_plane.plane_id = 0;
+	struct plane best_primary_osd_plane;   // is the AR24 capable primary plane with the highest plane_id
+	best_primary_osd_plane.plane_id = 0;
+	struct plane best_overlay_osd_plane;   // is the AR24 capable overlay plane with the highest plane_id
+	best_overlay_osd_plane.plane_id = 0;
 
 	for (j = 0; j < plane_res->count_planes; j++) {
 		plane = drmModeGetPlane(render->fd_drm, plane_res->planes[j]);
@@ -876,19 +883,19 @@ find_mode:
 
 	// debug output
 	if (best_primary_video_plane.plane_id) {
-		Debug2(L_DRM, "FindDevice: best_primary_video_plane: plane_id %d, type %s, zpos %"PRIu64"",
+		Debug2(L_DRM, "FindDevice: best_primary_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_primary_video_plane.plane_id, best_primary_video_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_video_plane.properties.zpos);
 	}
 	if (best_overlay_video_plane.plane_id) {
-		Debug2(L_DRM, "FindDevice: best_overlay_video_plane: plane_id %d, type %s, zpos %"PRIu64"",
+		Debug2(L_DRM, "FindDevice: best_overlay_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_overlay_video_plane.plane_id, best_overlay_video_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_video_plane.properties.zpos);
 	}
 	if (best_primary_osd_plane.plane_id) {
-		Debug2(L_DRM, "FindDevice: best_primary_osd_plane: plane_id %d, type %s, zpos %"PRIu64"",
+		Debug2(L_DRM, "FindDevice: best_primary_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_primary_osd_plane.plane_id, best_primary_osd_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_osd_plane.properties.zpos);
 	}
 	if (best_overlay_osd_plane.plane_id) {
-		Debug2(L_DRM, "FindDevice: best_overlay_osd_plane: plane_id %d, type %s, zpos %"PRIu64"",
+		Debug2(L_DRM, "FindDevice: best_overlay_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_overlay_osd_plane.plane_id, best_overlay_osd_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_osd_plane.properties.zpos);
 	}
 
@@ -950,7 +957,7 @@ find_mode:
 	drmModeFreeEncoder(encoder);
 	drmModeFreeResources(resources);
 
-	Info("FindDevice: DRM setup - CRTC: %i video_plane: %i (%s %"PRIu64") osd_plane: %i (%s %"PRIu64") use_zpos: %d",
+	Info("FindDevice: DRM setup - CRTC: %i video_plane: %i (%s %" PRIu64 ") osd_plane: %i (%s %" PRIu64 ") use_zpos: %d",
 		render->crtc_id, render->planes[VIDEO_PLANE]->plane_id,
 		render->planes[VIDEO_PLANE]->type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY",
 		render->planes[VIDEO_PLANE]->properties.zpos,
@@ -987,7 +994,7 @@ find_mode:
 static void drm_fb_destroy_callback(struct gbm_bo *bo, void *data)
 {
 	int drm_fd = gbm_device_get_fd(gbm_bo_get_device(bo));
-	struct drm_buf *buf = data;
+	struct drm_buf *buf = (struct drm_buf *)data;
 
 	if (buf->fb_id)
 		drmModeRmFB(drm_fd, buf->fb_id);
@@ -1015,7 +1022,7 @@ gbm_bo_get_offset(struct gbm_bo *bo, int plane);
 
 struct drm_buf *drm_get_buf_from_bo(VideoRender *render, struct gbm_bo *bo)
 {
-	struct drm_buf *buf = gbm_bo_get_user_data(bo);
+	struct drm_buf *buf = (struct drm_buf *)gbm_bo_get_user_data(bo);
 	uint32_t mod_flags = 0;
 	int ret = -1;
 
@@ -1023,7 +1030,7 @@ struct drm_buf *drm_get_buf_from_bo(VideoRender *render, struct gbm_bo *bo)
 	if (buf)
 		return buf;
 
-	buf = calloc(1, sizeof *buf);
+	buf = (struct drm_buf *)calloc(1, sizeof *buf);
 	buf->bo = bo;
 
 	buf->width = gbm_bo_get_width(bo);
@@ -1181,11 +1188,10 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 		for (int plane = 0; plane < format_info->num_planes; plane++) {
 			const struct format_plane_info *plane_info = &format_info->planes[plane];
 
-			struct drm_mode_create_dumb creq = {
-				.width = buf->width / plane_info->xsub,
-				.height = buf->height / plane_info->ysub,
-				.bpp = plane_info->bitspp,
-			};
+			struct drm_mode_create_dumb creq;
+			creq.height = buf->height / plane_info->ysub;
+			creq.width = buf->width / plane_info->xsub;
+			creq.bpp = plane_info->bitspp;
 
 			if (drmIoctl(render->fd_drm, DRM_IOCTL_MODE_CREATE_DUMB, &creq) < 0){
 				Error("SetupFB: cannot create dumb buffer %dx%d@%d (%d): %m",
@@ -1206,7 +1212,7 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 				return -errno;
 			}
 
-			buf->plane[plane] = mmap(0, creq.size, PROT_READ | PROT_WRITE, MAP_SHARED, render->fd_drm, mreq.offset);
+			buf->plane[plane] = (uint8_t *)mmap(0, creq.size, PROT_READ | PROT_WRITE, MAP_SHARED, render->fd_drm, mreq.offset);
 
 			if (buf->plane[plane] == MAP_FAILED) {
 				Error("SetupFB: cannot map dumb buffer (%d): %m", errno);
@@ -1351,7 +1357,7 @@ static void *GrabHandlerThread(void *arg)
 ///
 void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 {
-	struct drm_buf *buf = malloc(sizeof(struct drm_buf));
+	struct drm_buf *buf = (struct drm_buf *)malloc(sizeof(struct drm_buf));
 
 	buf->width = src->width;
 	buf->height = src->height;
@@ -1393,7 +1399,7 @@ void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 			munmap(src_buffer, src->size[object]);
 			for (int plane = 0; plane < buf->num_planes; plane++) {
 				if (buf->obj_index[plane] == object) {
-					buf->plane[plane] = dst_buffer;
+					buf->plane[plane] = (uint8_t *)dst_buffer;
 					Debug2(L_GRAB, "VideoCloneBuf: buf->plane[%d] gets %p (object %d)", plane, dst_buffer, object);
 				}
 			}
@@ -1402,7 +1408,7 @@ void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 		for (int plane = 0; plane < buf->num_planes; plane++) {
 			dst_buffer = malloc(buf->size[plane]);
 			memcpy(dst_buffer, src->plane[plane], src->size[plane]);
-			buf->plane[plane] = dst_buffer;
+			buf->plane[plane] = (uint8_t *)dst_buffer;
 		}
 	}
 
@@ -1488,6 +1494,13 @@ static int VideoDrmCommit(VideoRender *render, struct drm_buf *buf, int skip_vid
 	int dirty = 0; // 0: no commit, 1: osd only, 2: video only, 3: both
 	AVFrame *frame = NULL;
 
+	uint64_t DispWidth;
+	uint64_t DispHeight;
+	uint64_t DispX;
+	uint64_t DispY;
+	uint64_t PicWidth;
+	uint64_t PicHeight;
+
 	drmModeAtomicReqPtr ModeReq;
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
 	if (!(ModeReq = drmModeAtomicAlloc())) {
@@ -1503,10 +1516,10 @@ static int VideoDrmCommit(VideoRender *render, struct drm_buf *buf, int skip_vid
 
 	// handle the video plane
 	// Get video size and position and set crtc rect
-	uint64_t DispWidth = render->mode.hdisplay;
-	uint64_t DispHeight = render->mode.vdisplay;
-	uint64_t DispX = 0;
-	uint64_t DispY = 0;
+	DispWidth = render->mode.hdisplay;
+	DispHeight = render->mode.vdisplay;
+	DispX = 0;
+	DispY = 0;
 
 	if (render->video.is_scaled) {
 		DispWidth = (uint64_t)render->video.width;
@@ -1515,8 +1528,8 @@ static int VideoDrmCommit(VideoRender *render, struct drm_buf *buf, int skip_vid
 		DispY = (uint64_t)render->video.y;
 	}
 
-	uint64_t PicWidth = DispWidth;
-	uint64_t PicHeight = DispHeight;
+	PicWidth = DispWidth;
+	PicHeight = DispHeight;
 
 	// resize frame to fit into video area/ screen and keep the aspect ratio
 	if (frame) {
@@ -1572,7 +1585,7 @@ skip_video:
 			SetPlaneZpos(ModeReq, render->planes[VIDEO_PLANE]);
 			SetPlaneZpos(ModeReq, render->planes[OSD_PLANE]);
 
-			Debug2(L_DRM, "Frame2Display: SetPlaneZpos: video->plane_id %d -> zpos %"PRIu64", osd->plane_id %d -> zpos %"PRIu64"",
+			Debug2(L_DRM, "Frame2Display: SetPlaneZpos: video->plane_id %d -> zpos %" PRIu64 ", osd->plane_id %d -> zpos %" PRIu64 "",
 				render->planes[VIDEO_PLANE]->plane_id, render->planes[VIDEO_PLANE]->properties.zpos,
 				render->planes[OSD_PLANE]->plane_id, render->planes[OSD_PLANE]->properties.zpos);
 		}
@@ -1590,7 +1603,7 @@ skip_video:
 
 		SetPlane(ModeReq, render->planes[OSD_PLANE]);
 		dirty += 1;
-		Debug2(L_DRM, "Frame2Display: SetPlane OSD %d (fb = %"PRIu64")", render->OsdShown, render->planes[OSD_PLANE]->properties.fb_id);
+		Debug2(L_DRM, "Frame2Display: SetPlane OSD %d (fb = %" PRIu64 ")", render->OsdShown, render->planes[OSD_PLANE]->properties.fb_id);
 		render->buf_osd->dirty = 0;
 	}
 
@@ -1901,6 +1914,8 @@ static int Frame2Display(VideoRender * render)
 	AVFrame *frame = NULL;
 	int skip_video = 0;
 	int timeout; // ms
+	int ret;
+	FrameData *fd;
 
 	// early skips
 	if (check_closing(render, &skip_video, &buf))
@@ -1941,7 +1956,7 @@ dequeue:
 		}
 	}
 
-	FrameData *fd = (FrameData *)frame->opaque_ref->data;
+	fd = (FrameData *)frame->opaque_ref->data;
 
 	// skip old audio in trickspeed
 	if (fd->flags & FRAME_FLAG_TRICKSPEED) {
@@ -1956,7 +1971,7 @@ dequeue:
 	}
 
 	// sync audio/video
-	int ret = VideoSync(render, frame, &skip_video, &buf);
+	ret = VideoSync(render, frame, &skip_video, &buf);
 
 	if (ret < 0) { // drop frame (dup is handled within VideoSync())
 		av_frame_free(&frame);
@@ -2254,7 +2269,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 {
 	VideoRender *render;
 
-	if (!(render = calloc(1, sizeof(*render)))) {
+	if (!(render = (VideoRender *)calloc(1, sizeof(*render)))) {
 		Error("video/DRM: out of memory");
 		return NULL;
 	}
@@ -2267,7 +2282,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	render->FilterClosing = 0;
 	render->FilterDeintDisabled = render->ConfigFilterDeintDisabled;
 	render->enqueue_buffer = 0;
-	render->lastframe = calloc(1, sizeof(struct lastFrame));
+	render->lastframe = (struct lastFrame *)calloc(1, sizeof(struct lastFrame));
 	VideoResume(render);
 
 	return render;
@@ -2411,7 +2426,7 @@ get_buffer:
 	fd = (FrameData *)frame->opaque_ref->data;
 	fd->flags = ifd->flags;
 
-	primedata = av_mallocz(sizeof(AVDRMFrameDescriptor));
+	primedata = (AVDRMFrameDescriptor *)av_mallocz(sizeof(AVDRMFrameDescriptor));
 	primedata->objects[0].fd = buf->fd_prime[0];
 	frame->data[0] = (uint8_t *)primedata;
 	frame->buf[0] = av_buffer_create((uint8_t *)primedata, sizeof(*primedata),
@@ -3095,8 +3110,8 @@ void VideoGrab(struct grabimage *grabimage, struct drm_buf *buf, int *ready, int
 void VideoTriggerGrab(VideoRender *render)
 {
 	render->grabinwork = 1;
-	render->grabvideo = malloc(sizeof(struct grabimage));
-	render->grabosd = malloc(sizeof(struct grabimage));
+	render->grabvideo = (struct grabimage *)malloc(sizeof(struct grabimage));
+	render->grabosd = (struct grabimage *)malloc(sizeof(struct grabimage));
 	render->grabvideo->buf = NULL;
 	render->grabosd->buf = NULL;
 
@@ -3259,7 +3274,7 @@ void VideoInit(VideoRender * render)
 #else
 	if (render->DisableOglOsd) {
 		if (!render->buf_osd)
-			render->buf_osd = calloc(1, sizeof(struct drm_buf));
+			render->buf_osd = (struct drm_buf *)calloc(1, sizeof(struct drm_buf));
 		render->buf_osd->pix_fmt = DRM_FORMAT_ARGB8888;
 		render->buf_osd->width = render->mode.hdisplay;
 		render->buf_osd->height = render->mode.vdisplay;
