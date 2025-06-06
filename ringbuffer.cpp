@@ -32,6 +32,8 @@
 #include "iatomic.h"
 #include "ringbuffer.h"
 
+#include "logger.h"
+
 extern "C"
 {
 #include "misc.h"
@@ -54,7 +56,7 @@ extern "C"
 cDeviceRingbuffer::cDeviceRingbuffer(size_t size)
 {
     if (!(Buffer = (char *)malloc(size)))	// allocate buffer
-	Fatal("cDeviceRinbuffer::cDeviceRingbuffer: can't allocate memory for ringbuffer");
+	LOGFATAL("cDeviceRinbuffer::cDeviceRingbuffer: can't allocate memory for ringbuffer");
 
     Size = size;
     BufferEnd = Buffer + size;

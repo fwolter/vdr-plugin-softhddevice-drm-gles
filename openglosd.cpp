@@ -11,6 +11,8 @@
 #include <sys/ioctl.h>
 
 #include "misc.h"
+#include "logger.h"
+
 
 #ifdef WRITE_PNG
 #include <png.h>
@@ -45,7 +47,7 @@ int writeImage(char* filename, int width, int height, void *buffer, char* title)
 	// Open file for writing (binary mode)
 	fp = fopen(filename, "wb");
 	if (fp == NULL) {
-		Error("WritePng: Could not open file %s for writing", filename);
+		LOGERROR("WritePng: Could not open file %s for writing", filename);
 		code = 1;
 		goto finalise;
 	}
@@ -53,7 +55,7 @@ int writeImage(char* filename, int width, int height, void *buffer, char* title)
 	// Initialize write structure
 	png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 	if (png_ptr == NULL) {
-		Error("WritePng: Could not allocate write struct");
+		LOGERROR("WritePng: Could not allocate write struct");
 		code = 1;
 		goto finalise;
 	}
@@ -61,14 +63,14 @@ int writeImage(char* filename, int width, int height, void *buffer, char* title)
 	// Initialize info structure
 	info_ptr = png_create_info_struct(png_ptr);
 	if (info_ptr == NULL) {
-		Error("WritePng: Could not allocate info struct");
+		LOGERROR("WritePng: Could not allocate info struct");
 		code = 1;
 		goto finalise;
 	}
 
 	// Setup Exception handling
 	if (setjmp(png_jmpbuf(png_ptr))) {
-		Error("WritePng: Error during png creation");
+		LOGERROR("WritePng: Error during png creation");
 		code = 1;
 		goto finalise;
 	}
@@ -120,7 +122,7 @@ void writePng(int x, int y, int w, int h, bool oFb) {
     GLenum fbstatus;
     GL_CHECK(fbstatus = glCheckFramebufferStatus(GL_FRAMEBUFFER));
     if(fbstatus != GL_FRAMEBUFFER_COMPLETE)
-        Error("Framebuffer is not complete! %d", fbstatus);
+        LOGERROR("Framebuffer is not complete! %d", fbstatus);
 
     GL_CHECK(glReadPixels(x, y, w, h, GL_RGBA, GL_UNSIGNED_BYTE, &result));
     if (oFb) {
@@ -142,20 +144,20 @@ void ConvertColor(const GLint &colARGB, glm::vec4 &col) {
 void glCheckError(const char *stmt, const char *fname, int line) {
     GLint err = glGetError();
     if (err != GL_NO_ERROR)
-        Error("GL Error (0x%08x): %s failed at %s:%i", err, stmt, fname, line);
+        LOGERROR("GL Error (0x%08x): %s failed at %s:%i", err, stmt, fname, line);
 }
 
 void eglCheckError(const char *stmt, const char *fname, int line) {
     EGLint err = eglGetError();
     if (err != EGL_SUCCESS)
-        Error("EGL ERROR (0x%08x): %s failed at %s:%i", err, stmt, fname, line);
+        LOGERROR("EGL ERROR (0x%08x): %s failed at %s:%i", err, stmt, fname, line);
 }
 
 void eglAcquireContext()
 {
     VideoRender *render = (VideoRender *)GetVideoRender();
     if (!render) {
-        Fatal("failed to get VideoRender");
+        LOGFATAL("failed to get VideoRender");
     }
 
     EGL_CHECK(eglMakeCurrent(render->eglDisplay, render->eglSurface, render->eglSurface, render->eglContext));
@@ -165,7 +167,7 @@ void eglReleaseContext()
 {
     VideoRender *render = (VideoRender *)GetVideoRender();
     if (!render) {
-        Fatal("failed to get VideoRender");
+        LOGFATAL("failed to get VideoRender");
     }
 
     EGL_CHECK(eglMakeCurrent(render->eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
@@ -339,17 +341,17 @@ bool cShader::Load(eShaderType type) {
             fragmentCode = textFragmentShader;
             break;
         default:
-            Error("Shader: unknown shader type");
+            LOGERROR("Shader: unknown shader type");
             break;
     }
 
     if (vertexCode == NULL || fragmentCode == NULL) {
-        Error("Shader: error reading shader");
+        LOGERROR("Shader: error reading shader");
         return false;
     }
 
     if (!Compile(vertexCode, fragmentCode)) {
-        Error("Shader: error compiling shader");
+        LOGERROR("Shader: error compiling shader");
         return false;
     }
     return true;
@@ -415,14 +417,14 @@ bool cShader::CheckCompileErrors(GLuint object, bool program) {
         GL_CHECK(glGetShaderiv(object, GL_COMPILE_STATUS, &success));
         if (!success) {
             GL_CHECK(glGetShaderInfoLog(object, 1024, NULL, infoLog));
-            Error("Shader: Compile-time error: Type: %d - %s", type, infoLog);
+            LOGERROR("Shader: Compile-time error: Type: %d - %s", type, infoLog);
             return false;
         }
     } else {
         GL_CHECK(glGetProgramiv(object, GL_LINK_STATUS, &success));
         if (!success) {
             GL_CHECK(glGetProgramInfoLog(object, 1024, NULL, infoLog));
-            Error("Shader: Link-time error: Type: %d - %s", type, infoLog);
+            LOGERROR("Shader: Link-time error: Type: %d - %s", type, infoLog);
             return false;
         }
     }
@@ -546,7 +548,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
     /* Find the minimum size for the texture holding all visible ASCII characters */
     for (int i = MIN_CHARCODE; i <= MAX_CHARCODE; i++) {
         if (FT_Load_Char(face, i, FT_LOAD_NO_BITMAP)) {
-            Debug2(L_OPENGL, "Loading char %d failed!", i);
+            LOGDEBUG2(L_OPENGL, "Loading char %d failed!", i);
             continue;
         }
 
@@ -554,7 +556,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
         FT_Glyph ftGlyph;
         FT_Stroker stroker;
         if (FT_Stroker_New(g->library, &stroker)) {
-            Error("FT_Stroker_New error!");
+            LOGERROR("FT_Stroker_New error!");
             return;
         }
 
@@ -563,19 +565,19 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
                        FT_STROKER_LINECAP_ROUND, FT_STROKER_LINEJOIN_ROUND, 0);
 
         if (FT_Get_Glyph(g, &ftGlyph)) {
-            Error("FT_Get_Glyph error!");
+            LOGERROR("FT_Get_Glyph error!");
             return;
         }
 
         if (FT_Glyph_StrokeBorder(&ftGlyph, stroker, 0, 1)) {
-            Error("FT_Glyph_StrokeBoder error!");
+            LOGERROR("FT_Glyph_StrokeBoder error!");
             return;
         }
 
         FT_Stroker_Done(stroker);
 
         if (FT_Glyph_To_Bitmap(&ftGlyph, FT_RENDER_MODE_NORMAL, 0, 1)) {
-            Error("FT_Glyph_To_Bitmap error!");
+            LOGERROR("FT_Glyph_To_Bitmap error!");
             return;
         }
 
@@ -627,7 +629,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
     // Now do the real upload
     for (int i = MIN_CHARCODE; i <= MAX_CHARCODE; i++) {
         if (FT_Load_Char(face, i, FT_LOAD_NO_BITMAP)) {
-            Warning("Loading char %c failed!", i);
+            LOGWARNING("Loading char %c failed!", i);
             continue;
         }
 
@@ -635,7 +637,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
         FT_Glyph ftGlyph;
         FT_Stroker stroker;
         if (FT_Stroker_New(g->library, &stroker)) {
-            Error("FT_Stroker_New error!");
+            LOGERROR("FT_Stroker_New error!");
             return;
         }
 
@@ -644,19 +646,19 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
                        FT_STROKER_LINECAP_ROUND, FT_STROKER_LINEJOIN_ROUND, 0);
 
         if (FT_Get_Glyph(g, &ftGlyph)) {
-            Error("FT_Get_Glyph error!");
+            LOGERROR("FT_Get_Glyph error!");
             return;
         }
 
         if (FT_Glyph_StrokeBorder(&ftGlyph, stroker, 0, 1)) {
-            Error("FT_Glyph_StrokeBoder error!");
+            LOGERROR("FT_Glyph_StrokeBoder error!");
             return;
         }
 
         FT_Stroker_Done(stroker);
 
         if (FT_Glyph_To_Bitmap(&ftGlyph, FT_RENDER_MODE_NORMAL, 0, 1)) {
-            Error("FT_Glyph_To_Bitmap error!");
+            LOGERROR("FT_Glyph_To_Bitmap error!");
             return;
         }
         FT_BitmapGlyph bGlyph = (FT_BitmapGlyph)ftGlyph;
@@ -697,7 +699,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
     }
 
     GL_CHECK(glBindTexture(GL_TEXTURE_2D, 0));
-    Debug2(L_OPENGL, "Created a %d x %d (%d kB) FontAtlas for fontsize %d, rowh %d, roww %d", w, h, w * h / 1024, height, rowh, roww);
+    LOGDEBUG2(L_OPENGL, "Created a %d x %d (%d kB) FontAtlas for fontsize %d, rowh %d, roww %d", w, h, w * h / 1024, height, rowh, roww);
 }
 
 cOglFontAtlas::~cOglFontAtlas(void) {
@@ -727,7 +729,7 @@ cOglFont::cOglFont(const char *fontName, int charHeight) : name(fontName) {
 
     int error = FT_New_Face(ftLib, fontName, 0, &face);
     if (error)
-        Error("failed to open %s!", *name);
+        LOGERROR("failed to open %s!", *name);
 
     FT_ULong charcode;
     FT_UInt gindex;
@@ -749,7 +751,7 @@ cOglFont::cOglFont(const char *fontName, int charHeight) : name(fontName) {
     height = (face->size->metrics.ascender - face->size->metrics.descender + 63) / 64;
     bottom = abs((face->size->metrics.descender - 63) / 64);
     this->atlas = new cOglFontAtlas(face, charHeight);
-    Debug2(L_OPENGL, "Created new font: %s (%d) height: %d, bottom: %d - %d chars (%d - %d)", fontName, charHeight, height, bottom, count, min_index, max_index);
+    LOGDEBUG2(L_OPENGL, "Created new font: %s (%d) height: %d, bottom: %d - %d chars (%d - %d)", fontName, charHeight, height, bottom, count, min_index, max_index);
 }
 
 cOglFont::~cOglFont(void) {
@@ -772,7 +774,7 @@ cOglFont *cOglFont::Get(const char *name, int charHeight) {
 
 void cOglFont::Init(void) {
     if (FT_Init_FreeType(&ftLib)) {
-        Error("failed to initialize FreeType library!");
+        LOGERROR("failed to initialize FreeType library!");
         return;
     }
     fonts = new cList<cOglFont>;
@@ -785,7 +787,7 @@ void cOglFont::Cleanup(void) {
     delete fonts;
     fonts = 0;
     if (ftLib && FT_Done_FreeType(ftLib))
-        Error("failed to deinitialize FreeType library!");
+        LOGERROR("failed to deinitialize FreeType library!");
 
     ftLib = 0;
 }
@@ -808,7 +810,7 @@ cOglGlyph* cOglFont::Glyph(FT_ULong charCode) const {
     // Load glyph image into the slot (erase previous one):
     int error = FT_Load_Glyph(face, glyph_index, loadFlags);
     if (error) {
-        Error("FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
+        LOGERROR("FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
         return NULL;
     }
 
@@ -816,7 +818,7 @@ cOglGlyph* cOglFont::Glyph(FT_ULong charCode) const {
     FT_Stroker stroker;
     error = FT_Stroker_New( ftLib, &stroker );
     if (error) {
-        Error("FT_Stroker_New FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
+        LOGERROR("FT_Stroker_New FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
         return NULL;
     }
     float outlineWidth = 0.25f;
@@ -829,20 +831,20 @@ cOglGlyph* cOglFont::Glyph(FT_ULong charCode) const {
 
     error = FT_Get_Glyph(face->glyph, &ftGlyph);
     if (error) {
-        Error("FT_Get_Glyph FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
+        LOGERROR("FT_Get_Glyph FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
         return NULL;
     }
 
     error = FT_Glyph_StrokeBorder( &ftGlyph, stroker, 0, 1 );
     if ( error ) {
-        Error("FT_Glyph_StrokeBorder FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
+        LOGERROR("FT_Glyph_StrokeBorder FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
         return NULL;
     }
     FT_Stroker_Done(stroker);
 
     error = FT_Glyph_To_Bitmap( &ftGlyph, FT_RENDER_MODE_NORMAL, 0, 1);
     if (error) {
-        Error("FT_Glyph_To_Bitmap FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
+        LOGERROR("FT_Glyph_To_Bitmap FT_Error (0x%02x) : %s", FT_Errors[error].code, FT_Errors[error].message);
         return NULL;
     }
 
@@ -926,7 +928,7 @@ bool cOglFb::Init(void) {
     GLenum fbstatus;
     GL_CHECK(fbstatus = glCheckFramebufferStatus(GL_FRAMEBUFFER));
     if(fbstatus != GL_FRAMEBUFFER_COMPLETE) {
-        Error("Framebuffer is not complete!");
+        LOGERROR("Framebuffer is not complete!");
         return false;
     }
     return true;
@@ -995,7 +997,7 @@ bool cOglOutputFb::Init(void) {
     GLenum fbstatus;
     GL_CHECK(fbstatus = glCheckFramebufferStatus(GL_FRAMEBUFFER));
     if(fbstatus != GL_FRAMEBUFFER_COMPLETE) {
-        Error("cOglOutputFb: Framebuffer is not complete (%d)!", fbstatus);
+        LOGERROR("cOglOutputFb: Framebuffer is not complete (%d)!", fbstatus);
         return false;
     }
 
@@ -1298,7 +1300,7 @@ cOglCmdCopyBufferToOutputFb::cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputF
 bool cOglCmdCopyBufferToOutputFb::Execute(void) {
     VideoRender *render = (VideoRender *)GetVideoRender();
     if (!render) {
-        Fatal("failed to get VideoRender");
+        LOGFATAL("failed to get VideoRender");
     }
 
     GLfloat x2 = x + (GLfloat)fb->Width();
@@ -1760,7 +1762,7 @@ bool cOglCmdDrawText::Execute(void) {
             g = fa->GetGlyph(sym);
 
             if (!g) {
-                Warning("could not load glyph %lx", sym);
+                LOGWARNING("could not load glyph %lx", sym);
                 continue;
             }
 
@@ -1817,12 +1819,12 @@ bool cOglCmdDrawText::Execute(void) {
         VertexBuffers[vbText]->SetVertexData(vertices, (n / 4));
         VertexBuffers[vbText]->DrawArrays(n / 4);
     } else {
-        Debug2(L_OPENGL, "cOglCmdDrawText: char %d is not on the texture atlas, use single draw", unknown_char);
+        LOGDEBUG2(L_OPENGL, "cOglCmdDrawText: char %d is not on the texture atlas, use single draw", unknown_char);
         for (int i = 0; symbols[i]; i++) {
             sym = symbols[i];
             cOglGlyph *g = f->Glyph(sym);
             if (!g) {
-                Warning("could not load glyph %lx", sym);
+                LOGWARNING("could not load glyph %lx", sym);
                 continue;
             }
 
@@ -2090,12 +2092,12 @@ void cOglThread::DoCmd(cOglCmd* cmd) {
 
 int cOglThread::StoreImage(const cImage &image) {
     if (!maxCacheSize) {
-        Error("cannot store image, no cache set");
+        LOGERROR("cannot store image, no cache set");
         return 0;
     }
 
     if (image.Width() > maxTextureSize || image.Height() > maxTextureSize) {
-        Error("cannot store image of %dpx x %dpx "
+        LOGERROR("cannot store image of %dpx x %dpx "
                 "(maximum size is %dpx x %dpx) - falling back to "
                 "cOsdProvider::StoreImageData()",
                 image.Width(), image.Height(),
@@ -2108,7 +2110,7 @@ int cOglThread::StoreImage(const cImage &image) {
     if (newMemUsed > maxCacheSize) {
         float cachedMB = memCached / 1024.0f / 1024.0f;
         float maxMB = maxCacheSize / 1024.0f / 1024.0f;
-        Error("Maximum size for GPU cache reached. Used: %.2fMB Max: %.2fMB", cachedMB, maxMB);
+        LOGERROR("Maximum size for GPU cache reached. Used: %.2fMB Max: %.2fMB", cachedMB, maxMB);
         return 0;
     }
 
@@ -2118,7 +2120,7 @@ int cOglThread::StoreImage(const cImage &image) {
 
     tColor *argb = MALLOC(tColor, imgSize);
     if (!argb) {
-        Error("memory allocation of %d kb for OSD image failed", (int)(imgSize  * sizeof(tColor) / 1024));
+        LOGERROR("memory allocation of %d kb for OSD image failed", (int)(imgSize  * sizeof(tColor) / 1024));
         ClearSlot(slot);
         slot = 0;
         return 0;
@@ -2136,7 +2138,7 @@ int cOglThread::StoreImage(const cImage &image) {
         cCondWait::SleepMs(2);
 
     if (imageRef->texture == GL_NONE) {
-        Error("failed to store OSD image texture! (%s)", timer.TimedOut() ? "timed out" : "allocation failed");
+        LOGERROR("failed to store OSD image texture! (%s)", timer.TimedOut() ? "timed out" : "allocation failed");
         DropImageData(slot);
         slot = 0;
     }
@@ -2192,34 +2194,34 @@ void cOglThread::DropImageData(int imageHandle) {
 
 void cOglThread::Action(void) {
     if (!InitOpenGL()) {
-        Error("Could not initiate OpenGL context");
+        LOGERROR("Could not initiate OpenGL context");
         Cleanup();
         startWait->Signal();
         return;
     }
 
     if (!InitShaders()) {
-        Error("Could not initiate shaders");
+        LOGERROR("Could not initiate shaders");
         Cleanup();
         startWait->Signal();
         return;
     }
 
     if (!InitVertexBuffers()) {
-        Error("Vertex Buffers NOT initialized");
+        LOGERROR("Vertex Buffers NOT initialized");
         Cleanup();
         startWait->Signal();
         return;
     }
 
     GL_CHECK(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize));
-    Debug2(L_OPENGL, "Maximum Pixmap size: %dx%dpx", maxTextureSize, maxTextureSize);
+    LOGDEBUG2(L_OPENGL, "Maximum Pixmap size: %dx%dpx", maxTextureSize, maxTextureSize);
 
     //now Thread is ready to do his job
     startWait->Signal();
     stalled = false;
 
-    Info("OpenGL context initialized");
+    LOGINFO("OpenGL context initialized");
 
     uint64_t start_flush = 0;
     uint64_t end_flush = 0;
@@ -2244,47 +2246,47 @@ void cOglThread::Action(void) {
         }
 
         cmd->Execute();
-        Debug2(L_OPENGL_TIME_ALL, "\"%-*s\", %dms, %d commands left, time %" PRIu64 "", 15, cmd->Description(), (int)(cTimeMs::Now() - start), (int)(commands.size()), cTimeMs::Now());
+        LOGDEBUG2(L_OPENGL_TIME_ALL, "\"%-*s\", %dms, %d commands left, time %" PRIu64 "", 15, cmd->Description(), (int)(cTimeMs::Now() - start), (int)(commands.size()), cTimeMs::Now());
 
         if (strcmp(cmd->Description(), "Copy buffer to OutputFramebuffer") == 0) {
             end_flush = cTimeMs::Now();
             time_reset = 1;
-            Debug2(L_OPENGL_TIME, "OSD Flush %dms, time %" PRIu64 "", (int)(end_flush - start_flush), cTimeMs::Now());
+            LOGDEBUG2(L_OPENGL_TIME, "OSD Flush %dms, time %" PRIu64 "", (int)(end_flush - start_flush), cTimeMs::Now());
         }
         delete cmd;
         if (stalled && commands.size() < OGL_CMDQUEUE_SIZE / 2)
             stalled = false;
     }
 
-    Debug2(L_OPENGL, "Cleaning up OpenGL stuff");
+    LOGDEBUG2(L_OPENGL, "Cleaning up OpenGL stuff");
     Cleanup();
-    Debug2(L_OPENGL, "OpenGL worker thread ended");
+    LOGDEBUG2(L_OPENGL, "OpenGL worker thread ended");
 }
 
 bool cOglThread::InitOpenGL(void) {
     VideoRender *render = (VideoRender *)GetVideoRender();
     if (!render) {
-        Fatal("failed to get VideoRender");
+        LOGFATAL("failed to get VideoRender");
     }
 
-    Debug2(L_OPENGL, "Init OpenGL context");
+    LOGDEBUG2(L_OPENGL, "Init OpenGL context");
 
     // Wait for the EGL context to be created
     while(!render->GlInit) {
-        Debug2(L_OPENGL, "wait for EGL context");
+        LOGDEBUG2(L_OPENGL, "wait for EGL context");
         usleep(20000);
     }
 
     eglAcquireContext(); /* eglMakeCurrent with new eglSurface */
 
-    GL_CHECK(Debug2(L_OPENGL, "  GL Version: \"%s\"", glGetString(GL_VERSION)));
-    GL_CHECK(Debug2(L_OPENGL, "  GL Vendor: \"%s\"", glGetString(GL_VENDOR)));
-    GL_CHECK(Debug2(L_OPENGL, "  GL Extensions: \"%s\"", glGetString(GL_EXTENSIONS)));
-    GL_CHECK(Debug2(L_OPENGL, "  GL Renderer: \"%s\"", glGetString(GL_RENDERER)));
+    GL_CHECK(LOGDEBUG2(L_OPENGL, "  GL Version: \"%s\"", glGetString(GL_VERSION)));
+    GL_CHECK(LOGDEBUG2(L_OPENGL, "  GL Vendor: \"%s\"", glGetString(GL_VENDOR)));
+    GL_CHECK(LOGDEBUG2(L_OPENGL, "  GL Extensions: \"%s\"", glGetString(GL_EXTENSIONS)));
+    GL_CHECK(LOGDEBUG2(L_OPENGL, "  GL Renderer: \"%s\"", glGetString(GL_RENDERER)));
 
     VertexBuffers[vbText]->EnableBlending();
     GL_CHECK(glDisable(GL_DEPTH_TEST));
-    Debug2(L_OPENGL, "Init OpenGL context done");
+    LOGDEBUG2(L_OPENGL, "Init OpenGL context done");
     return true;
 }
 
@@ -2295,7 +2297,7 @@ bool cOglThread::InitShaders(void) {
             return false;
         Shaders[i] = shader;
     }
-    Debug2(L_OPENGL, "Shaders initialized");
+    LOGDEBUG2(L_OPENGL, "Shaders initialized");
     return true;
 }
 
@@ -2311,7 +2313,7 @@ bool cOglThread::InitVertexBuffers(void) {
             return false;
         VertexBuffers[i] = vb;
     }
-    Debug2(L_OPENGL, "Vertex buffers initialized");
+    LOGDEBUG2(L_OPENGL, "Vertex buffers initialized");
     return true;
 }
 
@@ -2339,7 +2341,7 @@ cOglPixmap::cOglPixmap(std::shared_ptr<cOglThread> oglThread, int Layer, const c
     int height = DrawPort.IsEmpty() ? ViewPort.Height() : DrawPort.Height();
 
     if (width > oglThread->MaxTextureSize() || height > oglThread->MaxTextureSize()) {
-        Warning("cannot allocate pixmap of %dpx x %dpx, clipped to %dpx x %dpx!",
+        LOGWARNING("cannot allocate pixmap of %dpx x %dpx, clipped to %dpx x %dpx!",
                     width, height, std::min(width, oglThread->MaxTextureSize()), std::min(height, oglThread->MaxTextureSize()));
         width = std::min(width, oglThread->MaxTextureSize());
         height = std::min(height, oglThread->MaxTextureSize());
@@ -2609,19 +2611,19 @@ void cOglPixmap::DrawSlope(const cRect &Rect, tColor Color, int Type) {
 }
 
 void cOglPixmap::Render(const cPixmap *Pixmap, const cRect &Source, const cPoint &Dest) {
-    Warning("Render %d %d %d not implemented in OpenGl OSD", Pixmap->ViewPort().X(), Source.X(), Dest.X());
+    LOGWARNING("Render %d %d %d not implemented in OpenGl OSD", Pixmap->ViewPort().X(), Source.X(), Dest.X());
 }
 
 void cOglPixmap::Copy(const cPixmap *Pixmap, const cRect &Source, const cPoint &Dest) {
-    Warning("Copy %d %d %d not implemented in OpenGl OSD", Pixmap->ViewPort().X(), Source.X(), Dest.X());
+    LOGWARNING("Copy %d %d %d not implemented in OpenGl OSD", Pixmap->ViewPort().X(), Source.X(), Dest.X());
 }
 
 void cOglPixmap::Scroll(const cPoint &Dest, const cRect &Source) {
-    Warning("Scroll %d %d not implemented in OpenGl OSD", Source.X(), Dest.X());
+    LOGWARNING("Scroll %d %d not implemented in OpenGl OSD", Source.X(), Dest.X());
 }
 
 void cOglPixmap::Pan(const cPoint &Dest, const cRect &Source) {
-    Warning("Pan %d %d not implemented in OpenGl OSD", Source.X(), Dest.X());
+    LOGWARNING("Pan %d %d not implemented in OpenGl OSD", Source.X(), Dest.X());
 }
 
 #ifdef GRIDPOINTS
@@ -2739,7 +2741,7 @@ cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglT
 
     VideoRender *render = (VideoRender *)GetVideoRender();
     VideoGetScreenSize(render, &osdWidth, &osdHeight, &pixel_aspect);
-    Debug2(L_OSD, "New Osd %p osdLeft %d osdTop %d screenWidth %d screenHeight %d", this, Left, Top, osdWidth, osdHeight);
+    LOGDEBUG2(L_OSD, "New Osd %p osdLeft %d osdTop %d screenWidth %d screenHeight %d", this, Left, Top, osdWidth, osdHeight);
 
     maxPixmapSize.Set(oglThread->MaxTextureSize(), oglThread->MaxTextureSize());
 
@@ -2755,7 +2757,7 @@ cOglOsd::~cOglOsd() {
         return;
     }
 
-    Debug2(L_OSD, "Delete Osd %p", this);
+    LOGDEBUG2(L_OSD, "Delete Osd %p", this);
     oglThread->DoCmd(new cOglCmdFill(bFb, clrTransparent));
 
     SetActive(false); // OsdClose() in cOglCmdCopyBufferToOutputFb()
@@ -2835,7 +2837,7 @@ void cOglOsd::Flush(void) {
     if (!oglThread->Active() || !Active())
         return;
 
-    Debug2(L_OSD, "Flush Osd %p", this);
+    LOGDEBUG2(L_OSD, "Flush Osd %p", this);
     LOCK_PIXMAPS;
     // check for dirty areas
     dirtyViewport->Set(0, 0, 0, 0);

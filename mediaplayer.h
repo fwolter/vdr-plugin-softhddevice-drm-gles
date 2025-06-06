@@ -83,7 +83,7 @@ public:
 	cSoftHdControl(const char *, cSoftHdDevice *);		///< control constructor
 	virtual ~cSoftHdControl();		///< control destructor
 	virtual void Hide(void);		///< hide control
-	virtual cOsdObject *GetInfo(void) { return NULL; }
+	virtual cOsdObject *GetLOGINFO(void) { return NULL; }
 	virtual eOSState ProcessKey(eKeys);	///< process input events
 	static cSoftHdControl *Control() { return pControl; }
 	static cSoftHdPlayer *Player() { return pPlayer; }

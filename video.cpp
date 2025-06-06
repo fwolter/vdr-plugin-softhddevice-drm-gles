@@ -49,6 +49,8 @@
 #include <sys/mman.h>
 #include <drm_fourcc.h>
 
+#include "logger.h"
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/hwcontext_drm.h>
@@ -66,8 +68,8 @@ extern "C" {
 #include "video.h"
 #include "audio.h"
 #include "drm.h"
-#include "buf2rgb.h"
 }
+#include "buf2rgb.h"
 
 //----------------------------------------------------------------------------
 //	Variables
@@ -119,7 +121,7 @@ int GetPropertyValue(int fd_drm, uint32_t objectID,
 
 	for (i = 0; i < objectProps->count_props; i++) {
 		if ((Prop = drmModeGetProperty(fd_drm, objectProps->props[i])) == NULL)
-			Debug2(L_DRM, "GetPropertyValue: Unable to query property.");
+			LOGDEBUG2(L_DRM, "GetPropertyValue: Unable to query property.");
 
 		if (strcmp(propName, Prop->name) == 0) {
 			*value = objectProps->prop_values[i];
@@ -135,7 +137,7 @@ int GetPropertyValue(int fd_drm, uint32_t objectID,
 	drmModeFreeObjectProperties(objectProps);
 
 	if (!found) {
-		Debug2(L_DRM, "GetPropertyValue: Unable to find value for property \'%s\'.",
+		LOGDEBUG2(L_DRM, "GetPropertyValue: Unable to find value for property \'%s\'.",
 			propName);
 		return -1;
 	}
@@ -147,7 +149,7 @@ static int SetPlanePropertyRequest(drmModeAtomicReqPtr ModeReq, uint32_t objectI
 {
 	VideoRender *render = (VideoRender *)GetVideoRender();
 	if (!render) {
-		Fatal("failed to get VideoRender");
+		LOGFATAL("failed to get VideoRender");
 	}
 
 	struct plane *obj = NULL;
@@ -158,7 +160,7 @@ static int SetPlanePropertyRequest(drmModeAtomicReqPtr ModeReq, uint32_t objectI
 		obj = render->planes[OSD_PLANE];
 
 	if (!obj) {
-		Error("SetPlanePropertyRequest: Unable to find plane with id %d", objectID);
+		LOGERROR("SetPlanePropertyRequest: Unable to find plane with id %d", objectID);
 		return -EINVAL;
 	}
 
@@ -173,7 +175,7 @@ static int SetPlanePropertyRequest(drmModeAtomicReqPtr ModeReq, uint32_t objectI
 	}
 
 	if (id < 0) {
-		Error("SetPlanePropertyRequest: Unable to find value for property \'%s\'.",
+		LOGERROR("SetPlanePropertyRequest: Unable to find value for property \'%s\'.",
 			propName);
 		return -EINVAL;
 	}
@@ -193,7 +195,7 @@ static int SetPropertyRequest(drmModeAtomicReqPtr ModeReq, int fd_drm,
 
 	for (i = 0; i < objectProps->count_props; i++) {
 		if ((Prop = drmModeGetProperty(fd_drm, objectProps->props[i])) == NULL)
-			Debug2(L_DRM, "SetPropertyRequest: Unable to query property.");
+			LOGDEBUG2(L_DRM, "SetPropertyRequest: Unable to query property.");
 
 		if (strcmp(propName, Prop->name) == 0) {
 			id = Prop->prop_id;
@@ -207,7 +209,7 @@ static int SetPropertyRequest(drmModeAtomicReqPtr ModeReq, int fd_drm,
 	drmModeFreeObjectProperties(objectProps);
 
 	if (id == 0)
-		Debug2(L_DRM, "SetPropertyRequest: Unable to find value for property \'%s\'.",
+		LOGDEBUG2(L_DRM, "SetPropertyRequest: Unable to find value for property \'%s\'.",
 			propName);
 
 	return drmModeAtomicAddProperty(ModeReq, objectID, id, value);
@@ -237,18 +239,18 @@ void SetPlane(drmModeAtomicReqPtr ModeReq, struct plane *plane)
 
 void DumpPlaneProperties(struct plane *plane)
 {
-	Info("DumpPlaneProperties (plane_id = %d):", plane->plane_id);
-	Info("  CRTC ID: %" PRIu64 "", plane->properties.crtc_id);
-	Info("  FB ID  : %" PRIu64 "", plane->properties.fb_id);
-	Info("  CRTC X : %" PRIu64 "", plane->properties.crtc_x);
-	Info("  CRTC Y : %" PRIu64 "", plane->properties.crtc_y);
-	Info("  CRTC W : %" PRIu64 "", plane->properties.crtc_w);
-	Info("  CRTC H : %" PRIu64 "", plane->properties.crtc_h);
-	Info("  SRC X  : %" PRIu64 "", plane->properties.src_x);
-	Info("  SRC Y  : %" PRIu64 "", plane->properties.src_y);
-	Info("  SRC W  : %" PRIu64 "", plane->properties.src_w);
-	Info("  SRC H  : %" PRIu64 "", plane->properties.src_h);
-	Info("  ZPOS   : %" PRIu64 "", plane->properties.zpos);
+	LOGINFO("DumpPlaneProperties (plane_id = %d):", plane->plane_id);
+	LOGINFO("  CRTC ID: %" PRIu64 "", plane->properties.crtc_id);
+	LOGINFO("  FB ID  : %" PRIu64 "", plane->properties.fb_id);
+	LOGINFO("  CRTC X : %" PRIu64 "", plane->properties.crtc_x);
+	LOGINFO("  CRTC Y : %" PRIu64 "", plane->properties.crtc_y);
+	LOGINFO("  CRTC W : %" PRIu64 "", plane->properties.crtc_w);
+	LOGINFO("  CRTC H : %" PRIu64 "", plane->properties.crtc_h);
+	LOGINFO("  SRC X  : %" PRIu64 "", plane->properties.src_x);
+	LOGINFO("  SRC Y  : %" PRIu64 "", plane->properties.src_y);
+	LOGINFO("  SRC W  : %" PRIu64 "", plane->properties.src_w);
+	LOGINFO("  SRC H  : %" PRIu64 "", plane->properties.src_h);
+	LOGINFO("  ZPOS   : %" PRIu64 "", plane->properties.zpos);
 }
 
 size_t ReadLineFromFile(char *buf, size_t size, const char * file)
@@ -258,7 +260,7 @@ size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 
 	fd = fopen(file, "r");
 	if (fd == NULL) {
-		Error("Can't open %s", file);
+		LOGERROR("Can't open %s", file);
 		return 0;
 	}
 
@@ -309,17 +311,17 @@ void ReadHWPlatform(VideoRender * render)
 			break;
 		}
 		if (strstr(read_ptr, "bcm2711")) {
-			Debug2(L_DRM, "ReadHWPlatform: bcm2711 (Raspberry Pi 4 Model B, Compute Module 4, Pi 400) found");
+			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2711 (Raspberry Pi 4 Model B, Compute Module 4, Pi 400) found");
 			render->HardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "bcm2712")) {
-			Debug2(L_DRM, "ReadHWPlatform: bcm2712 (Raspberry Pi 5, Compute Module 5, Pi 500) found");
+			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2712 (Raspberry Pi 5, Compute Module 5, Pi 500) found");
 			render->HardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "amlogic")) {
-			Debug2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
+			LOGDEBUG2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
 			render->HardwareQuirks |= QUIRK_CODEC_NEEDS_EXT_INIT
 					       |  QUIRK_CODEC_SKIP_FIRST_FRAMES
 					       |  QUIRK_NO_HW_DEINT;
@@ -363,13 +365,13 @@ static int CheckZpos(VideoRender * render, struct plane *plane, uint64_t zpos)
 	const uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
 
 	if (!(ModeReq = drmModeAtomicAlloc()))
-		Error("CheckZpos: cannot allocate atomic request (%d): %m", errno);
+		LOGERROR("CheckZpos: cannot allocate atomic request (%d): %m", errno);
 
 	plane->properties.zpos = zpos;
 	SetPlaneZpos(ModeReq, plane);
 
 	if (drmModeAtomicCommit(render->fd_drm, ModeReq, flags, NULL) != 0) {
-		Debug2(L_DRM, "CheckZpos: cannot set atomic mode (%d), don't use zpos change: %m", errno);
+		LOGDEBUG2(L_DRM, "CheckZpos: cannot set atomic mode (%d), don't use zpos change: %m", errno);
 		render->use_zpos = 0;
 		drmModeAtomicFree(ModeReq);
 		return 1;
@@ -391,7 +393,7 @@ EGLConfig get_config(void)
 {
     VideoRender *render = (VideoRender *)GetVideoRender();
     if (!render) {
-        Fatal("failed to get VideoRender");
+        LOGFATAL("failed to get VideoRender");
     }
 
     EGLint config_attribute_list[] = {
@@ -407,21 +409,21 @@ EGLConfig get_config(void)
     EGLint count;
     EGL_CHECK(eglGetConfigs(render->eglDisplay, NULL, 0, &count));
     if (count < 1) {
-        Fatal("no EGL configs to choose from");
+        LOGFATAL("no EGL configs to choose from");
     }
 
-    Debug2(L_OPENGL, "%d EGL configs found", count);
+    LOGDEBUG2(L_OPENGL, "%d EGL configs found", count);
 
     configs = (EGLConfig *)malloc(count * sizeof(*configs));
     if (!configs)
-        Fatal("can't allocate space for EGL configs");
+        LOGFATAL("can't allocate space for EGL configs");
 
     EGL_CHECK(eglChooseConfig(render->eglDisplay, config_attribute_list, configs, count, &matched));
     if (!matched) {
-        Fatal("no EGL configs with appropriate attributes");
+        LOGFATAL("no EGL configs with appropriate attributes");
     }
 
-    Debug2(L_OPENGL, "%d appropriate EGL configs found, which match attributes", matched);
+    LOGDEBUG2(L_OPENGL, "%d appropriate EGL configs found, which match attributes", matched);
 
     for (int i = 0; i < matched; ++i) {
         EGLint gbm_format;
@@ -431,7 +433,7 @@ EGLConfig get_config(void)
             return configs[i];
     }
 
-    Fatal("no matching gbm config found");
+    LOGFATAL("no matching gbm config found");
     return NULL;
 }
 
@@ -444,7 +446,7 @@ static void get_properties(int fd, int plane_id, struct plane *plane)
 	uint32_t i;
 	plane->props = drmModeObjectGetProperties(fd, plane_id, DRM_MODE_OBJECT_PLANE);
 	if (!plane->props) {
-		Error("could not get %u properties: %s",
+		LOGERROR("could not get %u properties: %s",
 			plane_id, strerror(errno));
 		return;
 	}
@@ -525,7 +527,7 @@ static int get_resources(int fd, drmModeRes **resources)
 {
 	*resources = drmModeGetResources(fd);
 	if (*resources == NULL) {
-		Error("FindDevice: cannot retrieve DRM resources (%d): %m", errno);
+		LOGERROR("FindDevice: cannot retrieve DRM resources (%d): %m", errno);
 		return -1;
 	}
 	return 0;
@@ -539,7 +541,7 @@ static int find_drm_device(drmModeRes **resources)
 
 	num_devices = drmGetDevices2(0, devices,MAX_DRM_DEVICES);
 	if (num_devices < 0) {
-		Error("FindDevice: drmGetDevices2 failed: %s", strerror(-num_devices));
+		LOGERROR("FindDevice: drmGetDevices2 failed: %s", strerror(-num_devices));
 		return fd;
 	}
 
@@ -568,7 +570,7 @@ static int find_drm_device(drmModeRes **resources)
 	drmFreeDevices(devices, num_devices);
 
 	if (fd < 0)
-		Error("FindDevice: no drm device found!");
+		LOGERROR("FindDevice: no drm device found!");
 
 	return fd;
 }
@@ -598,13 +600,13 @@ static int init_gbm(VideoRender *render, int w, int h, uint32_t format, uint64_t
 {
 	render->gbm_device = gbm_create_device(render->fd_drm);
 	if (!render->gbm_device) {
-		Error("FindDevice: failed to create gbm device!");
+		LOGERROR("FindDevice: failed to create gbm device!");
 		return -1;
 	}
 
 	render->gbm_surface = gbm_surface_create(render->gbm_device, w, h, format, modifier);
 	if (!render->gbm_surface) {
-		Error("FindDevice: failed to create %d x %d surface bo", w, h);
+		LOGERROR("FindDevice: failed to create %d x %d surface bo", w, h);
 		return -1;
 	}
 
@@ -622,33 +624,33 @@ static int init_egl(VideoRender *render)
 
 	EGL_CHECK(render->eglDisplay = get_platform_display(EGL_PLATFORM_GBM_KHR, render->gbm_device, NULL));
 	if (!render->eglDisplay) {
-		Error("FindDevice: failed to get eglDisplay");
+		LOGERROR("FindDevice: failed to get eglDisplay");
 		return -1;
 	}
 
 	if (!eglInitialize(render->eglDisplay, &iMajorVersion, &iMinorVersion)) {
-		Error("FindDevice: eglInitialize failed");
+		LOGERROR("FindDevice: eglInitialize failed");
 		return -1;
 	}
 
-	Debug2(L_OPENGL, "FindDevice: Using display %p with EGL version %d.%d", render->eglDisplay, iMajorVersion, iMinorVersion);
-	EGL_CHECK(Debug2(L_OPENGL, "  EGL Version: \"%s\"", eglQueryString(render->eglDisplay, EGL_VERSION)));
-	EGL_CHECK(Debug2(L_OPENGL, "  EGL Vendor: \"%s\"", eglQueryString(render->eglDisplay, EGL_VENDOR)));
-	EGL_CHECK(Debug2(L_OPENGL, "  EGL Extensions: \"%s\"", eglQueryString(render->eglDisplay, EGL_EXTENSIONS)));
-	EGL_CHECK(Debug2(L_OPENGL, "  EGL APIs: \"%s\"", eglQueryString(render->eglDisplay, EGL_CLIENT_APIS)));
+	LOGDEBUG2(L_OPENGL, "FindDevice: Using display %p with EGL version %d.%d", render->eglDisplay, iMajorVersion, iMinorVersion);
+	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Version: \"%s\"", eglQueryString(render->eglDisplay, EGL_VERSION)));
+	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Vendor: \"%s\"", eglQueryString(render->eglDisplay, EGL_VENDOR)));
+	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Extensions: \"%s\"", eglQueryString(render->eglDisplay, EGL_EXTENSIONS)));
+	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL APIs: \"%s\"", eglQueryString(render->eglDisplay, EGL_CLIENT_APIS)));
 
 	EGLConfig eglConfig = get_config();
 
 	EGL_CHECK(eglBindAPI(EGL_OPENGL_ES_API));
 	EGL_CHECK(render->eglContext = eglCreateContext(render->eglDisplay, eglConfig, EGL_NO_CONTEXT, context_attribute_list));
 	if (!render->eglContext) {
-		Error("FindDevice: failed to create eglContext");
+		LOGERROR("FindDevice: failed to create eglContext");
 		return -1;
 	}
 
 	EGL_CHECK(render->eglSurface = get_platform_surface(render->eglDisplay, eglConfig, render->gbm_surface, NULL));
 	if (render->eglSurface == EGL_NO_SURFACE) {
-		Error("FindDevice: failed to create eglSurface");
+		LOGERROR("FindDevice: failed to create eglSurface");
 		return -1;
 	}
 
@@ -656,10 +658,10 @@ static int init_egl(VideoRender *render)
 	EGL_CHECK(eglQuerySurface(render->eglDisplay, render->eglSurface, EGL_WIDTH, &s_width));
 	EGL_CHECK(eglQuerySurface(render->eglDisplay, render->eglSurface, EGL_HEIGHT, &s_height));
 
-	Debug2(L_OPENGL, "FindDevice: EGLSurface %p on EGLDisplay %p for %d x %d BO created", render->eglSurface, render->eglDisplay, s_width, s_height);
+	LOGDEBUG2(L_OPENGL, "FindDevice: EGLSurface %p on EGLDisplay %p for %d x %d BO created", render->eglSurface, render->eglDisplay, s_width, s_height);
 
 	render->GlInit = 1;
-	Info("EGL context initialized");
+	LOGINFO("EGL context initialized");
 
 	return 0;
 }
@@ -679,18 +681,18 @@ static int FindDevice(VideoRender * render)
 	// find a drm device
 	render->fd_drm = find_drm_device(&resources);
 	if (render->fd_drm < 0) {
-		Error("FindDevice: Could not open device!");
+		LOGERROR("FindDevice: Could not open device!");
 		return -1;
 	}
 
-	Debug2(L_DRM, "FindDevice: DRM have %i connectors, %i crtcs, %i encoders",
+	LOGDEBUG2(L_DRM, "FindDevice: DRM have %i connectors, %i crtcs, %i encoders",
 		resources->count_connectors, resources->count_crtcs,
 		resources->count_encoders);
 
 	// find a connector
 	connector = find_drm_connector(render->fd_drm, resources);
 	if (!connector) {
-		Error("FindDevice: cannot retrieve DRM connector (%d): %m", errno);
+		LOGERROR("FindDevice: cannot retrieve DRM connector (%d): %m", errno);
 		return -errno;
 	}
 	render->connector_id = connector->connector_id;
@@ -702,12 +704,12 @@ static int FindDevice(VideoRender * render)
 			if(current_mode->hdisplay == VideoDisplayWidth && current_mode->vdisplay == VideoDisplayHeight &&
 			   current_mode->vrefresh == VideoDisplayRefresh && !(current_mode->flags & DRM_MODE_FLAG_INTERLACE)) {
 				mode = current_mode;
-				Debug2(L_DRM, "FindDevice: Use user requested mode: %dx%d@%d", mode->hdisplay, mode->vdisplay, mode->vrefresh);
+				LOGDEBUG2(L_DRM, "FindDevice: Use user requested mode: %dx%d@%d", mode->hdisplay, mode->vdisplay, mode->vrefresh);
 				break;
 			}
 		}
 		if (!mode)
-			Warning("FindDevice: User requested mode not found, try default modes");
+			LOGWARNING("FindDevice: User requested mode not found, try default modes");
 	}
 
 	uint32_t preferred_hz[3] = {50, 60, 0};
@@ -735,12 +737,12 @@ find_mode:
 		}
 
 		if (mode)
-			Debug2(L_DRM, "FindDevice: Use mode with the biggest width: %dx%d@%d",
+			LOGDEBUG2(L_DRM, "FindDevice: Use mode with the biggest width: %dx%d@%d",
 				mode->hdisplay, mode->vdisplay, mode->vrefresh);
 	}
 
 	if (!mode) {
-		Error("FindDevice: No monitor mode found! Probably no monitor connected, giving up!");
+		LOGERROR("FindDevice: No monitor mode found! Probably no monitor connected, giving up!");
 		return -1;
 	}
 
@@ -757,16 +759,16 @@ find_mode:
 
 	if (encoder) {
 		render->crtc_id = encoder->crtc_id;
-		Debug2(L_DRM, "FindDevice: have encoder, render->crtc_id %d", render->crtc_id);
+		LOGDEBUG2(L_DRM, "FindDevice: have encoder, render->crtc_id %d", render->crtc_id);
 	} else {
 		int32_t crtc_id = find_crtc_for_connector(render, resources, connector);
 		if (crtc_id == -1) {
-			Error("FindDevice: No crtc found!");
+			LOGERROR("FindDevice: No crtc found!");
 			return -errno;
 		}
 
 		render->crtc_id = crtc_id;
-		Debug2(L_DRM, "FindDevice: have no encoder, render->crtc_id %d", render->crtc_id);
+		LOGDEBUG2(L_DRM, "FindDevice: have no encoder, render->crtc_id %d", render->crtc_id);
 	}
 
 	for (i = 0; i < resources->count_crtcs; i++) {
@@ -776,7 +778,7 @@ find_mode:
 		}
 	}
 
-	Info("FindDevice: Using Monitor Mode %dx%d@%d, crtc_id %d crtc_idx %d",
+	LOGINFO("FindDevice: Using Monitor Mode %dx%d@%d, crtc_id %d crtc_idx %d",
 		render->mode.hdisplay, render->mode.vdisplay, render->mode.vrefresh, render->crtc_id, render->crtc_index);
 
 	drmModeFreeConnector(connector);
@@ -784,7 +786,7 @@ find_mode:
 
 	// find planes
 	if ((plane_res = drmModeGetPlaneResources(render->fd_drm)) == NULL) {
-		Error("FindDevice: cannot retrieve PlaneResources (%d): %m", errno);
+		LOGERROR("FindDevice: cannot retrieve PlaneResources (%d): %m", errno);
 		return -1;
 	}
 
@@ -796,18 +798,22 @@ find_mode:
 	// test and list the local plane structs
 	struct plane best_primary_video_plane; // is the NV12 capable primary plane with the lowest plane_id
 	best_primary_video_plane.plane_id = 0;
+	best_primary_video_plane.properties.zpos = 0;
 	struct plane best_overlay_video_plane; // is the NV12 capable overlay plane with the lowest plane_id
 	best_overlay_video_plane.plane_id = 0;
+	best_overlay_video_plane.properties.zpos = 0;
 	struct plane best_primary_osd_plane;   // is the AR24 capable primary plane with the highest plane_id
 	best_primary_osd_plane.plane_id = 0;
+	best_primary_osd_plane.properties.zpos = 0;
 	struct plane best_overlay_osd_plane;   // is the AR24 capable overlay plane with the highest plane_id
 	best_overlay_osd_plane.plane_id = 0;
+	best_overlay_osd_plane.properties.zpos = 0;
 
 	for (j = 0; j < plane_res->count_planes; j++) {
 		plane = drmModeGetPlane(render->fd_drm, plane_res->planes[j]);
 
 		if (plane == NULL) {
-			Error("FindDevice: cannot query DRM-KMS plane %d", j);
+			LOGERROR("FindDevice: cannot query DRM-KMS plane %d", j);
 			continue;
 		}
 
@@ -818,16 +824,16 @@ find_mode:
 		if (plane->possible_crtcs & (1 << render->crtc_index)) {
 			if (GetPropertyValue(render->fd_drm, plane_res->planes[j],
 					     DRM_MODE_OBJECT_PLANE, "type", &type)) {
-				Debug2(L_DRM, "FindDevice: Failed to get property 'type'");
+				LOGDEBUG2(L_DRM, "FindDevice: Failed to get property 'type'");
 			}
 			if (GetPropertyValue(render->fd_drm, plane_res->planes[j],
 					     DRM_MODE_OBJECT_PLANE, "zpos", &zpos)) {
-				Debug2(L_DRM, "FindDevice: Failed to get property 'zpos'");
+				LOGDEBUG2(L_DRM, "FindDevice: Failed to get property 'zpos'");
 			} else {
 				render->use_zpos = 1;
 			}
 
-			Debug2(L_DRM, "FindDevice: %s: id %i possible_crtcs %i",
+			LOGDEBUG2(L_DRM, "FindDevice: %s: id %i possible_crtcs %i",
 				(type == DRM_PLANE_TYPE_PRIMARY) ? "PRIMARY " :
 				(type == DRM_PLANE_TYPE_OVERLAY) ? "OVERLAY " :
 				(type == DRM_PLANE_TYPE_CURSOR) ? "CURSOR " : "UNKNOWN",
@@ -876,26 +882,26 @@ find_mode:
 					}
 				}
 			}
-			Debug2(L_DRM, "%s", pixelformats);
+			LOGDEBUG2(L_DRM, "%s", pixelformats);
 		}
 		drmModeFreePlane(plane);
 	}
 
 	// debug output
 	if (best_primary_video_plane.plane_id) {
-		Debug2(L_DRM, "FindDevice: best_primary_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
+		LOGDEBUG2(L_DRM, "FindDevice: best_primary_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_primary_video_plane.plane_id, best_primary_video_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_video_plane.properties.zpos);
 	}
 	if (best_overlay_video_plane.plane_id) {
-		Debug2(L_DRM, "FindDevice: best_overlay_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
+		LOGDEBUG2(L_DRM, "FindDevice: best_overlay_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_overlay_video_plane.plane_id, best_overlay_video_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_video_plane.properties.zpos);
 	}
 	if (best_primary_osd_plane.plane_id) {
-		Debug2(L_DRM, "FindDevice: best_primary_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
+		LOGDEBUG2(L_DRM, "FindDevice: best_primary_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_primary_osd_plane.plane_id, best_primary_osd_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_osd_plane.properties.zpos);
 	}
 	if (best_overlay_osd_plane.plane_id) {
-		Debug2(L_DRM, "FindDevice: best_overlay_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
+		LOGDEBUG2(L_DRM, "FindDevice: best_overlay_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_overlay_osd_plane.plane_id, best_overlay_osd_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_osd_plane.properties.zpos);
 	}
 
@@ -916,7 +922,7 @@ find_mode:
 		render->planes[OSD_PLANE]->properties.zpos = render->zpos_primary = best_primary_osd_plane.properties.zpos;
 		render->use_zpos = 1;
 	} else {
-		Error("FindDevice: No suitable planes found!");
+		LOGERROR("FindDevice: No suitable planes found!");
 		return -1;
 	}
 
@@ -951,13 +957,13 @@ find_mode:
 			render->zpos_primary = render->zpos_overlay;
 			render->zpos_overlay = zpos_tmp;
 		}
-		Debug2(L_DRM, "%s", str_zpos);
+		LOGDEBUG2(L_DRM, "%s", str_zpos);
 	}
 	drmModeFreePlaneResources(plane_res);
 	drmModeFreeEncoder(encoder);
 	drmModeFreeResources(resources);
 
-	Info("FindDevice: DRM setup - CRTC: %i video_plane: %i (%s %" PRIu64 ") osd_plane: %i (%s %" PRIu64 ") use_zpos: %d",
+	LOGINFO("FindDevice: DRM setup - CRTC: %i video_plane: %i (%s %" PRIu64 ") osd_plane: %i (%s %" PRIu64 ") use_zpos: %d",
 		render->crtc_id, render->planes[VIDEO_PLANE]->plane_id,
 		render->planes[VIDEO_PLANE]->type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY",
 		render->planes[VIDEO_PLANE]->properties.zpos,
@@ -976,13 +982,13 @@ find_mode:
 	VideoGetScreenSize(render, &w, &h, &pixel_aspect);
 
 	if (init_gbm(render, w, h, DRM_FORMAT_ARGB8888, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING)) {
-		Error("FindDevice: failed to init gbm device and surface!");
+		LOGERROR("FindDevice: failed to init gbm device and surface!");
 		return -1;
 	}
 
 	// init egl
 	if (init_egl(render)) {
-		Error("FindDevice: failed to init egl!");
+		LOGERROR("FindDevice: failed to init egl!");
 		return -1;
 	}
 #endif
@@ -1050,7 +1056,7 @@ struct drm_buf *drm_get_buf_from_bo(VideoRender *render, struct gbm_bo *bo)
 			buf->offset[i] = gbm_bo_get_offset(bo, i);
 			modifiers[i] = modifiers[0];
 			buf->size[i] = buf->height * buf->pitch[i];
-			Debug2(L_DRM, "drm_get_buf_from_bo: %d: handle %d pitch %d, offset %d, size %d", i, buf->handle[i], buf->pitch[i], buf->offset[i], buf->size[i]);
+			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: %d: handle %d pitch %d, offset %d, size %d", i, buf->handle[i], buf->pitch[i], buf->offset[i], buf->size[i]);
 		}
 		buf->nb_objects = 1;
 		buf->obj_index[0] = 0;
@@ -1058,7 +1064,7 @@ struct drm_buf *drm_get_buf_from_bo(VideoRender *render, struct gbm_bo *bo)
 
 		if (modifiers[0]) {
 			mod_flags = DRM_MODE_FB_MODIFIERS;
-			Debug2(L_DRM, "drm_get_buf_from_bo: Using modifier %" PRIx64 "", modifiers[0]);
+			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: Using modifier %" PRIx64 "", modifiers[0]);
 		}
 
 		// Add FB
@@ -1068,7 +1074,7 @@ struct drm_buf *drm_get_buf_from_bo(VideoRender *render, struct gbm_bo *bo)
 
 	if (ret) {
 		if (mod_flags)
-			Debug2(L_DRM, "drm_get_buf_from_bo: Modifiers failed!");
+			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: Modifiers failed!");
 
 		buf->num_planes = 1;
 		memcpy(buf->handle, (uint32_t [4]){ gbm_bo_get_handle(bo).u32, 0, 0, 0}, 16);
@@ -1083,12 +1089,12 @@ struct drm_buf *drm_get_buf_from_bo(VideoRender *render, struct gbm_bo *bo)
 	}
 
 	if (ret) {
-		Fatal("drm_get_buf_from_bo: cannot create framebuffer (%d): %m", errno);
+		LOGFATAL("drm_get_buf_from_bo: cannot create framebuffer (%d): %m", errno);
 		free(buf);
 		return NULL;
 	}
 
-	Debug2(L_DRM, "drm_get_buf_from_bo: New GL buffer %d x %d pix_fmt %4.4s fb_id %d",
+	LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: New GL buffer %d x %d pix_fmt %4.4s fb_id %d",
 		buf->width, buf->height, (char *)&buf->pix_fmt, buf->fb_id);
 
 	gbm_bo_set_user_data(bo, buf, drm_fb_destroy_callback);
@@ -1125,7 +1131,7 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 	if (primedata) {
 		// we have no DRM objects yet, so return
 		if (!primedata->nb_objects) {
-			Warning("SetupFB: No primedata objects available!");
+			LOGWARNING("SetupFB: No primedata objects available!");
 			return 1;
 		}
 
@@ -1135,7 +1141,7 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 		buf->num_planes = layer->nb_planes;
 		buf->nb_objects = primedata->nb_objects;
 
-		Debug2(L_DRM, "SetupFB: PRIMEDATA %d x %d, pix_fmt %4.4s nb_planes %d nb_objects %d",
+		LOGDEBUG2(L_DRM, "SetupFB: PRIMEDATA %d x %d, pix_fmt %4.4s nb_planes %d nb_objects %d",
 			buf->width, buf->height, (char *)&buf->pix_fmt, buf->num_planes, buf->nb_objects);
 
 		// create handles for PrimeFDs
@@ -1143,14 +1149,14 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 			if (drmPrimeFDToHandle(render->fd_drm,
 				primedata->objects[object].fd, &buf->primehandle[object])) {
 
-				Error("SetupFB: PRIMEDATA Failed to retrieve the Prime Handle %i size %zu (%d): %m",
+				LOGERROR("SetupFB: PRIMEDATA Failed to retrieve the Prime Handle %i size %zu (%d): %m",
 					primedata->objects[object].fd,
 					primedata->objects[object].size, errno);
 				return -errno;
 			}
 			buf->fd_prime[object] = primedata->objects[object].fd;
 			buf->size[object] = primedata->objects[object].size;
-			Debug2(L_DRM, "SetupFB: PRIMEDATA create handle for PrimeFD (%d|%i): PrimeFD %i ToHandle %i size %zu modifier %" PRIx64 "",
+			LOGDEBUG2(L_DRM, "SetupFB: PRIMEDATA create handle for PrimeFD (%d|%i): PrimeFD %i ToHandle %i size %zu modifier %" PRIx64 "",
 				object, primedata->nb_objects, primedata->objects[object].fd, buf->primehandle[object],
 				primedata->objects[object].size, primedata->objects[object].format_modifier);
 		}
@@ -1167,7 +1173,7 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 				if (primedata->objects[object].format_modifier)
 					modifier[plane] = primedata->objects[object].format_modifier;
 
-				Debug2(L_DRM, "SetupFB: PRIMEDATA fill plane %d: handle %d object_index %i pitch %d offset %d size %d modifier %" PRIx64 " (buf->plane not mapped!)",
+				LOGDEBUG2(L_DRM, "SetupFB: PRIMEDATA fill plane %d: handle %d object_index %i pitch %d offset %d size %d modifier %" PRIx64 " (buf->plane not mapped!)",
 					plane, buf->handle[plane], buf->obj_index[plane], buf->pitch[plane], buf->offset[plane], buf->size[plane], modifier[plane]);
 			}
 		}
@@ -1176,13 +1182,13 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 	} else {
 		const struct format_info *format_info = find_format(buf->pix_fmt);
 		if (!format_info) {
-			Error("SetupFB: No suitable format found!");
+			LOGERROR("SetupFB: No suitable format found!");
 			return 1;
 		}
 
 		buf->num_planes = format_info->num_planes;
 
-		Debug2(L_DRM, "SetupFB:  %d x %d, pix_fmt %4.4s nb_planes %d",
+		LOGDEBUG2(L_DRM, "SetupFB:  %d x %d, pix_fmt %4.4s nb_planes %d",
 			buf->width, buf->height, (char *)&buf->pix_fmt, buf->num_planes);
 
 		for (int plane = 0; plane < format_info->num_planes; plane++) {
@@ -1194,7 +1200,7 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 			creq.bpp = plane_info->bitspp;
 
 			if (drmIoctl(render->fd_drm, DRM_IOCTL_MODE_CREATE_DUMB, &creq) < 0){
-				Error("SetupFB: cannot create dumb buffer %dx%d@%d (%d): %m",
+				LOGERROR("SetupFB: cannot create dumb buffer %dx%d@%d (%d): %m",
 					creq.width, creq.height, creq.bpp, errno);
 				return -errno;
 			}
@@ -1208,20 +1214,20 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 			mreq.handle = buf->handle[plane];
 
 			if (drmIoctl(render->fd_drm, DRM_IOCTL_MODE_MAP_DUMB, &mreq)){
-				Error("SetupFB: cannot prepare dumb buffer for mapping (%d): %m", errno);
+				LOGERROR("SetupFB: cannot prepare dumb buffer for mapping (%d): %m", errno);
 				return -errno;
 			}
 
 			buf->plane[plane] = (uint8_t *)mmap(0, creq.size, PROT_READ | PROT_WRITE, MAP_SHARED, render->fd_drm, mreq.offset);
 
 			if (buf->plane[plane] == MAP_FAILED) {
-				Error("SetupFB: cannot map dumb buffer (%d): %m", errno);
+				LOGERROR("SetupFB: cannot map dumb buffer (%d): %m", errno);
 				return -errno;
 			}
 
 			memset(buf->plane[plane], 0, buf->size[plane]);
 
-			Debug2(L_DRM, "SetupFB: fill plane %d: handle %d pitch %d offset %d size %d address %p",
+			LOGDEBUG2(L_DRM, "SetupFB: fill plane %d: handle %d pitch %d offset %d size %d address %p",
 				plane, buf->handle[plane], buf->pitch[plane], buf->offset[plane], buf->size[plane], buf->plane[plane]);
 		}
 	}
@@ -1232,16 +1238,16 @@ static int SetupFB(VideoRender * render, struct drm_buf *buf,
 
 	if (ret) {
 		if (mod_flags)
-			Error("SetupFB: cannot create modifiers framebuffer (%d): %m", errno);
+			LOGERROR("SetupFB: cannot create modifiers framebuffer (%d): %m", errno);
 
 		ret = drmModeAddFB2(render->fd_drm, buf->width, buf->height, buf->pix_fmt,
 			buf->handle, buf->pitch, buf->offset, &buf->fb_id, 0);
 	}
 
 	if (ret)
-		Fatal("SetupFB: cannot create framebuffer (%d): %m", errno);
+		LOGFATAL("SetupFB: cannot create framebuffer (%d): %m", errno);
 
-	Debug2(L_DRM, "SetupFB: Added %sFB fb_id %d width %d height %d pix_fmt %4.4s",
+	LOGDEBUG2(L_DRM, "SetupFB: Added %sFB fb_id %d width %d height %d pix_fmt %4.4s",
 		primedata ? "primedata " : "", buf->fb_id, buf->width, buf->height, (char *)&buf->pix_fmt);
 
 	buf->dirty = 1;
@@ -1252,21 +1258,21 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 {
 	struct drm_mode_destroy_dumb dreq;
 
-	Debug2(L_DRM, "DestroyFB: destroy FB %d", buf->fb_id);
+	LOGDEBUG2(L_DRM, "DestroyFB: destroy FB %d", buf->fb_id);
 
 	for (int i = 0; i < buf->num_planes; i++) {
 		if (buf->plane[i]) {
 			if (munmap(buf->plane[i], buf->size[i]))
-				Error("DestroyFB: failed unmap FB (%d): %m", errno);
+				LOGERROR("DestroyFB: failed unmap FB (%d): %m", errno);
 		}
 	}
 
 	if (drmModeRmFB(fd_drm, buf->fb_id) < 0)
-		Error("DestroyFB: cannot rm FB (%d): %m", errno);
+		LOGERROR("DestroyFB: cannot rm FB (%d): %m", errno);
 
 	if (buf->fd_prime[0] && buf->swbuffer) {
 		if (close(buf->fd_prime[0]))
-			Error("DestroyFB: error closing prime fd %d (%d): %m", buf->fd_prime[0], errno);
+			LOGERROR("DestroyFB: error closing prime fd %d (%d): %m", buf->fd_prime[0], errno);
 		buf->fd_prime[0] = 0;
 	}
 
@@ -1276,7 +1282,7 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 			dreq.handle = buf->handle[i];
 
 			if (drmIoctl(fd_drm, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq) < 0)
-				Error("DestroyFB: cannot destroy dumb buffer (%d): %m", errno);
+				LOGERROR("DestroyFB: cannot destroy dumb buffer (%d): %m", errno);
 			buf->handle[i] = 0;
 
 		}
@@ -1293,7 +1299,7 @@ static void DestroyFB(int fd_drm, struct drm_buf *buf)
 		// this can happen, when we SetPlayMode 0 while in trickspeed
 		// does not show negative effects, but its not nice though -> TODO
 			if (drmIoctl(fd_drm, DRM_IOCTL_GEM_CLOSE, &buf->primehandle[i]) < 0)
-				Error("DestroyFB: cannot close handle %d FB %d GEM (%d): %m", buf->primehandle[i], buf->fb_id, errno);
+				LOGERROR("DestroyFB: cannot close handle %d FB %d GEM (%d): %m", buf->primehandle[i], buf->fb_id, errno);
 		}
 	}
 
@@ -1315,7 +1321,7 @@ static void *GrabHandlerThread(void *arg)
 {
 	VideoRender * render = (VideoRender *)arg;
 
-	Debug2(L_GRAB, "GrabHandlerThread: thread started");
+	LOGDEBUG2(L_GRAB, "GrabHandlerThread: thread started");
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
@@ -1328,7 +1334,7 @@ static void *GrabHandlerThread(void *arg)
 	if (videobuf) {
 		for (int plane = 0; plane < videobuf->num_planes; plane++) {
 			if (videobuf->size[plane]) {
-				Debug2(L_GRAB, "GrabHandlerThread: free videobuf %p (plane %d)", videobuf->plane[plane], plane);
+				LOGDEBUG2(L_GRAB, "GrabHandlerThread: free videobuf %p (plane %d)", videobuf->plane[plane], plane);
 				free(videobuf->plane[plane]);
 			}
 		}
@@ -1338,14 +1344,14 @@ static void *GrabHandlerThread(void *arg)
 	if (osdbuf) {
 		for (int plane = 0; plane < osdbuf->num_planes; plane++) {
 			if (osdbuf->size[plane]) {
-				Debug2(L_GRAB, "GrabHandlerThread: free osdbuf %p (plane %d)", osdbuf->plane[plane], plane);
+				LOGDEBUG2(L_GRAB, "GrabHandlerThread: free osdbuf %p (plane %d)", osdbuf->plane[plane], plane);
 				free(osdbuf->plane[plane]);
 			}
 		}
 		free(osdbuf);
 	}
 
-	Debug2(L_GRAB, "GrabHandlerThread: thread ended");
+	LOGDEBUG2(L_GRAB, "GrabHandlerThread: thread ended");
 	pthread_exit((void *)pthread_self());
 }
 
@@ -1390,17 +1396,17 @@ void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 			dst_buffer = malloc(src->size[object]);
 			src_buffer = mmap(NULL, src->size[object], PROT_READ, MAP_PRIVATE, src->fd_prime[object], 0);
 			if (src_buffer == MAP_FAILED) {
-				Error("VideoCloneBufB: cannot map buffer (%d): %m", errno);
+				LOGERROR("VideoCloneBufB: cannot map buffer (%d): %m", errno);
 				return;
 			}
 
-			Debug2(L_GRAB, "VideoCloneBuf: Copy %p to %p", src_buffer, dst_buffer);
+			LOGDEBUG2(L_GRAB, "VideoCloneBuf: Copy %p to %p", src_buffer, dst_buffer);
 			memcpy(dst_buffer, src_buffer, src->size[object]);
 			munmap(src_buffer, src->size[object]);
 			for (int plane = 0; plane < buf->num_planes; plane++) {
 				if (buf->obj_index[plane] == object) {
 					buf->plane[plane] = (uint8_t *)dst_buffer;
-					Debug2(L_GRAB, "VideoCloneBuf: buf->plane[%d] gets %p (object %d)", plane, dst_buffer, object);
+					LOGDEBUG2(L_GRAB, "VideoCloneBuf: buf->plane[%d] gets %p (object %d)", plane, dst_buffer, object);
 				}
 			}
 		}
@@ -1413,7 +1419,7 @@ void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 	}
 
 	for (int plane = 0; plane < buf->num_planes; plane++) {
-		Debug2(L_GRAB, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d",
+		LOGDEBUG2(L_GRAB, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d",
 		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
 	}
 
@@ -1434,7 +1440,7 @@ static void CleanDisplayThread(VideoRender * render)
 		int timeout = 20;
 		usleep(1000);
 		if (!timeout--) {
-			Error("CleanDisplayThread: Wait for filter thread ending -- TIMEOUT");
+			LOGERROR("CleanDisplayThread: Wait for filter thread ending -- TIMEOUT");
 			break;
 		}
 	}
@@ -1476,7 +1482,7 @@ dequeue:
 	render->FilterDeintDisabled = render->ConfigFilterDeintDisabled;
 	pthread_mutex_unlock(&WaitCleanMutex);
 
-	Debug("CleanDisplayThread: DRM cleaned.");
+	LOGDEBUG("CleanDisplayThread: DRM cleaned.");
 }
 
 ///
@@ -1504,7 +1510,7 @@ static int VideoDrmCommit(VideoRender *render, struct drm_buf *buf, int skip_vid
 	drmModeAtomicReqPtr ModeReq;
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
 	if (!(ModeReq = drmModeAtomicAlloc())) {
-		Error("Frame2Display: cannot allocate atomic request (%d): %m", errno);
+		LOGERROR("Frame2Display: cannot allocate atomic request (%d): %m", errno);
 		return -2;
 	}
 
@@ -1566,7 +1572,7 @@ static int VideoDrmCommit(VideoRender *render, struct drm_buf *buf, int skip_vid
 	dirty += 2;
 
 	if (render->startgrab) {
-		Debug2(L_GRAB, "Frame2Display: Trigger video grab arrived");
+		LOGDEBUG2(L_GRAB, "Frame2Display: Trigger video grab arrived");
 		VideoCloneBuf(&render->grabvideo->buf, buf);
 		// should be the size on screen
 		render->grabvideo->x = DispX + (DispWidth - PicWidth) / 2;
@@ -1585,7 +1591,7 @@ skip_video:
 			SetPlaneZpos(ModeReq, render->planes[VIDEO_PLANE]);
 			SetPlaneZpos(ModeReq, render->planes[OSD_PLANE]);
 
-			Debug2(L_DRM, "Frame2Display: SetPlaneZpos: video->plane_id %d -> zpos %" PRIu64 ", osd->plane_id %d -> zpos %" PRIu64 "",
+			LOGDEBUG2(L_DRM, "Frame2Display: SetPlaneZpos: video->plane_id %d -> zpos %" PRIu64 ", osd->plane_id %d -> zpos %" PRIu64 "",
 				render->planes[VIDEO_PLANE]->plane_id, render->planes[VIDEO_PLANE]->properties.zpos,
 				render->planes[OSD_PLANE]->plane_id, render->planes[OSD_PLANE]->properties.zpos);
 		}
@@ -1603,13 +1609,13 @@ skip_video:
 
 		SetPlane(ModeReq, render->planes[OSD_PLANE]);
 		dirty += 1;
-		Debug2(L_DRM, "Frame2Display: SetPlane OSD %d (fb = %" PRIu64 ")", render->OsdShown, render->planes[OSD_PLANE]->properties.fb_id);
+		LOGDEBUG2(L_DRM, "Frame2Display: SetPlane OSD %d (fb = %" PRIu64 ")", render->OsdShown, render->planes[OSD_PLANE]->properties.fb_id);
 		render->buf_osd->dirty = 0;
 	}
 
 	if (render->startgrab) {
 		if (render->buf_osd && render->OsdShown) {
-			Debug2(L_GRAB, "Frame2Display: Trigger osd grab arrived");
+			LOGDEBUG2(L_GRAB, "Frame2Display: Trigger osd grab arrived");
 			VideoCloneBuf(&render->grabosd->buf, render->buf_osd);
 			// should be the size on screen
 			render->grabosd->x = 0;
@@ -1635,7 +1641,7 @@ skip_video:
 			DumpPlaneProperties(render->planes[VIDEO_PLANE]);
 
 		drmModeAtomicFree(ModeReq);
-		Error("Frame2Display: page flip failed (%d): %m", errno);
+		LOGERROR("Frame2Display: page flip failed (%d): %m", errno);
 		return -2;
 	}
 
@@ -1660,7 +1666,7 @@ static int VideoSync(VideoRender *render, AVFrame *frame, int *skip_video, struc
 	video_pts = frame->pts * 1000 * av_q2d(*render->timebase);
 
 	if(!render->StartCounter && !render->Closing) {
-		Debug("VideoSync: start PTS %s", Timestamp2String(video_pts));
+		LOGDEBUG("VideoSync: start PTS %s", Timestamp2String(video_pts));
 		AudioSkipInTrickSpeed(frame->pts, 0);
 avready:
 		if (AudioVideoReady(video_pts)) {
@@ -1668,11 +1674,11 @@ avready:
 
 			// check for close/flush request or pause
 			if (render->Closing) {
-				Debug2(L_DRM, "Frame2Display: closing while sync, set a black FB");
+				LOGDEBUG2(L_DRM, "Frame2Display: closing while sync, set a black FB");
 				*buf = &render->buf_black;
 				return 1;
 			} else if (render->Flushing) {
-				Debug2(L_DRM, "Frame2Display: flushing while sync, skip video");
+				LOGDEBUG2(L_DRM, "Frame2Display: flushing while sync, skip video");
 				*skip_video = 1;
 				return 1;
 			} else if (VideoIsPaused(render)) {
@@ -1686,11 +1692,11 @@ avready:
 audioclock:
 	// check for close/flush request or pause
 	if (render->Closing) {
-		Debug2(L_DRM, "Frame2Display: closing while sync, set a black FB");
+		LOGDEBUG2(L_DRM, "Frame2Display: closing while sync, set a black FB");
 		*buf = &render->buf_black;
 		return 1;
 	} else if (render->Flushing) {
-		Debug2(L_DRM, "Frame2Display: flushing while sync, skip video");
+		LOGDEBUG2(L_DRM, "Frame2Display: flushing while sync, skip video");
 		*skip_video = 1;
 		return 1;
 	} else if (VideoIsPaused(render)) {
@@ -1707,7 +1713,7 @@ audioclock:
 	int diff = video_pts - audio_pts - VideoAudioDelay;
 
 	if (abs(diff) > 5000) {	// more than 5s
-		Debug2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
 			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), VideoAudioDelay, diff);
@@ -1715,7 +1721,7 @@ audioclock:
 	}
 
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
-		Debug2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			render->FramesDropped, render->FramesDuped,
 			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
 			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
@@ -1729,7 +1735,7 @@ audioclock:
 	}
 
 	if (diff > 35 && !(abs(diff) > 5000)) {	// audio is more than 35ms behind video, duplicate video frame
-		Debug2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			render->FramesDropped, render->FramesDuped,
 			VideoGetPackets(), atomic_read(&render->FramesDeintFilled),
 			atomic_read(&render->FramesFilled), AudioUsedBytes(), Timestamp2String(audio_pts),
@@ -1805,7 +1811,7 @@ static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf *
 				break;
 		}
 		if (render->bufs[i].dirty) {
-			Debug("VideoGetBuffer: SHOULD NOT HAPPEN! no free buffer available!");
+			LOGDEBUG("VideoGetBuffer: SHOULD NOT HAPPEN! no free buffer available!");
 			return 1;
 		}
 
@@ -1821,7 +1827,7 @@ static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf *
 	}
 
 	if (pbuf == 0) {
-		Debug("VideoGetBuffer: SHOULD NOT HAPPEN! failed, no buffer found!");
+		LOGDEBUG("VideoGetBuffer: SHOULD NOT HAPPEN! failed, no buffer found!");
 		return 1;
 	}
 
@@ -1840,13 +1846,13 @@ static int VideoGetBuffer(VideoRender * render, AVFrame *frame, struct drm_buf *
 ///
 static int check_closing(VideoRender *render, int *skip_video, struct drm_buf **buf) {
 	if (render->Closing) {
-		Debug2(L_DRM, "Frame2Display: closing, set a black FB");
+		LOGDEBUG2(L_DRM, "Frame2Display: closing, set a black FB");
 		*buf = &render->buf_black;
 		return 1;
 	}
 
 	if (render->Flushing) {
-		Debug2(L_DRM, "Frame2Display: flushing, skip video");
+		LOGDEBUG2(L_DRM, "Frame2Display: flushing, skip video");
 		*skip_video = 1;
 		return 1;
 	}
@@ -1867,7 +1873,7 @@ static int check_pausing(VideoRender *render, int *skip_video) {
 
 	*skip_video = 1;
 	usleep(10000);
-//	Debug2(L_DRM, "Frame2Display: paused, skip video");
+//	LOGDEBUG2(L_DRM, "Frame2Display: paused, skip video");
 	return 1;
 }
 
@@ -1932,7 +1938,7 @@ dequeue:
 		// wait max. 25ms in case we have an osd
 		if (render->buf_osd && render->buf_osd->dirty && !timeout--) {
 			skip_video = 1;
-			Debug2(L_DRM, "Frame2Display: no video but osd, skip video");
+			LOGDEBUG2(L_DRM, "Frame2Display: no video but osd, skip video");
 			goto page_flip;
 		}
 
@@ -1946,11 +1952,11 @@ dequeue:
 	if (VideoGetFrame(render, &frame)) {
 		FrameData *fd = (FrameData *)frame->opaque_ref->data;
 		if (fd->flags & FRAME_FLAG_STILLPICTURE) {
-			Debug2(L_STILL, "Frame2Display: Stillpicture has AV_NOPTS_VALUE, skip sync ...");
+			LOGDEBUG2(L_STILL, "Frame2Display: Stillpicture has AV_NOPTS_VALUE, skip sync ...");
 			goto skip_sync;
 		} else {
 			// TODO: fast/soft sync
-			Debug2(L_DRM, "Frame2Display: no AV_NOPTS_VALUE, use next frame ...");
+			LOGDEBUG2(L_DRM, "Frame2Display: no AV_NOPTS_VALUE, use next frame ...");
 			av_frame_free(&frame);
 			return 1;
 		}
@@ -2009,7 +2015,7 @@ page_flip:
 		VideoSetClock(render, frame->pts);
 
 	if (frame)
-		Debug2(L_PACKET, "Frame2Display:                 PTS %s", Timestamp2String(frame->pts / 90));
+		LOGDEBUG2(L_PACKET, "Frame2Display:                 PTS %s", Timestamp2String(frame->pts / 90));
 
 	// new video frame was sent, rotate the frames
 	if (render->lastframe->frame) {
@@ -2038,7 +2044,7 @@ static void *DisplayHandlerThread(void * arg)
 {
 	VideoRender * render = (VideoRender *)arg;
 
-	Debug("video: display thread started");
+	LOGDEBUG("video: display thread started");
 	pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
@@ -2049,13 +2055,13 @@ static void *DisplayHandlerThread(void * arg)
 
 		if (!ret) {
 			if (drmHandleEvent(render->fd_drm, &render->ev) != 0)
-				Error("DisplayHandlerThread: drmHandleEvent failed!");
+				LOGERROR("DisplayHandlerThread: drmHandleEvent failed!");
 		}
 
 		if (render->Closing || render->Flushing)
 			CleanDisplayThread(render);
 	}
-	Debug("video: display thread stopped");
+	LOGDEBUG("video: display thread stopped");
 	pthread_exit((void *)pthread_self());
 }
 
@@ -2082,7 +2088,7 @@ void VideoOsdClear(VideoRender * render)
 
 		buf = drm_get_buf_from_bo(render, render->next_bo);
 		if (!buf) {
-			Error("Failed to get GL buffer");
+			LOGERROR("Failed to get GL buffer");
 			return;
 		}
 
@@ -2096,7 +2102,7 @@ void VideoOsdClear(VideoRender * render)
 		render->old_bo = render->bo;
 		render->bo = render->next_bo;
 
-		Debug2(L_OPENGL, "VideoOsdClear(GL): eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", render->eglDisplay, render->eglSurface, buf->width, buf->height, buf->pitch[0]);
+		LOGDEBUG2(L_OPENGL, "VideoOsdClear(GL): eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", render->eglDisplay, render->eglSurface, buf->width, buf->height, buf->pitch[0]);
 	}
 #else
 	memset((void *)render->buf_osd->plane[0], 0,
@@ -2127,7 +2133,7 @@ void VideoOsdDrawARGB(VideoRender * render, int xi, int yi,
 {
 #ifdef USE_GLES
 	if (render->DisableOglOsd) {
-		Debug2(L_OSD, "VideoOsdDrawARGB width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d",
+		LOGDEBUG2(L_OSD, "VideoOsdDrawARGB width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d",
 		       width, height, pitch, argb, x, y, render->buf_osd->pitch[0], xi, yi);
 		for (int i = 0; i < height; ++i) {
 			memcpy(render->buf_osd->plane[0] + x * 4 + (i + y) * render->buf_osd->pitch[0],
@@ -2142,7 +2148,7 @@ void VideoOsdDrawARGB(VideoRender * render, int xi, int yi,
 
 		buf = drm_get_buf_from_bo(render, render->next_bo);
 		if (!buf) {
-			Error("Failed to get GL buffer");
+			LOGERROR("Failed to get GL buffer");
 			return;
 		}
 
@@ -2156,7 +2162,7 @@ void VideoOsdDrawARGB(VideoRender * render, int xi, int yi,
 		render->old_bo = render->bo;
 		render->bo = render->next_bo;
 
-		Debug2(L_OPENGL, "VideoOsdDrawARGB(GL): eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", render->eglDisplay, render->eglSurface, buf->width, buf->height, buf->pitch[0]);
+		LOGDEBUG2(L_OPENGL, "VideoOsdDrawARGB(GL): eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", render->eglDisplay, render->eglSurface, buf->width, buf->height, buf->pitch[0]);
 	}
 #else
 	for (int i = 0; i < height; ++i) {
@@ -2179,7 +2185,7 @@ static void *DecodeHandlerThread(void *arg)
 {
 	VideoRender * render = (VideoRender *)arg;
 
-	Debug("video: decoding thread started");
+	LOGDEBUG("video: decoding thread started");
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
@@ -2191,7 +2197,7 @@ static void *DecodeHandlerThread(void *arg)
 			usleep(10000);
 		}
 	}
-	Debug("video: decoding thread stopped");
+	LOGDEBUG("video: decoding thread stopped");
 	pthread_exit((void *)pthread_self());
 }
 
@@ -2207,24 +2213,24 @@ void VideoThreadExit(void)
 {
 	void *retval;
 
-	Debug("VideoThreadExit: cancel decoding and display thread");
+	LOGDEBUG("VideoThreadExit: cancel decoding and display thread");
 
 	if (DecodeThread) {
-		Debug("VideoThreadExit: cancel decode thread");
+		LOGDEBUG("VideoThreadExit: cancel decode thread");
 		// FIXME: can't cancel locked
 		if (pthread_cancel(DecodeThread))
-			Error("VideoThreadExit: can't cancel decoding thread");
+			LOGERROR("VideoThreadExit: can't cancel decoding thread");
 		if (pthread_join(DecodeThread, &retval) || retval != PTHREAD_CANCELED)
-			Error("VideoThreadExit: can't cancel decoding thread");
+			LOGERROR("VideoThreadExit: can't cancel decoding thread");
 		DecodeThread = 0;
 	}
 
 	if (DisplayThread) {
-		Debug("VideoThreadExit: cancel display thread");
+		LOGDEBUG("VideoThreadExit: cancel display thread");
 		if (pthread_cancel(DisplayThread))
-			Error("VideoThreadExit: can't cancel display thread");
+			LOGERROR("VideoThreadExit: can't cancel display thread");
 		if (pthread_join(DisplayThread, &retval) || retval != PTHREAD_CANCELED)
-			Error("VideoThreadExit: can't cancel display thread");
+			LOGERROR("VideoThreadExit: can't cancel display thread");
 		DisplayThread = 0;
 	}
 }
@@ -2236,10 +2242,10 @@ void VideoThreadExit(void)
 ///
 void VideoThreadWakeup(VideoRender * render, int decoder, int display)
 {
-	Debug("VideoThreadWakeup: VideoThreadWakeup");
+	LOGDEBUG("VideoThreadWakeup: VideoThreadWakeup");
 
 	if (decoder && !DecodeThread) {
-		Debug("DisplayThreadWakeup: wakeup decoding thread");
+		LOGDEBUG("DisplayThreadWakeup: wakeup decoding thread");
 		pthread_cond_init(&WaitCleanCondition,NULL);
 		pthread_mutex_init(&WaitCleanMutex, NULL);
 
@@ -2248,7 +2254,7 @@ void VideoThreadWakeup(VideoRender * render, int decoder, int display)
 	}
 
 	if (display && !DisplayThread) {
-		Debug("VideoThreadWakeup: wakeup display thread");
+		LOGDEBUG("VideoThreadWakeup: wakeup display thread");
 		pthread_create(&DisplayThread, NULL, DisplayHandlerThread, render);
 		pthread_setname_np(DisplayThread, "display thread");
 	}
@@ -2270,7 +2276,7 @@ VideoRender *VideoNewRender(VideoStream * stream)
 	VideoRender *render;
 
 	if (!(render = (VideoRender *)calloc(1, sizeof(*render)))) {
-		Error("video/DRM: out of memory");
+		LOGERROR("video/DRM: out of memory");
 		return NULL;
 	}
 	atomic_set(&render->FramesFilled, 0);
@@ -2297,7 +2303,7 @@ void VideoDelRender(VideoRender * render)
 {
     if (render) {
 		if (!pthread_equal(pthread_self(), DecodeThread)) {
-			Debug("video: should only be called from inside the thread");
+			LOGDEBUG("video: should only be called from inside the thread");
 		}
 		free(render->lastframe);
 		free(render);
@@ -2319,7 +2325,7 @@ enum AVPixelFormat Video_get_format(__attribute__ ((unused))VideoRender * render
 		AVCodecContext * video_ctx, const enum AVPixelFormat *fmt)
 {
 	while (*fmt != AV_PIX_FMT_NONE) {
-		Debug2(L_CODEC, "Video_get_format: PixelFormat: %s video_ctx->pix_fmt: %s sw_pix_fmt: %s Codecname: %s",
+		LOGDEBUG2(L_CODEC, "Video_get_format: PixelFormat: %s video_ctx->pix_fmt: %s sw_pix_fmt: %s Codecname: %s",
 			av_get_pix_fmt_name(*fmt), av_get_pix_fmt_name(video_ctx->pix_fmt),
 			av_get_pix_fmt_name(video_ctx->sw_pix_fmt), video_ctx->codec->name);
 		if (*fmt == AV_PIX_FMT_DRM_PRIME) {
@@ -2331,7 +2337,7 @@ enum AVPixelFormat Video_get_format(__attribute__ ((unused))VideoRender * render
 		}
 		fmt++;
 	}
-	Warning("Video_get_format: No pixel format found! Set default format.");
+	LOGWARNING("Video_get_format: No pixel format found! Set default format.");
 
 	return avcodec_default_get_format(video_ctx, fmt);
 }
@@ -2352,7 +2358,7 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 				break;
 		}
 		if (render->bufs[i].dirty)
-			Fatal("EnqueueFB: SHOULD NOT HAPPEN! no free buffer available!");
+			LOGFATAL("EnqueueFB: SHOULD NOT HAPPEN! no free buffer available!");
 
 		buf = &render->bufs[i];
 		buf->width = (uint32_t)inframe->width;
@@ -2360,11 +2366,11 @@ void EnqueueFB(VideoRender * render, AVFrame *inframe)
 		buf->pix_fmt = DRM_FORMAT_NV12;
 
 		if (SetupFB(render, buf, NULL)) {
-			Error("EnqueueFB: SetupFB FB %i x %i failed",
+			LOGERROR("EnqueueFB: SetupFB FB %i x %i failed",
 				buf->width, buf->height);
 		}
 		if (drmPrimeHandleToFD(render->fd_drm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime[0]))
-			Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+			LOGERROR("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
 	} else {
 		// create some buffers up to VIDEO_SURFACES_MAX + 2
 get_buffer:
@@ -2385,14 +2391,14 @@ get_buffer:
 			buf->pix_fmt = DRM_FORMAT_NV12;
 
 			if (SetupFB(render, buf, NULL)) {
-				Error("EnqueueFB: SetupFB FB %i x %i failed",
+				LOGERROR("EnqueueFB: SetupFB FB %i x %i failed",
 					buf->width, buf->height);
 			}
 
 			render->buffers++;
 
 			if (drmPrimeHandleToFD(render->fd_drm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime[0]))
-				Error("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+				LOGERROR("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
 		}
 	}
 
@@ -2420,7 +2426,7 @@ get_buffer:
 	if (!frame->opaque_ref) {
 		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
 		if (!frame->opaque_ref) {
-			Fatal("EnqueueFB: cannot allocate private frame data");
+			LOGFATAL("EnqueueFB: cannot allocate private frame data");
 		}
 	}
 	fd = (FrameData *)frame->opaque_ref->data;
@@ -2459,7 +2465,7 @@ static void *FilterHandlerThread(void * arg)
 	AVFrame *frame = 0;
 	int ret = 0;
 
-	Debug("video: video filter thread started");
+	LOGDEBUG("video: video filter thread started");
 
 	while (1) {
 		while (!atomic_read(&render->FramesDeintFilled) && !render->FilterClosing) {
@@ -2494,7 +2500,7 @@ getinframe:
 
 		if (av_buffersrc_add_frame_flags(render->buffersrc_ctx,
 			frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
-			Warning("FilterHandlerThread: can't add_frame.");
+			LOGWARNING("FilterHandlerThread: can't add_frame.");
 		} else {
 			av_frame_free(&frame);
 		}
@@ -2512,7 +2518,7 @@ getinframe:
 				goto closing;
 			}
 			if (ret < 0) {
-				Error("FilterHandlerThread: can't get filtered frame: %s",
+				LOGERROR("FilterHandlerThread: can't get filtered frame: %s",
 					av_err2str(ret));
 				av_frame_free(&filt_frame);
 				break;
@@ -2527,7 +2533,7 @@ fillframe:
 			if (!filt_frame->opaque_ref) {
 				filt_frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
 				if (!filt_frame->opaque_ref)
-					Fatal("FilterHandlerThread: cannot allocate private frame data");
+					LOGFATAL("FilterHandlerThread: cannot allocate private frame data");
 			}
 			fd = (FrameData *)filt_frame->opaque_ref->data;
 			// set trickspeed flag of the filtered frame (scale filter and AV_PIX_FMT_YUV420P)
@@ -2572,7 +2578,7 @@ closing:
 	render->Filter_Still = 0;
 	pthread_cleanup_push(ThreadExitHandler, render);
 	pthread_cleanup_pop(1);
-	Debug("video: video filter thread stopped");
+	LOGDEBUG("video: video filter thread stopped");
 	pthread_exit((void *)pthread_self());
 }
 
@@ -2590,7 +2596,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	const char *filter_descr = NULL;
 	render->filter_graph = avfilter_graph_alloc();
 	if (!render->filter_graph) {
-		Error("VideoFilterInit: Cannot alloc filter graph");
+		LOGERROR("VideoFilterInit: Cannot alloc filter graph");
 		return -1;
 	}
 
@@ -2617,7 +2623,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 
 	if (render->FilterDeintDisabled) {
 		if (interlaced)
-			Debug2(L_CODEC, "VideoFilterInit: Deinterlacer wanted, but disabled in setup!");
+			LOGDEBUG2(L_CODEC, "VideoFilterInit: Deinterlacer wanted, but disabled in setup!");
 		interlaced = 0;
 	}
 
@@ -2625,7 +2631,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	if (!frame->opaque_ref) {
 		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
 		if (!frame->opaque_ref)
-			Fatal("FilterHandlreThread: cannot allocate private frame data");
+			LOGFATAL("FilterHandlreThread: cannot allocate private frame data");
 	}
 	fd = (FrameData *)frame->opaque_ref->data;
 
@@ -2661,13 +2667,13 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 		video_ctx->sample_aspect_ratio.num != 0 ? video_ctx->sample_aspect_ratio.num : 1,
 		video_ctx->sample_aspect_ratio.num != 0 ? video_ctx->sample_aspect_ratio.den : 1);
 
-	Debug2(L_CODEC, "VideoFilterInit: filter=\"%s\" args=\"%s\"",
+	LOGDEBUG2(L_CODEC, "VideoFilterInit: filter=\"%s\" args=\"%s\"",
 		filter_descr, args);
 
 	ret = avfilter_graph_create_filter(&render->buffersrc_ctx, buffersrc, "in",
 		args, NULL, render->filter_graph);
 	if (ret < 0) {
-		Error("VideoFilterInit: Cannot create buffer source (%d)", ret);
+		LOGERROR("VideoFilterInit: Cannot create buffer source (%d)", ret);
 		avfilter_graph_free(&render->filter_graph);
 		return -1;
 	}
@@ -2678,7 +2684,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	par->hw_frames_ctx = frame->hw_frames_ctx;
 	ret = av_buffersrc_parameters_set(render->buffersrc_ctx, par);
 	if (ret < 0) {
-		Error("VideoFilterInit: Cannot av_buffersrc_parameters_set (%d)", ret);
+		LOGERROR("VideoFilterInit: Cannot av_buffersrc_parameters_set (%d)", ret);
 		av_free(par);
 		avfilter_graph_free(&render->filter_graph);
 		return -1;
@@ -2689,7 +2695,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	ret = avfilter_graph_create_filter(&render->buffersink_ctx, buffersink, "out",
 		NULL, NULL, render->filter_graph);
 	if (ret < 0) {
-		Error("VideoFilterInit: Cannot create buffer sink (%d)", ret);
+		LOGERROR("VideoFilterInit: Cannot create buffer sink (%d)", ret);
 		avfilter_graph_free(&render->filter_graph);
 		return -1;
 	}
@@ -2699,7 +2705,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 		ret = av_opt_set_int_list(render->buffersink_ctx, "pix_fmts", pix_fmts,
 			AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
 		if (ret < 0) {
-			Error("VideoFilterInit: Cannot set output pixel format (%d)", ret);
+			LOGERROR("VideoFilterInit: Cannot set output pixel format (%d)", ret);
 			avfilter_graph_free(&render->filter_graph);
 			return -1;
 		}
@@ -2724,14 +2730,14 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	avfilter_inout_free(&outputs);
 
 	if (ret < 0) {
-		Error("VideoFilterInit: avfilter_graph_parse_ptr failed (%d)", ret);
+		LOGERROR("VideoFilterInit: avfilter_graph_parse_ptr failed (%d)", ret);
 		avfilter_graph_free(&render->filter_graph);
 		return -1;
 	}
 
 	ret = avfilter_graph_config(render->filter_graph, NULL);
 	if (ret < 0) {
-		Error("VideoFilterInit: avfilter_graph_config failed (%d)", ret);
+		LOGERROR("VideoFilterInit: avfilter_graph_config failed (%d)", ret);
 		avfilter_graph_free(&render->filter_graph);
 		return -1;
 	}
@@ -2758,14 +2764,14 @@ int VideoRenderFrame(VideoRender * render,
 	}
 
 	if (frame->decode_error_flags || frame->flags & AV_FRAME_FLAG_CORRUPT) {
-		Warning("VideoRenderFrame: error_flag or FRAME_FLAG_CORRUPT");
+		LOGWARNING("VideoRenderFrame: error_flag or FRAME_FLAG_CORRUPT");
 	}
 
 	FrameData *fd;
 	if (!frame->opaque_ref) {
 		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
 		if (!frame->opaque_ref)
-			Fatal("VideoRenderFrame: cannot allocate private frame data");
+			LOGFATAL("VideoRenderFrame: cannot allocate private frame data");
 	}
 	fd = (FrameData *)frame->opaque_ref->data;
 	fd->flags = flags;
@@ -2806,7 +2812,7 @@ int VideoRenderFrame(VideoRender * render,
 		}
 
 		if (!FilterThread) {
-			Debug("VideoRenderFrame: wakeup filter thread");
+			LOGDEBUG("VideoRenderFrame: wakeup filter thread");
 			if (VideoFilterInit(render, video_ctx, frame)) {
 				av_frame_free(&frame);
 				return 0;
@@ -2898,7 +2904,7 @@ void StartVideo(VideoRender * render)
 {
 	VideoResume(render);
 	render->StartCounter = 0;
-	Debug("StartVideo: reset StartCounter %d Closing %d TrickSpeed %d",
+	LOGDEBUG("StartVideo: reset StartCounter %d Closing %d TrickSpeed %d",
 		render->StartCounter, render->Closing, VideoGetTrickSpeed(render));
 }
 
@@ -2911,7 +2917,7 @@ void StartVideo(VideoRender * render)
 ///
 void VideoSetClosing(VideoRender * render, int black)
 {
-	Debug("VideoSetClosing: StartCounter %d", render->StartCounter);
+	LOGDEBUG("VideoSetClosing: StartCounter %d", render->StartCounter);
 	if (!DisplayThread)
 		return;
 
@@ -2923,10 +2929,10 @@ void VideoSetClosing(VideoRender * render, int black)
 	if (VideoIsPaused(render))
 		VideoResume(render);
 
-	Debug("VideoSetClosing: pthread_cond_wait");
+	LOGDEBUG("VideoSetClosing: pthread_cond_wait");
 	pthread_cond_wait(&WaitCleanCondition, &WaitCleanMutex);
 	pthread_mutex_unlock(&WaitCleanMutex);
-	Debug("VideoSetClosing: NACH pthread_cond_wait");
+	LOGDEBUG("VideoSetClosing: NACH pthread_cond_wait");
 
 	render->StartCounter = 0;
 	render->FramesDuped = 0;
@@ -2940,7 +2946,7 @@ void VideoSetClosing(VideoRender * render, int black)
 //
 void VideoPause(VideoRender * render)
 {
-	Debug("VideoPause:");
+	LOGDEBUG("VideoPause:");
 	pthread_mutex_lock(&PlaybackMutex);
 	render->VideoPaused = 1;
 	pthread_mutex_unlock(&PlaybackMutex);
@@ -2951,7 +2957,7 @@ void VideoPause(VideoRender * render)
 //
 void VideoResume(VideoRender * render)
 {
-	Debug("VideoResume:");
+	LOGDEBUG("VideoResume:");
 	pthread_mutex_lock(&PlaybackMutex);
 	render->VideoPaused = 0;
 	pthread_mutex_unlock(&PlaybackMutex);
@@ -2993,7 +2999,7 @@ void VideoTrickSpeed(VideoRender * render, int speed, int forward)
 ///
 void VideoSetTrickSpeed(VideoRender * render, int speed, int forward)
 {
-	Debug2(L_TRICK, "VideoSetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
+	LOGDEBUG2(L_TRICK, "VideoSetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
 	pthread_mutex_lock(&TrickSpeedMutex);
 	render->TrickSpeed = speed;
 	render->TrickCounter = speed;
@@ -3065,7 +3071,7 @@ int VideoDecTrickCounter(VideoRender * render)
 //
 void VideoPlay(VideoRender * render)
 {
-	Debug("VideoPlay:");
+	LOGDEBUG("VideoPlay:");
 	if (VideoGetTrickSpeed(render)) {
 		VideoSetTrickSpeed(render, 0, 1);
 	}
@@ -3093,7 +3099,7 @@ void VideoGrab(struct grabimage *grabimage, struct drm_buf *buf, int *ready, int
 
 	int size;
 	for (int plane = 0; plane < buf->num_planes; plane++) {
-		Debug2(L_GRAB, "VideoGrab: %s plane %d address %p pitch %d offset %d handle %d size %d", is_osd ? "OSD" : "VIDEO",
+		LOGDEBUG2(L_GRAB, "VideoGrab: %s plane %d address %p pitch %d offset %d handle %d size %d", is_osd ? "OSD" : "VIDEO",
 		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
@@ -3180,7 +3186,7 @@ uint8_t *VideoGetGrab(VideoRender *render, int *size, int *width, int *height, i
 	else
 		grab = render->grabvideo;
 
-	Debug2(L_GRAB, "VideoGetGrab: %s size %d %dx%d at %d|%x %p", is_osd ? "OSD" : "VIDEO", grab->size, grab->width, grab->height, grab->x, grab->y, grab->result);
+	LOGDEBUG2(L_GRAB, "VideoGetGrab: %s size %d %dx%d at %d|%x %p", is_osd ? "OSD" : "VIDEO", grab->size, grab->width, grab->height, grab->x, grab->y, grab->result);
 	if (!grab->size)
 		return NULL;
 
@@ -3252,7 +3258,7 @@ void VideoInit(VideoRender * render)
 	unsigned int i;
 
 	if (FindDevice(render)){
-		Fatal("VideoInit: FindDevice() failed");
+		LOGFATAL("VideoInit: FindDevice() failed");
 	}
 
 	ReadHWPlatform(render);
@@ -3269,7 +3275,7 @@ void VideoInit(VideoRender * render)
 	render->buf_osd->width = render->mode.hdisplay;
 	render->buf_osd->height = render->mode.vdisplay;
 	if (SetupFB(render, render->buf_osd, NULL)){
-		Fatal("VideoOsdInit: SetupFB FB OSD failed!");
+		LOGFATAL("VideoOsdInit: SetupFB FB OSD failed!");
 	}
 #else
 	if (render->DisableOglOsd) {
@@ -3279,7 +3285,7 @@ void VideoInit(VideoRender * render)
 		render->buf_osd->width = render->mode.hdisplay;
 		render->buf_osd->height = render->mode.vdisplay;
 		if (SetupFB(render, render->buf_osd, NULL)){
-			Fatal("VideoOsdInit: SetupFB FB OSD failed!");
+			LOGFATAL("VideoOsdInit: SetupFB FB OSD failed!");
 		}
 	}
 #endif
@@ -3288,9 +3294,9 @@ void VideoInit(VideoRender * render)
 	render->buf_black.pix_fmt = DRM_FORMAT_NV12;
 	render->buf_black.width = render->mode.hdisplay;
 	render->buf_black.height = render->mode.vdisplay;
-	Debug2(L_DRM, "Videoinit: Try to create a black FB");
+	LOGDEBUG2(L_DRM, "Videoinit: Try to create a black FB");
 	if (SetupFB(render, &render->buf_black, NULL))
-		Error("VideoInit: SetupFB black FB %i x %i failed",
+		LOGERROR("VideoInit: SetupFB black FB %i x %i failed",
 			render->buf_black.width, render->buf_black.height);
 
 	for (i = 0; i < render->buf_black.width * render->buf_black.height; ++i) {
@@ -3307,9 +3313,9 @@ void VideoInit(VideoRender * render)
 	uint32_t modeID = 0;
 
 	if (drmModeCreatePropertyBlob(render->fd_drm, &render->mode, sizeof(render->mode), &modeID) != 0)
-		Error("Failed to create mode property blob.");
+		LOGERROR("Failed to create mode property blob.");
 	if (!(ModeReq = drmModeAtomicAlloc()))
-		Error("cannot allocate atomic request (%d): %m", errno);
+		LOGERROR("cannot allocate atomic request (%d): %m", errno);
 
 	SetPropertyRequest(ModeReq, render->fd_drm, render->crtc_id,
 						DRM_MODE_OBJECT_CRTC, "MODE_ID", modeID);
@@ -3380,7 +3386,7 @@ void VideoInit(VideoRender * render)
 		DumpPlaneProperties(render->planes[VIDEO_PLANE]);
 
 		drmModeAtomicFree(ModeReq);
-		Fatal("VideoInit: cannot set atomic mode (%d): %m", errno);
+		LOGFATAL("VideoInit: cannot set atomic mode (%d): %m", errno);
 	}
 
 	drmModeAtomicFree(ModeReq);
@@ -3459,7 +3465,7 @@ void VideoSetOutputPosition(VideoRender *render, int x, int y, int width, int he
 	else
 		render->video.is_scaled = 1;
 
-	Debug("VideoSetOutputPosition %d %d %d %d%s", x, y, width, height, render->video.is_scaled ? ", video is scaled" : "");
+	LOGDEBUG("VideoSetOutputPosition %d %d %d %d%s", x, y, width, height, render->video.is_scaled ? ", video is scaled" : "");
 }
 
 int VideoCodecMode(VideoRender * render)

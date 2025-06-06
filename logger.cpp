@@ -1,0 +1,182 @@
+///
+///	@file codec_audio.cpp	@brief Audio decoder functions
+///
+///	Copyright (c) 2009 - 2015 by Johns.  All Rights Reserved.
+///	Copyright (c) 2018 by zille.  All Rights Reserved.
+///
+///	Contributor(s):
+///
+///	License: AGPLv3
+///
+///	This program is free software: you can redistribute it and/or modify
+///	it under the terms of the GNU Affero General Public License as
+///	published by the Free Software Foundation, either version 3 of the
+///	License.
+///
+///	This program is distributed in the hope that it will be useful,
+///	but WITHOUT ANY WARRANTY; without even the implied warranty of
+///	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+///	GNU Affero General Public License for more details.
+///
+//////////////////////////////////////////////////////////////////////////////
+
+#include "logger.h"
+
+std::shared_ptr<cSoftHdLogger> cSoftHdLogger::instance;
+
+/*****************************************************************************
+**	cSoftHdLogger class
+*****************************************************************************/
+
+/**
+**	cSoftHdLogger constructor
+*/
+cSoftHdLogger::cSoftHdLogger(void)
+{
+}
+
+std::shared_ptr<cSoftHdLogger> cSoftHdLogger::GetLogger()
+{
+    if (instance == nullptr) {
+	instance = std::shared_ptr<cSoftHdLogger>(new cSoftHdLogger());
+    }
+    return instance;
+}
+
+void cSoftHdLogger::SetLogLevel(int level)
+{
+    LogLevel = level;
+}
+
+void cSoftHdLogger::LogFatal(const char *format, ...)
+{
+	if (SysLogLevel <= 0)
+		abort();
+
+	va_list ap;
+	char fmt[256];
+
+	pid_t threadId = syscall(__NR_gettid);
+	snprintf(fmt, sizeof(fmt), "[%d] [softhddevice] %s", threadId, format);
+
+	va_start(ap, format);
+	vsyslog(LOG_ERR, fmt, ap);
+	va_end(ap);
+
+	abort();
+}
+
+void cSoftHdLogger::LogError(const char *format, ...)
+{
+	if (SysLogLevel <= 0)
+		return;
+
+	va_list ap;
+	char fmt[256];
+
+	pid_t threadId = syscall(__NR_gettid);
+	snprintf(fmt, sizeof(fmt), "[%d] [softhddevice] %s", threadId, format);
+
+	va_start(ap, format);
+	vsyslog(LOG_ERR, fmt, ap);
+	va_end(ap);
+}
+
+void cSoftHdLogger::LogWarning(const char *format, ...)
+{
+	if (SysLogLevel <= 1)
+		return;
+
+	va_list ap;
+	char fmt[256];
+
+	pid_t threadId = syscall(__NR_gettid);
+	snprintf(fmt, sizeof(fmt), "[%d] [softhddevice] %s", threadId, format);
+
+	va_start(ap, format);
+	vsyslog(LOG_WARNING, fmt, ap);
+	va_end(ap);
+}
+
+void cSoftHdLogger::LogInfo(const char *format, ...)
+{
+	if (SysLogLevel <= 2)
+		return;
+
+	va_list ap;
+	char fmt[256];
+
+	pid_t threadId = syscall(__NR_gettid);
+	snprintf(fmt, sizeof(fmt), "[%d] [softhddevice] %s", threadId, format);
+
+	va_start(ap, format);
+	vsyslog(LOG_INFO, fmt, ap);
+	va_end(ap);
+}
+
+void cSoftHdLogger::LogDebug(const char *format, ...)
+{
+	va_list ap;
+	char fmt[256];
+
+	pid_t threadId = syscall(__NR_gettid);
+	snprintf(fmt, sizeof(fmt), "[%d] [softhddevice] %s", threadId, format);
+
+	va_start(ap, format);
+	vsyslog(LOG_DEBUG, fmt, ap);
+	va_end(ap);
+}
+
+void cSoftHdLogger::LogDebug2(const int cat, const char *format, ...)
+{
+	va_list ap;
+	char fmt[256];
+	char prefix[20] = "";
+
+	switch (LogLevel & cat) {
+	case L_AV_SYNC:
+		strcpy(prefix, "[AV_Sync]");
+		break;
+	case L_SOUND:
+		strcpy(prefix, "[Sound]");
+		break;
+	case L_OSD:
+		strcpy(prefix, "[Osd]");
+		break;
+	case L_DRM:
+		strcpy(prefix, "[Drm]");
+		break;
+	case L_CODEC:
+		strcpy(prefix, "[Codec]");
+		break;
+	case L_STILL:
+		strcpy(prefix, "[Still]");
+		break;
+	case L_TRICK:
+		strcpy(prefix, "[Trick]");
+		break;
+	case L_MEDIA:
+		strcpy(prefix, "[Media]");
+		break;
+	case L_OPENGL:
+	case L_OPENGL_TIME:
+	case L_OPENGL_TIME_ALL:
+		strcpy(prefix, "[OpenGL]");
+		break;
+	case L_PACKET:
+		strcpy(prefix, "[Packet]");
+		break;
+	case L_GRAB:
+		strcpy(prefix, "[Grab]");
+		break;
+	case L_DEBUG:
+	default:
+		return;
+	}
+	pid_t threadId = syscall(__NR_gettid);
+	snprintf(fmt, sizeof(fmt), "[%d] [softhddevice]%s %s", threadId, prefix, format);
+
+	va_start(ap, format);
+	vsyslog(LOG_DEBUG, fmt, ap);
+	va_end(ap);
+}

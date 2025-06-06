@@ -67,6 +67,10 @@ class cSoftHdDevice:public cDevice
     virtual void SetDigitalAudioDevice(bool);
     virtual void SetAudioTrackDevice(eTrackType);
     virtual void SetVolumeDevice(int);
+private:
+    int PesHeadLength(const uint8_t *);
+
+public:
 
 // Image Grab facilities
 

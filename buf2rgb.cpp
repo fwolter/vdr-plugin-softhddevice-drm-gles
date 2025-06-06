@@ -1,10 +1,14 @@
+extern "C" {
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
+}
 #include <sys/mman.h>
 
 #include "misc.h"
 #include "buf2rgb.h"
 #include <drm_fourcc.h>
+
+#include "logger.h"
 
 #define OPAQUE		0xff
 #define TRANSPARENT	0x00
@@ -45,7 +49,7 @@ uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPi
     // planes aren't mmapped, return
     // this should be done before in VideoCloneBuf
     if (!buf->plane[0]) {
-        Error("buf2rgb: prime data is not mapped!");
+        LOGERROR("buf2rgb: prime data is not mapped!");
         return NULL;
     }
 
@@ -54,14 +58,14 @@ uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPi
                              dst_w, dst_h, dst_pix_fmt,
                              SWS_BILINEAR, NULL, NULL, NULL);
     if (!sws_ctx) {
-        Error("buf2rgb: Could not create sws_ctx");
+        LOGERROR("buf2rgb: Could not create sws_ctx");
         munmap(buffer, buf->size[0]);
         return NULL;
     }
 
     if ((ret = av_image_alloc(dst_data, dst_linesize,
                               dst_w, dst_h, dst_pix_fmt, 1)) < 0) {
-        Error("buf2rgb: Could not alloc dst image");
+        LOGERROR("buf2rgb: Could not alloc dst image");
         munmap(buffer, buf->size[0]);
         sws_freeContext(sws_ctx);
         return NULL;
@@ -84,7 +88,7 @@ uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPi
     sws_freeContext(sws_ctx);
     *size = dst_bufsize;
 
-    Debug2(L_GRAB, "buf2rgb: return image at %p size %d", dst_data[0], dst_bufsize);
+    LOGDEBUG2(L_GRAB, "buf2rgb: return image at %p size %d", dst_data[0], dst_bufsize);
     return dst_data[0];
 }
 
@@ -103,13 +107,13 @@ uint8_t *scalergb24(uint8_t *src, int *size, int src_w, int src_h, int dst_w, in
                              dst_w, dst_h, AV_PIX_FMT_RGB24,
                              SWS_BILINEAR, NULL, NULL, NULL);
     if (!sws_ctx) {
-        Error("scalergb: Could not create sws_ctx");
+        LOGERROR("scalergb: Could not create sws_ctx");
         return NULL;
     }
 
     if ((ret = av_image_alloc(dst_data, dst_linesize,
                               dst_w, dst_h, AV_PIX_FMT_RGB24, 1)) < 0) {
-        Error("scalergb: Could not alloc dst image");
+        LOGERROR("scalergb: Could not alloc dst image");
         sws_freeContext(sws_ctx);
         return NULL;
     }
@@ -122,7 +126,7 @@ uint8_t *scalergb24(uint8_t *src, int *size, int src_w, int src_h, int dst_w, in
     sws_freeContext(sws_ctx);
     *size = dst_bufsize;
 
-    Debug2(L_GRAB, "scalergb: return scaled image at %p size %d", dst_data[0], dst_bufsize);
+    LOGDEBUG2(L_GRAB, "scalergb: return scaled image at %p size %d", dst_data[0], dst_bufsize);
     return dst_data[0];
 }
 
@@ -179,7 +183,7 @@ uint8_t *blitvideo(uint8_t *src, int dst_w, int dst_h, int dst_x, int dst_y, int
     int dst_stride = dst_w * 3;
 
     // create a black screen
-    uint8_t *result = calloc(1, dst_stride * dst_h);
+    uint8_t *result = (uint8_t *)calloc(1, dst_stride * dst_h);
 
     // blit the scaled image into the black one
     for (int y = 0; y < src_h; y++) {

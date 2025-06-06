@@ -67,6 +67,8 @@ extern "C"
 #include "softhddev.h"
 }
 
+#include "logger.h"
+
 //----------------------------------------------------------------------------
 //	Defines
 //----------------------------------------------------------------------------
@@ -281,7 +283,7 @@ static void AudioNormalizer(int16_t * samples, int count)
 		} else {
 		    factor = 1000;
 		}
-		Debug2(L_SOUND, "audio/noramlize: avg %8d, fac=%6.3f, norm=%6.3f",
+		LOGDEBUG2(L_SOUND, "audio/noramlize: avg %8d, fac=%6.3f, norm=%6.3f",
 		    avg, factor / 1000.0, AudioNormalizeFactor / 1000.0);
 	    }
 
@@ -361,7 +363,7 @@ static void AudioCompressor(int16_t * samples, int count)
 		return;				// silent nothing todo
     }
 
-    Debug2(L_SOUND, "audio/compress: max %5d, fac=%6.3f, com=%6.3f", max_sample,
+    LOGDEBUG2(L_SOUND, "audio/compress: max %5d, fac=%6.3f, com=%6.3f", max_sample,
 	factor / 1000.0, AudioCompressionFactor / 1000.0);
 
     // apply compression factor
@@ -430,7 +432,7 @@ void AudioSetEq(int band[17], int onoff)
 {
 	int i;
 
-/*	Debug2(L_SOUND, "AudioSetEq %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i onoff %d",
+/*	LOGDEBUG2(L_SOUND, "AudioSetEq %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i onoff %d",
 		band[0], band[1], band[2], band[3], band[4], band[5], band[6], band[7],
 		band[8], band[9], band[10], band[11], band[12], band[13], band[14],
 		band[15], band[16], band[17], onoff);*/
@@ -530,15 +532,15 @@ static int AudioFilterInit(AVCodecContext *AudioCtx)
 #endif
 
 	if (!(filter_graph = avfilter_graph_alloc()))
-		Error("Unable to create filter graph.");
+		LOGERROR("Unable to create filter graph.");
 
 	// input buffer
 	if (!(abuffer = avfilter_get_by_name("abuffer")))
-		Warning("AudioFilterInit: Could not find the abuffer filter.");
+		LOGWARNING("AudioFilterInit: Could not find the abuffer filter.");
 	if (!(abuffersrc_ctx = avfilter_graph_alloc_filter(filter_graph, abuffer, "src")))
-		Warning("AudioFilterInit: Could not allocate the abuffersrc_ctx instance.");
+		LOGWARNING("AudioFilterInit: Could not allocate the abuffersrc_ctx instance.");
 	av_channel_layout_describe(&AudioCtx->ch_layout, ch_layout, sizeof(ch_layout));
-	Debug2(L_SOUND, "AudioFilterInit: IN ch_layout %s sample_fmt %s sample_rate %d channels %d",
+	LOGDEBUG2(L_SOUND, "AudioFilterInit: IN ch_layout %s sample_fmt %s sample_rate %d channels %d",
 		ch_layout, av_get_sample_fmt_name(AudioCtx->sample_fmt), AudioCtx->sample_rate, AudioCtx->ch_layout.nb_channels);
 	av_opt_set    (abuffersrc_ctx, "channel_layout", ch_layout,                             AV_OPT_SEARCH_CHILDREN);
 	av_opt_set    (abuffersrc_ctx, "sample_fmt",     av_get_sample_fmt_name(AudioCtx->sample_fmt), AV_OPT_SEARCH_CHILDREN);
@@ -547,14 +549,14 @@ static int AudioFilterInit(AVCodecContext *AudioCtx)
 //	av_opt_set_int(abuffersrc_ctx, "channel_counts", AudioCtx->channels,                    AV_OPT_SEARCH_CHILDREN);
 	// initialize the filter with NULL options, set all options above.
 	if (avfilter_init_str(abuffersrc_ctx, NULL) < 0)
-		Warning("AudioFilterInit: Could not initialize the abuffer filter.");
+		LOGWARNING("AudioFilterInit: Could not initialize the abuffer filter.");
 
 	if (AudioEq) {
 		// superequalizer
 		if (!(eq = avfilter_get_by_name("superequalizer")))
-			Warning("AudioFilterInit: Could not find the superequalizer filter.");
+			LOGWARNING("AudioFilterInit: Could not find the superequalizer filter.");
 		if (!(filter_ctx[n_filter] = avfilter_graph_alloc_filter(filter_graph, eq, "superequalizer")))
-			Warning("AudioFilterInit: Could not allocate the superequalizer instance.");
+			LOGWARNING("AudioFilterInit: Could not allocate the superequalizer instance.");
 		snprintf(options_str, sizeof(options_str),"1b=%.2f:2b=%.2f:3b=%.2f:4b=%.2f:5b=%.2f"
 			":6b=%.2f:7b=%.2f:8b=%.2f:9b=%.2f:10b=%.2f:11b=%.2f:12b=%.2f:13b=%.2f:14b=%.2f:"
 			"15b=%.2f:16b=%.2f:17b=%.2f:18b=%.2f ", AudioEqBand[0], AudioEqBand[1],
@@ -563,7 +565,7 @@ static int AudioFilterInit(AVCodecContext *AudioCtx)
 			AudioEqBand[10], AudioEqBand[11], AudioEqBand[12], AudioEqBand[13],
 			AudioEqBand[14], AudioEqBand[15], AudioEqBand[16], AudioEqBand[17]);
 		if (avfilter_init_str(filter_ctx[n_filter], options_str) < 0)
-			Warning("AudioFilterInit: Could not initialize the superequalizer filter.");
+			LOGWARNING("AudioFilterInit: Could not initialize the superequalizer filter.");
 		n_filter++;
 	}
 
@@ -573,27 +575,27 @@ static int AudioFilterInit(AVCodecContext *AudioCtx)
 	av_channel_layout_describe(&channel_layout, ch_layout, sizeof(ch_layout));
 	av_channel_layout_uninit(&channel_layout);
 	// should use IN layout if more then 2 ch!?
-	Debug2(L_SOUND, "AudioFilterInit: OUT AudioDownMix %d HwChannels %d HwSampleRate %d ch_layout %s bytes_per_sample %d",
+	LOGDEBUG2(L_SOUND, "AudioFilterInit: OUT AudioDownMix %d HwChannels %d HwSampleRate %d ch_layout %s bytes_per_sample %d",
 		AudioDownMix, HwChannels, HwSampleRate,
 		ch_layout, av_get_bytes_per_sample(AV_SAMPLE_FMT_S16));
 	if (!(aformat = avfilter_get_by_name("aformat")))
-		Warning("AudioFilterInit: Could not find the aformat filter.");
+		LOGWARNING("AudioFilterInit: Could not find the aformat filter.");
 	if (!(filter_ctx[n_filter] = avfilter_graph_alloc_filter(filter_graph, aformat, "aformat")))
-		Warning("AudioFilterInit: Could not allocate the aformat instance.");
+		LOGWARNING("AudioFilterInit: Could not allocate the aformat instance.");
 	snprintf(options_str, sizeof(options_str),
 		"sample_fmts=%s:sample_rates=%d:channel_layouts=%s",
 		av_get_sample_fmt_name(AV_SAMPLE_FMT_S16), HwSampleRate, ch_layout);
 	if (avfilter_init_str(filter_ctx[n_filter], options_str) < 0)
-		Warning("AudioFilterInit: Could not initialize the aformat filter.");
+		LOGWARNING("AudioFilterInit: Could not initialize the aformat filter.");
 	n_filter++;
 
 	// abuffersink
 	if (!(abuffersink = avfilter_get_by_name("abuffersink")))
-		Warning("AudioFilterInit: Could not find the abuffersink filter.");
+		LOGWARNING("AudioFilterInit: Could not find the abuffersink filter.");
 	if (!(filter_ctx[n_filter] = avfilter_graph_alloc_filter(filter_graph, abuffersink, "sink")))
-		Warning("AudioFilterInit: Could not allocate the abuffersink instance.");
+		LOGWARNING("AudioFilterInit: Could not allocate the abuffersink instance.");
 	if (avfilter_init_str(filter_ctx[n_filter], NULL) < 0)
-		Warning("AudioFilterInit: Could not initialize the abuffersink instance.");
+		LOGWARNING("AudioFilterInit: Could not initialize the abuffersink instance.");
 	n_filter++;
 
 	// Connect the filters
@@ -605,11 +607,11 @@ static int AudioFilterInit(AVCodecContext *AudioCtx)
 		}
 	}
 	if (err < 0)
-		Warning("AudioFilterInit: Error connecting audio filters");
+		LOGWARNING("AudioFilterInit: Error connecting audio filters");
 
 	// Configure the graph.
 	if (avfilter_graph_config(filter_graph, NULL) < 0)
-		Warning("AudioFilterInit: Error configuring the audio filter graph");
+		LOGWARNING("AudioFilterInit: Error configuring the audio filter graph");
 
 	abuffersink_ctx = filter_ctx[n_filter - 1];
 	Filterchanged = 0;
@@ -663,7 +665,7 @@ static void xrun_recovery(void)
 	err = snd_pcm_prepare(AlsaPCMHandle);
 	if (err < 0) {
 		state = snd_pcm_state(AlsaPCMHandle);
-		Error("audio/alsa: Can't recovery from xrun: %s pcm state: %s",
+		LOGERROR("audio/alsa: Can't recovery from xrun: %s pcm state: %s",
 			snd_strerror(err), snd_pcm_state_name(state));
 	}
 }
@@ -676,17 +678,17 @@ static void AlsaFlushBuffers(void)
 	int err;
 	snd_pcm_state_t state;
 
-	Debug2(L_SOUND, "audio: AlsaFlushBuffers: AlsaFlushBuffers");
+	LOGDEBUG2(L_SOUND, "audio: AlsaFlushBuffers: AlsaFlushBuffers");
 
 	state = snd_pcm_state(AlsaPCMHandle);
 	if (state != SND_PCM_STATE_OPEN) {
 		if ((err = snd_pcm_drop(AlsaPCMHandle)) < 0)
-			Error("audio: AlsaFlushBuffers: snd_pcm_drop(): %s", snd_strerror(err));
+			LOGERROR("audio: AlsaFlushBuffers: snd_pcm_drop(): %s", snd_strerror(err));
 		// ****ing alsa crash, when in open state here
 		if ((err = snd_pcm_prepare(AlsaPCMHandle)) < 0)
-			Error("audio: AlsaFlushBuffers: snd_pcm_prepare(): %s", snd_strerror(err));
+			LOGERROR("audio: AlsaFlushBuffers: snd_pcm_prepare(): %s", snd_strerror(err));
 	state = snd_pcm_state(AlsaPCMHandle);
-	Debug2(L_SOUND, "audio: AlsaFlushBuffers: pcm state %s", snd_pcm_state_name(state));
+	LOGDEBUG2(L_SOUND, "audio: AlsaFlushBuffers: pcm state %s", snd_pcm_state_name(state));
 	}
 
 	AudioRingBuffer->Reset();
@@ -722,9 +724,9 @@ static int AlsaPlayer(void)
 
 		// wait for space in kernel buffers
 		if ((err = snd_pcm_wait(AlsaPCMHandle, 150)) < 0) {
-//			Error("AlsaPlayer: snd_pcm_wait error? '%s'", snd_strerror(err));
+//			LOGERROR("AlsaPlayer: snd_pcm_wait error? '%s'", snd_strerror(err));
 			err = snd_pcm_recover(AlsaPCMHandle, err, 0);
-//			Error("AlsaPlayer: snd_pcm_wait error: snd_pcm_recover %s", snd_strerror(err));
+//			LOGERROR("AlsaPlayer: snd_pcm_wait error: snd_pcm_recover %s", snd_strerror(err));
 		}
 
 		if (AudioPaused || AlsaPlayerStop) {
@@ -742,20 +744,20 @@ static int AlsaPlayer(void)
 			if (err >= 0) {
 				continue;
 			}
-			Error("audio/alsa: snd_pcm_avail_update(): %s",
+			LOGERROR("audio/alsa: snd_pcm_avail_update(): %s",
 				snd_strerror(n));
 			return -1;
 		}
 		avail = snd_pcm_frames_to_bytes(AlsaPCMHandle, n);
 		if (avail < 256) {		// too much overhead
-			Debug2(L_SOUND, "audio/alsa: break state '%s' avail %d",
+			LOGDEBUG2(L_SOUND, "audio/alsa: break state '%s' avail %d",
 				snd_pcm_state_name(snd_pcm_state(AlsaPCMHandle)), avail);
 			break;
 		}
 
 		n = AudioRingBuffer->GetReadPointer(&p);
 		if (!n) {			// ring buffer empty
-			Warning("AlsaPlayer: ring buffer empty Videopkts: %d",
+			LOGWARNING("AlsaPlayer: ring buffer empty Videopkts: %d",
 				VideoGetPackets());
 		}
 		if (n < avail) {		// not enough bytes in ring buffer
@@ -787,18 +789,18 @@ static int AlsaPlayer(void)
 				if (err == -EAGAIN) {
 					continue;
 				}
-				Warning("audio/alsa: writei underrun error? '%s'",
+				LOGWARNING("audio/alsa: writei underrun error? '%s'",
 					snd_strerror(err));
 				err = snd_pcm_recover(AlsaPCMHandle, err, 0);
 				if (err >= 0) {
 					continue;
 				}
-				Error("audio/alsa: snd_pcm_writei failed: %s",
+				LOGERROR("audio/alsa: snd_pcm_writei failed: %s",
 					snd_strerror(err));
 				return -1;
 			}
 			// this could happen, if underrun happened
-			Warning("audio/alsa: not all frames written");
+			LOGWARNING("audio/alsa: not all frames written");
 			avail = snd_pcm_frames_to_bytes(AlsaPCMHandle, err);
 			break;
 		}
@@ -816,7 +818,7 @@ static char *opendevice(const char *device, int passthrough)
 	if (!device)
 		return NULL;
 
-	Debug2(L_SOUND, "audio/alsa: try opening %sdevice '%s'",
+	LOGDEBUG2(L_SOUND, "audio/alsa: try opening %sdevice '%s'",
 		passthrough ? "pass-through " : "", device);
 
 	if (passthrough && AudioAppendAES) {
@@ -833,7 +835,7 @@ static char *opendevice(const char *device, int passthrough)
 				IEC958_AES1_CON_ORIGINAL | IEC958_AES1_CON_PCM_CODER,
 				IEC958_AES3_CON_FS_48000);
 		}
-		Debug2(L_SOUND, "audio/alsa: auto append AES: %s -> %s", device, tmp);
+		LOGDEBUG2(L_SOUND, "audio/alsa: auto append AES: %s -> %s", device, tmp);
 	} else {
 		sprintf(tmp, "%s", device);
 	}
@@ -842,12 +844,12 @@ static char *opendevice(const char *device, int passthrough)
 	if ((err = snd_pcm_open(&AlsaPCMHandle, tmp, SND_PCM_STREAM_PLAYBACK,
 		SND_PCM_NONBLOCK)) < 0) {
 
-		Warning("audio: AlsaInitPCM: could not open device '%s' error: %s", device,
+		LOGWARNING("audio: AlsaInitPCM: could not open device '%s' error: %s", device,
 			snd_strerror(err));
 		return NULL;
 	}
 
-	Debug2(L_SOUND, "audio/alsa: opened %sdevice '%s'",
+	LOGDEBUG2(L_SOUND, "audio/alsa: opened %sdevice '%s'",
 		passthrough ? "pass-through " : "", device);
 
 	return (char *)device;
@@ -863,7 +865,7 @@ static char *finddevice(const char *devname, const char *hint, int passthrough)
 
 	err = snd_device_name_hint(-1, devname, (void ***)&hints);
 	if (err != 0) {
-		Warning("AlsaInitPCM: Cannot get device names for %s!", hint);
+		LOGWARNING("AlsaInitPCM: Cannot get device names for %s!", hint);
 		return NULL;
 	}
 
@@ -896,7 +898,7 @@ static void AlsaInitPCM(void)
 {
 	char *device = NULL;
 	int err;
-	Debug2(L_SOUND, "AlsaInit: passthrough %d", AudioPassthrough);
+	LOGDEBUG2(L_SOUND, "AlsaInit: passthrough %d", AudioPassthrough);
 
 	// try user set device
 	if (AudioPassthrough)
@@ -913,40 +915,40 @@ static void AlsaInitPCM(void)
 
 	// walkthrough hdmi: devices
 	if (!device) {
-		Debug2(L_SOUND, "AlsaInitPCM: Try hdmi: devices...");
+		LOGDEBUG2(L_SOUND, "AlsaInitPCM: Try hdmi: devices...");
 		device = finddevice("pcm", "hdmi:", AudioPassthrough);
 	}
 
 	// walkthrough default: devices
 	if (!device) {
-		Debug2(L_SOUND, "AlsaInitPCM: Try default: devices...");
+		LOGDEBUG2(L_SOUND, "AlsaInitPCM: Try default: devices...");
 		device = finddevice("pcm", "default:", AudioPassthrough);
 	}
 
 	// try default device
 	if (!device) {
-		Debug2(L_SOUND, "AlsaInitPCM: Try default device...");
+		LOGDEBUG2(L_SOUND, "AlsaInitPCM: Try default device...");
 		device = opendevice("default", AudioPassthrough);
 	}
 
 	// use null device
 	if (!device) {
-		Debug2(L_SOUND, "AlsaInitPCM: Try null device...");
+		LOGDEBUG2(L_SOUND, "AlsaInitPCM: Try null device...");
 		device = opendevice("null", AudioPassthrough);
 	}
 
 	if (!device)
-		Fatal("audio: AlsaInitPCM: could not open any device, abort!");
+		LOGFATAL("audio: AlsaInitPCM: could not open any device, abort!");
 
 	if (!strcmp(device, "null"))
-		Warning("audio/alsa: using %sdevice '%s'",
+		LOGWARNING("audio/alsa: using %sdevice '%s'",
 			AudioPassthrough ? "pass-through " : "", device);
 	else
-		Info("audio/alsa: using %sdevice '%s'",
+		LOGINFO("audio/alsa: using %sdevice '%s'",
 			AudioPassthrough ? "pass-through " : "", device);
 
 	if ((err = snd_pcm_nonblock(AlsaPCMHandle, 0)) < 0) {
-		Error("audio/alsa: can't set block mode: %s", snd_strerror(err));
+		LOGERROR("audio/alsa: can't set block mode: %s", snd_strerror(err));
 	}
 }
 
@@ -991,7 +993,7 @@ static void AlsaInitMixer(void)
 			channel = "PCM";
 		}
     }
-    Debug2(L_SOUND, "audio/alsa: mixer %s - %s open", device, channel);
+    LOGDEBUG2(L_SOUND, "audio/alsa: mixer %s - %s open", device, channel);
     snd_mixer_open(&alsa_mixer, 0);
     if (alsa_mixer && snd_mixer_attach(alsa_mixer, device) >= 0
 		&& snd_mixer_selem_register(alsa_mixer, NULL, NULL) >= 0
@@ -1008,7 +1010,7 @@ static void AlsaInitMixer(void)
 			snd_mixer_selem_get_playback_volume_range(alsa_mixer_elem,
 				&alsa_mixer_elem_min, &alsa_mixer_elem_max);
 			AlsaRatio = 1000 * (alsa_mixer_elem_max - alsa_mixer_elem_min);
-			Debug2(L_SOUND, "audio/alsa: PCM mixer found %ld - %ld ratio %d",
+			LOGDEBUG2(L_SOUND, "audio/alsa: PCM mixer found %ld - %ld ratio %d",
 				alsa_mixer_elem_min, alsa_mixer_elem_max, AlsaRatio);
 			break;
 			}
@@ -1019,7 +1021,7 @@ static void AlsaInitMixer(void)
 		AlsaMixer = alsa_mixer;
 		AlsaMixerElem = alsa_mixer_elem;
     } else {
-		Error("audio/alsa: can't open mixer '%s'", device);
+		LOGERROR("audio/alsa: can't open mixer '%s'", device);
     }
 }
 
@@ -1051,20 +1053,20 @@ static int AlsaSetup(int channels, int sample_rate, int passthrough)
 	AudioDownMix = 0;
 
 	if (AudioRunning) {
-		Debug2(L_SOUND, "AlsaSetup: Audio is Running => AudioFlushBuffers");
+		LOGDEBUG2(L_SOUND, "AlsaSetup: Audio is Running => AudioFlushBuffers");
 		AudioFlushBuffers();
 	}
 
 	state = snd_pcm_state(AlsaPCMHandle);
 	if (state == SND_PCM_STATE_XRUN) {
-		Error("audio/AlsaSetup: recover from xrun pcm state: %s",
+		LOGERROR("audio/AlsaSetup: recover from xrun pcm state: %s",
 			snd_pcm_state_name(state));
 		xrun_recovery();
 	}
 
 	snd_pcm_hw_params_alloca(&hwparams);
 	if ((err = snd_pcm_hw_params_any(AlsaPCMHandle, hwparams)) < 0) {
-		Error("AlsaSetup: Read HW config failed! %s", snd_strerror(err));
+		LOGERROR("AlsaSetup: Read HW config failed! %s", snd_strerror(err));
 		return -1;
 	}
 
@@ -1074,18 +1076,18 @@ static int AlsaSetup(int channels, int sample_rate, int passthrough)
 
 	HwSampleRate = sample_rate;
 	if ((err = snd_pcm_hw_params_set_rate_near(AlsaPCMHandle, hwparams, &HwSampleRate, 0) < 0)) {
-		Error("AlsaSetup: SampleRate %d not supported! %s",
+		LOGERROR("AlsaSetup: SampleRate %d not supported! %s",
 			sample_rate, snd_strerror(err));
 		return -1;
 	}
 	if ((int)HwSampleRate != sample_rate) {
-		Debug2(L_SOUND, "AlsaSetup: sample_rate %d HwSampleRate %d",
+		LOGDEBUG2(L_SOUND, "AlsaSetup: sample_rate %d HwSampleRate %d",
 			sample_rate, HwSampleRate);
 	}
 
 	HwChannels = channels;
 	if ((err = snd_pcm_hw_params_set_channels_near(AlsaPCMHandle, hwparams, &HwChannels)) < 0) {
-		Warning("AlsaSetup: %d channels not supported! %s",
+		LOGWARNING("AlsaSetup: %d channels not supported! %s",
 			HwChannels, snd_strerror(err));
 	}
 	if ((int)HwChannels != channels && !passthrough) {
@@ -1093,7 +1095,7 @@ static int AlsaSetup(int channels, int sample_rate, int passthrough)
 	}
 
 	if ((err = snd_pcm_hw_params_set_buffer_time_near(AlsaPCMHandle, hwparams, &buffer_time, NULL)) < 0) {
-		Warning("AlsaSetup: buffer_time %d not supported! %s",
+		LOGWARNING("AlsaSetup: buffer_time %d not supported! %s",
 			buffer_time, snd_strerror(err));
 	}
 
@@ -1101,7 +1103,7 @@ static int AlsaSetup(int channels, int sample_rate, int passthrough)
 
 /*	err = snd_pcm_hw_params_test_format(AlsaPCMHandle, hwparams, SND_PCM_FORMAT_S16);
 	if (err < 0)	// err == 0 if is supported
-		Error("AlsaSetup: SND_PCM_FORMAT_S16 not supported! %s",
+		LOGERROR("AlsaSetup: SND_PCM_FORMAT_S16 not supported! %s",
 			snd_strerror(err));
 */
 	if ((err = snd_pcm_set_params(AlsaPCMHandle, SND_PCM_FORMAT_S16,
@@ -1110,7 +1112,7 @@ static int AlsaSetup(int channels, int sample_rate, int passthrough)
 		buffer_time))) {
 
 		state = snd_pcm_state(AlsaPCMHandle);
-		Error("audio/alsa: set params error: %s\n"
+		LOGERROR("audio/alsa: set params error: %s\n"
 			"AlsaSetup: Channels %d SampleRate %d\n"
 			"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
 			"           Supports pause: %s mmap: %s\n"
@@ -1142,7 +1144,7 @@ static int AlsaSetup(int channels, int sample_rate, int passthrough)
 		AudioStartThreshold = AudioRingBufferSize / 3;
 	}
 
-	Info("AlsaSetup: Channels %d SampleRate %d%s\n"
+	LOGINFO("AlsaSetup: Channels %d SampleRate %d%s\n"
 		"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
 		"           Supports pause: %s mmap: %s\n"
 		"           AlsaBufferTime %dms AudioBufferTime %dms Threshold %ums",
@@ -1215,13 +1217,13 @@ static void *AudioPlayHandlerThread(void *dummy)
 	for (;;) {
 		// check if we should stop the thread
 		if (AudioThreadStop) {
-			Debug2(L_SOUND, "audio: AudioPlayHandlerThread: play thread stopped");
+			LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: play thread stopped");
 			return PTHREAD_CANCELED;
 		}
 
-		Debug2(L_SOUND, "audio: wait on start condition");
+		LOGDEBUG2(L_SOUND, "audio: wait on start condition");
 		if (!AudioPaused) {
-//			Debug2(L_SOUND, "audio: AudioPlayHandlerThread: => AlsaFlushBuffers");
+//			LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: => AlsaFlushBuffers");
 			AlsaFlushBuffers();
 			AudioResetCompressor();
 			AudioResetNormalizer();
@@ -1229,7 +1231,7 @@ static void *AudioPlayHandlerThread(void *dummy)
 		AudioRunning = 0;
 		AlsaPlayerStop = 0;
 		pthread_mutex_lock(&AudioStartMutex);
-		Debug2(L_SOUND, "audio: AudioPlayHandlerThread: pthread_cond_wait");
+		LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: pthread_cond_wait");
 
 		do {
 			pthread_cond_wait(&AudioStartCond, &AudioStartMutex);
@@ -1237,13 +1239,13 @@ static void *AudioPlayHandlerThread(void *dummy)
 
 		pthread_mutex_unlock(&AudioStartMutex);
 
-		Debug2(L_SOUND, "audio: AudioPlayHandlerThread: nach pthread_cond_wait ----> %dms start", (AudioUsedBytes() * 1000)
+		LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: nach pthread_cond_wait ----> %dms start", (AudioUsedBytes() * 1000)
 			/ (!HwSampleRate + !HwChannels +
 			HwSampleRate * HwChannels * AudioBytesProSample));
 
 		do {
 			if (AudioThreadStop) {
-				Debug2(L_SOUND, "audio: play thread stopped");
+				LOGDEBUG2(L_SOUND, "audio: play thread stopped");
 				return PTHREAD_CANCELED;
 			}
 
@@ -1251,7 +1253,7 @@ static void *AudioPlayHandlerThread(void *dummy)
 				// try to play some samples
 				AlsaPlayer();
 			} else {
-				Debug2(L_SOUND, "AudioPlayHandlerThread: ring buffer is empty, HwSampleRate %d", HwSampleRate);
+				LOGDEBUG2(L_SOUND, "AudioPlayHandlerThread: ring buffer is empty, HwSampleRate %d", HwSampleRate);
 				usleep(5000);
 			}
 
@@ -1286,14 +1288,14 @@ static void AudioExitThread(void)
 {
     void *retval;
 
-    Debug2(L_SOUND, "audio: %s", __FUNCTION__);
+    LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 
     if (AudioThread) {
 	AudioThreadStop = 1;
 	AudioRunning = 1;		// wakeup thread, if needed
 	pthread_cond_signal(&AudioStartCond);
 	if (pthread_join(AudioThread, &retval) || retval != PTHREAD_CANCELED) {
-	    Error("audio: can't cancel play thread");
+	    LOGERROR("audio: can't cancel play thread");
 	}
 	pthread_cond_destroy(&AudioStartCond);
 	pthread_mutex_destroy(&AudioRbMutex);
@@ -1317,7 +1319,7 @@ void AudioEnqueue(AVFrame *frame)
 
 	if (AlsaPlayerStop) {
 		av_frame_unref(frame);
-//		Debug2(L_SOUND, "AudioEnqueue: AlsaPlayerStop!!!");
+//		LOGDEBUG2(L_SOUND, "AudioEnqueue: AlsaPlayerStop!!!");
 		return;
 	}
 
@@ -1336,7 +1338,7 @@ void AudioEnqueue(AVFrame *frame)
 	pthread_mutex_lock(&AudioRbMutex);
 	n = AudioRingBuffer->Write(buffer, count);
 	if (n != (size_t) count)
-		Error("audio: AudioEnqueue: can't place %d samples in ring buffer", count);
+		LOGERROR("audio: AudioEnqueue: can't place %d samples in ring buffer", count);
 	PTS = frame->pts + (frame->nb_samples * timebase->den /
 		timebase->num / frame->sample_rate);
 	pthread_mutex_unlock(&AudioRbMutex);
@@ -1348,7 +1350,7 @@ void AudioEnqueue(AVFrame *frame)
 		skip = AudioSkip;
 		// FIXME: round to packet size
 
-		Debug2(L_AV_SYNC, "AudioEnqueue: start? in Rb %4zdms to skip %dms nb_samples %d",
+		LOGDEBUG2(L_AV_SYNC, "AudioEnqueue: start? in Rb %4zdms to skip %dms nb_samples %d",
 			n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			frame->nb_samples);
@@ -1366,7 +1368,7 @@ void AudioEnqueue(AVFrame *frame)
 			AudioStartThreshold * 4 < n) {
 			// restart play-back
 			// no lock needed, can wakeup next time
-			Debug2(L_AV_SYNC, "AudioEnqueue: start play-back Threshold %ums RingBuffer %zums AudioVideoIsReady %d",
+			LOGDEBUG2(L_AV_SYNC, "AudioEnqueue: start play-back Threshold %ums RingBuffer %zums AudioVideoIsReady %d",
 				AudioStartThreshold * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 				n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 				AudioVideoIsReady);
@@ -1392,7 +1394,7 @@ void AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *samples, int count, 
 	timebase = &ctx->pkt_timebase;
 
 	if (AlsaPlayerStop) {
-//		Debug2(L_SOUND, "AudioEnqueueSpdif: AlsaPlayerStop!!!");
+//		LOGDEBUG2(L_SOUND, "AudioEnqueueSpdif: AlsaPlayerStop!!!");
 		av_frame_unref(frame);
 		return;
 	}
@@ -1402,7 +1404,7 @@ void AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *samples, int count, 
 	pthread_mutex_lock(&AudioRbMutex);
 	n = AudioRingBuffer->Write(buffer, count);
 	if (n != (size_t) count)
-		Error("audio: AudioEnqueueSpdif: can't place %d samples in ring buffer", count);
+		LOGERROR("audio: AudioEnqueueSpdif: can't place %d samples in ring buffer", count);
 
 	PTS = frame->pts + (frame->nb_samples * timebase->den /
 		timebase->num / frame->sample_rate);
@@ -1415,7 +1417,7 @@ void AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *samples, int count, 
 		skip = AudioSkip;
 		// FIXME: round to packet size
 
-		Debug2(L_AV_SYNC, "AudioEnqueueSpdif: start? in Rb %4zdms to skip %dms nb_samples %d",
+		LOGDEBUG2(L_AV_SYNC, "AudioEnqueueSpdif: start? in Rb %4zdms to skip %dms nb_samples %d",
 			n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			frame->nb_samples);
@@ -1433,7 +1435,7 @@ void AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *samples, int count, 
 			AudioStartThreshold * 4 < n) {
 			// restart play-back
 			// no lock needed, can wakeup next time
-			Debug2(L_AV_SYNC, "AudioEnqueueSpdif: start play-back Threshold %ums RingBuffer %zums AudioVideoIsReady %d",
+			LOGDEBUG2(L_AV_SYNC, "AudioEnqueueSpdif: start play-back Threshold %ums RingBuffer %zums AudioVideoIsReady %d",
 				AudioStartThreshold * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 				n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 				AudioVideoIsReady);
@@ -1465,7 +1467,7 @@ int AudioSetup(AVCodecContext *AudioCtx, int samplerate, int channels, int passt
 
 		err = AlsaSetup(channels, samplerate, passthrough);
 		if (err) {
-			Debug2(L_SOUND, "AudioSetup: failed!");
+			LOGDEBUG2(L_SOUND, "AudioSetup: failed!");
 			return err;
 		}
 	}
@@ -1487,13 +1489,13 @@ void AudioFilter(AVFrame *inframe, AVCodecContext *AudioCtx)
 	int err_count = 0;
 
 	if (!inframe) {
-//		Debug2(L_SOUND, "AudioFilter: NO inframe!!!");
+//		LOGDEBUG2(L_SOUND, "AudioFilter: NO inframe!!!");
 		goto get_frame;
 	}
 in:
 	if (FilterInit && Filterchanged) {
 
-//		Debug2(L_SOUND, "AudioFilter: FilterInit %d sink_links_count %d channels %d nb_filters %d nb_outputs %d channels %d Filterchanged %d",
+//		LOGDEBUG2(L_SOUND, "AudioFilter: FilterInit %d sink_links_count %d channels %d nb_filters %d nb_outputs %d channels %d Filterchanged %d",
 //			FilterInit,
 //			filter_graph->sink_links_count, filter_graph->sink_links[0]->channels,
 //			filter_graph->filters[filter_graph->nb_filters - 1]->nb_outputs,
@@ -1502,13 +1504,13 @@ in:
 
 		avfilter_graph_free(&filter_graph);
 		FilterInit = 0;
-		Debug2(L_SOUND, "AudioFilter: Free the filter graph.");
+		LOGDEBUG2(L_SOUND, "AudioFilter: Free the filter graph.");
 	}
 
 	if (!FilterInit) {
 		err = AudioFilterInit(AudioCtx);
 		if (err) {
-			Debug2(L_SOUND, "AudioFilter: AudioFilterInit failed!");
+			LOGDEBUG2(L_SOUND, "AudioFilter: AudioFilterInit failed!");
 			return;
 		}
 	}
@@ -1517,13 +1519,13 @@ in:
 		if (err_count) {
 			char errbuf[128];
 			av_strerror(err, errbuf, sizeof(errbuf));
-			Error("AudioFilter: Error submitting the frame to the filter fmt %s channels %d %s",
+			LOGERROR("AudioFilter: Error submitting the frame to the filter fmt %s channels %d %s",
 				av_get_sample_fmt_name(AudioCtx->sample_fmt), AudioCtx->ch_layout.nb_channels, errbuf);
 			return;
 		} else {
 			Filterchanged = 1;
 			err_count++;
-			Debug2(L_SOUND, "AudioFilter: Filterchanged %d  err_count %d", Filterchanged, err_count);
+			LOGDEBUG2(L_SOUND, "AudioFilter: Filterchanged %d  err_count %d", Filterchanged, err_count);
 			goto in;
 		}
 	}
@@ -1533,13 +1535,13 @@ get_frame:
 	err = av_buffersink_get_frame(abuffersink_ctx, outframe);
 
 	if (err == AVERROR(EAGAIN)) {
-//		Error("AudioFilter: Error filtering AVERROR(EAGAIN)");
+//		LOGERROR("AudioFilter: Error filtering AVERROR(EAGAIN)");
 		av_frame_free(&outframe);
 	} else if (err == AVERROR_EOF) {
-		Error("AudioFilter: Error filtering AVERROR_EOF");
+		LOGERROR("AudioFilter: Error filtering AVERROR_EOF");
 		av_frame_free(&outframe);
 	} else if (err < 0) {
-		Error("AudioFilter: Error filtering the data");
+		LOGERROR("AudioFilter: Error filtering the data");
 		av_frame_free(&outframe);
 	}
 
@@ -1559,13 +1561,13 @@ int AudioVideoReady(int64_t video_pts)
 	int skip;
 
 	if (AudioRunning) {
-		Debug2(L_SOUND, "AudioVideoReady: Audio is Running !!!???");
+		LOGDEBUG2(L_SOUND, "AudioVideoReady: Audio is Running !!!???");
 		return 0;
 	}
 
 	// no valid audio known
 	if (PTS == AV_NOPTS_VALUE) {
-		Debug2(L_SOUND, "AudioVideoReady: can't a/v start, no valid PTS");
+		LOGDEBUG2(L_SOUND, "AudioVideoReady: can't a/v start, no valid PTS");
 		return -1;
 	}
 
@@ -1586,7 +1588,7 @@ int AudioVideoReady(int64_t video_pts)
 			AudioSkip = skip - used;
 			skip = used;
 		}
-		Debug2(L_AV_SYNC, "AudioVideoReady: RB %" PRId64 "ms skip %dms to skip %dms",
+		LOGDEBUG2(L_AV_SYNC, "AudioVideoReady: RB %" PRId64 "ms skip %dms to skip %dms",
 			used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			AudioSkip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample);
@@ -1617,13 +1619,13 @@ int AudioSkipInTrickSpeed(int64_t video_pts, int full)
 
 	// no valid audio known, if we had a ClearAudio just before
 	if (PTS == AV_NOPTS_VALUE) {
-		Debug2(L_AV_SYNC, "AudioSkipInTrickSpeed: can't sync, no valid PTS");
+		LOGDEBUG2(L_AV_SYNC, "AudioSkipInTrickSpeed: can't sync, no valid PTS");
 		return -1;
 	}
 
 	// no valid video pts
 	if (video_pts == AV_NOPTS_VALUE) {
-		Debug2(L_AV_SYNC, "AudioSkipInTrickSpeed: can't sync, no valid video PTS");
+		LOGDEBUG2(L_AV_SYNC, "AudioSkipInTrickSpeed: can't sync, no valid video PTS");
 		return -1;
 	}
 
@@ -1650,7 +1652,7 @@ int AudioSkipInTrickSpeed(int64_t video_pts, int full)
 		if ((unsigned)skip >= used)
 			skip = used - (1 - full) * HwChannels * AudioBytesProSample;
 
-		Debug2(L_AV_SYNC, "AudioSkipInTrickSpeed: RB %" PRId64 "ms skip %dms audio %s -> %s video %s",
+		LOGDEBUG2(L_AV_SYNC, "AudioSkipInTrickSpeed: RB %" PRId64 "ms skip %dms audio %s -> %s video %s",
 			used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			skip * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 			Timestamp2String(audio_pts),
@@ -1668,7 +1670,7 @@ int AudioSkipInTrickSpeed(int64_t video_pts, int full)
 */
 void AudioFlushBuffers(void)
 {
-	Debug2(L_SOUND, "AudioFlushBuffers: AudioFlushBuffers");
+	LOGDEBUG2(L_SOUND, "AudioFlushBuffers: AudioFlushBuffers");
 
 	if (AudioRunning)
 		AlsaPlayerStop = 1;
@@ -1730,12 +1732,12 @@ int64_t AudioGetClock(void)
 	pthread_mutex_lock(&AudioRbMutex);
 	// delay in frames in alsa + kernel buffers
 	if (snd_pcm_delay(AlsaPCMHandle, &delay) < 0) {
-		Debug2(L_SOUND, "AudioGetClock: no hw delay");
+		LOGDEBUG2(L_SOUND, "AudioGetClock: no hw delay");
 		delay = 0L;
 	}
 
 	if (delay < 0) {
-		Debug2(L_SOUND, "AudioGetClock: delay < 0");
+		LOGDEBUG2(L_SOUND, "AudioGetClock: delay < 0");
 		delay = 0L;
 	}
 
@@ -1782,16 +1784,16 @@ void AudioPlay(void)
 	int err;
 
 	if (!AudioPaused && !AlsaCanPause) {
-		Debug2(L_SOUND, "AudioPlay: not paused, check the code");
+		LOGDEBUG2(L_SOUND, "AudioPlay: not paused, check the code");
 	}
-	Debug2(L_SOUND, "AudioPlay: resumed");
+	LOGDEBUG2(L_SOUND, "AudioPlay: resumed");
 	if (AlsaCanPause) {
 		snd_pcm_state_t state;
 		state = snd_pcm_state(AlsaPCMHandle);
 		if (state == SND_PCM_STATE_PAUSED) {
-			Debug2(L_SOUND, "AudioPlay: state paused, try snd_pcm_pause(0)!");
+			LOGDEBUG2(L_SOUND, "AudioPlay: state paused, try snd_pcm_pause(0)!");
 			if ((err = snd_pcm_pause(AlsaPCMHandle, 0))) {
-				Error("AudioPlay: snd_pcm_pause(): %s", snd_strerror(err));
+				LOGERROR("AudioPlay: snd_pcm_pause(): %s", snd_strerror(err));
 			}
 		}
 	} else {
@@ -1810,17 +1812,17 @@ void AudioPause(void)
 	int err;
 
 	if (AudioPaused) {
-		Debug2(L_SOUND, "AudioPause: already paused, check the code");
+		LOGDEBUG2(L_SOUND, "AudioPause: already paused, check the code");
 	return;
 	}
-	Debug2(L_SOUND, "AudioPause: paused");
+	LOGDEBUG2(L_SOUND, "AudioPause: paused");
 	if (AlsaCanPause) {
 		snd_pcm_state_t state;
 		state = snd_pcm_state(AlsaPCMHandle);
 		if (state == SND_PCM_STATE_RUNNING) {
-			Debug2(L_SOUND, "AudioPlay: state running, try snd_pcm_pause(1)!");
+			LOGDEBUG2(L_SOUND, "AudioPlay: state running, try snd_pcm_pause(1)!");
 			if ((err = snd_pcm_pause(AlsaPCMHandle, 1))) {
-				Error("AudioPause: snd_pcm_pause(): %s", snd_strerror(err));
+				LOGERROR("AudioPause: snd_pcm_pause(): %s", snd_strerror(err));
 			}
 		}
 	} else {
@@ -1998,7 +2000,7 @@ void AudioInit(int passthrough)
 */
 void AudioExit(void)
 {
-	Debug2(L_SOUND, "audio: %s", __FUNCTION__);
+	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 
 	AudioExitThread();
 	AlsaExit();
