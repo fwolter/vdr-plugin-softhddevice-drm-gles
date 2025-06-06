@@ -37,11 +37,11 @@ extern "C" {
 #include <libavcodec/bsf.h>
 #include <libavutil/opt.h>
 #include <libavutil/pixdesc.h>
+}
 
 #include "codec_video.h"
 #include "misc.h"
 #include "video.h"
-}
 
 #include "logger.h"
 

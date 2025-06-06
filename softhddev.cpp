@@ -41,12 +41,11 @@
 #include "softhddevice.h"
 #include "logger.h"
 
-#include "misc.h"
-
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/timestamp.h>
+}
 
 #include "iatomic.h"			// portable atomic_t
 #include "softhddev.h"
@@ -54,8 +53,6 @@ extern "C" {
 #include "video.h"
 #include "codec_audio.h"
 #include "codec_video.h"
-//#include "buf2rgb.h"
-}
 #include "buf2rgb.h"
 
 //////////////////////////////////////////////////////////////////////////////

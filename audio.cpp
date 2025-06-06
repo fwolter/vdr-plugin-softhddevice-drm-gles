@@ -49,13 +49,13 @@
 
 extern "C"
 {
-
 #include <libavcodec/avcodec.h>
-#include <libavutil/channel_layout.h>
-#include <libavutil/opt.h>
 #include <libavfilter/avfilter.h>
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/opt.h>
+}
 
 #include "iatomic.h"			// portable atomic_t
 
@@ -65,7 +65,6 @@ extern "C"
 #include "video.h"
 #include "codec_audio.h"
 #include "softhddev.h"
-}
 
 #include "logger.h"
 

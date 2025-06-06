@@ -30,15 +30,15 @@ const struct {
 #include <vdr/osd.h>
 #include <vdr/thread.h>
 
+#include <stdint.h>
 extern "C"
 {
-#include <stdint.h>
 #include <libavcodec/avcodec.h>
+}
 
 #include "audio.h"
 #include "video.h"
 #include "softhddev.h"
-}
 
 #include "softhddevice.h"
 

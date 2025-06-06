@@ -58,6 +58,7 @@ extern "C" {
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
 #include <libavutil/opt.h>
+}
 
 #ifdef USE_GLES
 #include <gbm.h>
@@ -68,7 +69,6 @@ extern "C" {
 #include "video.h"
 #include "audio.h"
 #include "drm.h"
-}
 #include "buf2rgb.h"
 
 //----------------------------------------------------------------------------

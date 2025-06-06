@@ -41,10 +41,10 @@ extern "C"
 {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+}
 
 #include "softhddev.h"
 #include "audio.h"
-}
 
 #include "misc.h"
 

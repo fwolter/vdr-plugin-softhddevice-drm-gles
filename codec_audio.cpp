@@ -33,11 +33,11 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+}
 
-#include "codec_audio.h"
 #include "misc.h"
 #include "audio.h"
-}
+#include "codec_audio.h"
 
 #include "logger.h"
 

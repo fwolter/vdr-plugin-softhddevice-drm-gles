@@ -28,7 +28,9 @@
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+extern "C" {
 #include <libavfilter/avfilter.h>
+}
 
 #ifdef USE_GLES
 #include <gbm.h>

@@ -18,9 +18,6 @@
 #undef Status
 #undef CurrentTime
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 //typedef char GLchar;
 
@@ -55,10 +52,5 @@ int writeImage(char* filename, int width, int height, void *buffer, char* title)
     stmt; \
     eglCheckError(#stmt, __FILE__, __LINE__); \
     } while (0)
-
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

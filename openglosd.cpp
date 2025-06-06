@@ -10,7 +10,6 @@
 #endif
 #include <sys/ioctl.h>
 
-#include "misc.h"
 #include "logger.h"
 
 

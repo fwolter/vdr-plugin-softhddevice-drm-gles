@@ -27,7 +27,9 @@
 
 #include <pthread.h>
 
+extern "C" {
 #include <libavcodec/avcodec.h>
+}
 
 #include "video.h"
 

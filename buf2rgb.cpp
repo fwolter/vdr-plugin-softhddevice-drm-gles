@@ -2,12 +2,11 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
 }
-#include <sys/mman.h>
 
-#include "misc.h"
-#include "buf2rgb.h"
+#include <sys/mman.h>
 #include <drm_fourcc.h>
 
+#include "buf2rgb.h"
 #include "logger.h"
 
 #define OPAQUE		0xff

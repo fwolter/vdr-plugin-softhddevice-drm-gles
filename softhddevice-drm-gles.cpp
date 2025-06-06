@@ -35,7 +35,6 @@ using std::ifstream;
 #include "softhddevice-drm-gles.h"
 #include "softhddevice.h"
 #include "mediaplayer.h"
-#include "misc.h"
 
 #ifdef USE_GLES
 #include "openglosd.h"
@@ -44,12 +43,12 @@ using std::ifstream;
 extern "C"
 {
 #include <libavcodec/avcodec.h>
+}
 
 #include "softhddev.h"
 #include "video.h"
 #include "audio.h"
 #include "codec_audio.h"
-}
 
 //////////////////////////////////////////////////////////////////////////////
 //	OSD

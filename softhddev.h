@@ -22,12 +22,9 @@
 #ifndef __SOFTHDDEV_H
 #define __SOFTHDDEV_H
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
+extern "C" {
 #include <libavcodec/avcodec.h>
+}
 
 //----------------------------------------------------------------------------
 //	Typedefs
@@ -51,9 +48,5 @@ extern "C"
     extern void *GetVideoRender(void);
     /// Set interlaced stream flag
     extern void SetInterlacedStream(int);
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif
