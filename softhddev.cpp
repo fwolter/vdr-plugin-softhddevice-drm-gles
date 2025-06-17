@@ -112,17 +112,6 @@ int DebugLogLevel;
 #define AUDIO_BUFFER_SIZE (512 * 1024)	///< audio PES buffer default size
 static AVPacket AudioAvPkt[1];		///< audio a/v packet
 
-void PrintStreamData(const uint8_t *data, int size)
-{
-	LOGDEBUG("Data: %02x %02x %02x %02x %02x %02x %02x %02x %02x "
-		"%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x "
-		"%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x size %d",
-		data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
-		data[9], data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17],
-		data[18], data[19], data[20], data[21], data[22], data[23], data[24], data[25], data[26],
-		data[27], data[28], data[29], data[30], data[31], data[32], data[33], data[34], size);
-}
-
 //////////////////////////////////////////////////////////////////////////////
 //	Audio codec parser
 //////////////////////////////////////////////////////////////////////////////
@@ -498,191 +487,6 @@ static int AdtsCheck(const uint8_t * data, int size)
     }
 
     return 0;
-}
-
-//////////////////////////////////////////////////////////////////////////////
-//	Video
-//////////////////////////////////////////////////////////////////////////////
-
-//////////////////////////////////////////////////////////////////////////////
-
-// helper functions to parse resolution from stream
-const unsigned char * m_pStart;
-unsigned short m_nLength;
-int m_nCurrentBit;
-
-unsigned int ReadBit()
-{
-	assert(m_nCurrentBit <= m_nLength * 8);
-	int nIndex = m_nCurrentBit / 8;
-	int nOffset = m_nCurrentBit % 8 + 1;
-
-	m_nCurrentBit++;
-	return (m_pStart[nIndex] >> (8-nOffset)) & 0x01;
-}
-
-unsigned int ReadBits(int n)
-{
-	int r = 0;
-
-	for (int i = 0; i < n; i++) {
-		r |= ( ReadBit() << ( n - i - 1 ) );
-	}
-	return r;
-}
-
-unsigned int ReadExponentialGolombCode()
-{
-	int r = 0;
-	int i = 0;
-
-	while((ReadBit() == 0) && (i < 32)) {
-		i++;
-	}
-
-	r = ReadBits(i);
-	r += (1 << i) - 1;
-	return r;
-}
-
-unsigned int ReadSE()
-{
-	int r = ReadExponentialGolombCode();
-
-	if (r & 0x01) {
-		r = (r+1)/2;
-	} else {
-		r = -(r/2);
-	}
-	return r;
-}
-
-void ParseResolutionH264(int *width, int *height)
-{
-	AVPacket *avpkt;
-	m_pStart = NULL;
-	int i;
-
-	while (!VideoGetPackets()) {
-		usleep(10000);
-	}
-
-	avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketRead];
-
-	for (i = 0; i < avpkt->size; i++) {
-		if (!avpkt->data[i] && !avpkt->data[i + 1] && avpkt->data[i + 2] == 0x01 && 
-			(avpkt->data[i + 3] == 0x67 || avpkt->data[i + 3] == 0x27)) {
-
-			m_pStart = &avpkt->data[i + 4];
-			m_nLength = avpkt->size - i - 4;
-			break;
-		}
-	}
-	if (!m_pStart) {
-		LOGDEBUG("ParseResolutionH264: No m_pStart %p Pkt %p Packets %d i %d",
-			m_pStart, avpkt, VideoGetPackets(), i);
-		PrintStreamData(avpkt->data, avpkt->size);
-		return;
-	}
-
-	m_nCurrentBit = 0;
-	int frame_crop_left_offset = 0;
-	int frame_crop_right_offset = 0;
-	int frame_crop_top_offset = 0;
-	int frame_crop_bottom_offset = 0;
-	int chroma_format_idc = 0;
-	int separate_colour_plane_flag = 0;
-
-	int profile_idc = ReadBits(8);
-	ReadBits(16);
-	ReadExponentialGolombCode();
-
-
-	if (profile_idc == 100 || profile_idc == 110 ||
-		profile_idc == 122 || profile_idc == 244 ||
-		profile_idc == 44 || profile_idc == 83 ||
-		profile_idc == 86 || profile_idc == 118) {
-
-		chroma_format_idc = ReadExponentialGolombCode();
-		if (chroma_format_idc == 3) {
-			separate_colour_plane_flag = ReadBit();
-		}
-		ReadExponentialGolombCode();
-		ReadExponentialGolombCode();
-		ReadBit();
-		int seq_scaling_matrix_present_flag = ReadBit();
-		if (seq_scaling_matrix_present_flag) {
-			for (int i = 0; i < 8; i++) {
-				int seq_scaling_list_present_flag = ReadBit();
-				if (seq_scaling_list_present_flag) {
-					int sizeOfScalingList = (i < 6) ? 16 : 64;
-					int lastScale = 8;
-					int nextScale = 8;
-					for (int j = 0; j < sizeOfScalingList; j++) {
-						if (nextScale != 0) {
-							int delta_scale = ReadSE();
-							nextScale = (lastScale + delta_scale + 256) % 256;
-						}
-						lastScale = (nextScale == 0) ? lastScale : nextScale;
-					}
-				}
-			}
-		}
-	}
-	ReadExponentialGolombCode();
-	int pic_order_cnt_type = ReadExponentialGolombCode();
-	if (pic_order_cnt_type == 0) {
-		ReadExponentialGolombCode();
-	} else if (pic_order_cnt_type == 1) {
-		ReadBit();
-		ReadSE();
-		ReadSE();
-		int num_ref_frames_in_pic_order_cnt_cycle = ReadExponentialGolombCode();
-		for (int i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++ ) {
-			ReadSE();
-		}
-	}
-	ReadExponentialGolombCode();
-	ReadBit();
-	int pic_width_in_mbs_minus1 = ReadExponentialGolombCode();
-	int pic_height_in_map_units_minus1 = ReadExponentialGolombCode();
-	int frame_mbs_only_flag = ReadBit();
-	if (!frame_mbs_only_flag) {
-		ReadBit();
-	}
-	ReadBit();
-	int frame_cropping_flag = ReadBit();
-	if (frame_cropping_flag) {
-		frame_crop_left_offset = ReadExponentialGolombCode();
-		frame_crop_right_offset = ReadExponentialGolombCode();
-		frame_crop_top_offset = ReadExponentialGolombCode();
-		frame_crop_bottom_offset = ReadExponentialGolombCode();
-	}
-
-	int SubWidthC = 0;
-	int SubHeightC = 0;
-
-	if (chroma_format_idc == 0 && separate_colour_plane_flag == 0) { //monochrome
-		SubWidthC = SubHeightC = 2;
-	} else if (chroma_format_idc == 1 && separate_colour_plane_flag == 0) { //4:2:0 
-		SubWidthC = SubHeightC = 2;
-	} else if (chroma_format_idc == 2 && separate_colour_plane_flag == 0) { //4:2:2 
-		SubWidthC = 2;
-		SubHeightC = 1;
-	} else if (chroma_format_idc == 3) { //4:4:4
-		if (separate_colour_plane_flag == 0) {
-		SubWidthC = SubHeightC = 1;
-		} else if (separate_colour_plane_flag == 1) {
-			SubWidthC = SubHeightC = 0;
-		}
-	}
-
-	*width = ((pic_width_in_mbs_minus1 + 1) * 16) -
-		SubWidthC * (frame_crop_right_offset + frame_crop_left_offset);
-
-	*height = ((2 - frame_mbs_only_flag)* (pic_height_in_map_units_minus1 +1) * 16) -
-		SubHeightC * ((frame_crop_bottom_offset * 2) + (frame_crop_top_offset * 2));
-
 }
 
 /**
@@ -1112,7 +916,7 @@ void cSoftHdDevice::Start(void)
 		VideoSetDisableOglOsd(MyVideoStream->Render);
 	    VideoSetDisableDeint(MyVideoStream->Render, ConfigDisableDeint);
 	    VideoInit(MyVideoStream->Render);
-	    MyVideoStream->Decoder = new cVideoDecoder(MyVideoStream->Render);
+	    MyVideoStream->Decoder = new cVideoDecoder(MyVideoStream->Render, &MyVideoStream[1]);
 	    VideoPacketInit(MyVideoStream);
 	}
     }

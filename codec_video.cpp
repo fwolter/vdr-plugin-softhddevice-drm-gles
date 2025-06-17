@@ -32,6 +32,8 @@
 #include <string.h>
 #include <stdarg.h>
 
+#include <cassert>
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavcodec/bsf.h>
@@ -41,7 +43,9 @@ extern "C" {
 
 #include "codec_video.h"
 #include "misc.h"
+#include "buf2rgb.h"
 #include "video.h"
+#include "softhddev.h"
 
 #include "logger.h"
 
@@ -124,10 +128,11 @@ static enum AVPixelFormat GetFormat(AVCodecContext * video_ctx,
 **
 **	@param render	pointer to VideoRender
 */
-cVideoDecoder::cVideoDecoder(VideoRender *render)
+cVideoDecoder::cVideoDecoder(VideoRender *render, VideoStream *stream)
 {
     VideoCtx = nullptr;
     Render = render;
+    Stream = stream;
     pthread_mutex_init(&CodecLockMutex, NULL);
     av_log_set_callback(CodecLogCallback);
 
@@ -637,4 +642,185 @@ void cVideoDecoder::GetVideoSize(int *width, int *height, double *aspect_ratio)
 	*height = VideoCtx->coded_height;
 	if (VideoCtx->coded_height > 0)
 		*aspect_ratio = (double)(VideoCtx->coded_width) / (double)(VideoCtx->coded_height);
+}
+
+/**
+**	helper functions to parse resolution from stream
+*/
+unsigned int cVideoDecoder::ReadBit()
+{
+	assert(m_nCurrentBit <= m_nLength * 8);
+	int nIndex = m_nCurrentBit / 8;
+	int nOffset = m_nCurrentBit % 8 + 1;
+
+	m_nCurrentBit++;
+	return (m_pStart[nIndex] >> (8-nOffset)) & 0x01;
+}
+
+unsigned int cVideoDecoder::ReadBits(int n)
+{
+	int r = 0;
+
+	for (int i = 0; i < n; i++) {
+		r |= ( ReadBit() << ( n - i - 1 ) );
+	}
+	return r;
+}
+
+unsigned int cVideoDecoder::ReadExponentialGolombCode()
+{
+	int r = 0;
+	int i = 0;
+
+	while((ReadBit() == 0) && (i < 32)) {
+		i++;
+	}
+
+	r = ReadBits(i);
+	r += (1 << i) - 1;
+	return r;
+}
+
+unsigned int cVideoDecoder::ReadSE()
+{
+	int r = ReadExponentialGolombCode();
+
+	if (r & 0x01) {
+		r = (r+1)/2;
+	} else {
+		r = -(r/2);
+	}
+	return r;
+}
+
+/**
+**	Parse h264 stream to get width and height
+**
+**	@param[out] width		video stream width
+**	@param[out] height		video stream height
+*/
+void cVideoDecoder::ParseResolutionH264(int *width, int *height)
+{
+	AVPacket *avpkt;
+	m_pStart = NULL;
+	int i;
+
+	while (!atomic_read(Stream->PacketsFilled)) {
+		usleep(10000);
+	}
+
+	avpkt = &Stream->PacketRb[Stream->PacketRead];
+
+	for (i = 0; i < avpkt->size; i++) {
+		if (!avpkt->data[i] && !avpkt->data[i + 1] && avpkt->data[i + 2] == 0x01 &&
+			(avpkt->data[i + 3] == 0x67 || avpkt->data[i + 3] == 0x27)) {
+
+			m_pStart = &avpkt->data[i + 4];
+			m_nLength = avpkt->size - i - 4;
+			break;
+		}
+	}
+	if (!m_pStart) {
+		LOGDEBUG("ParseResolutionH264: No m_pStart %p Pkt %p Packets %d i %d",
+			m_pStart, avpkt, atomic_read(Stream->PacketsFilled), i);
+		PrintStreamData(avpkt->data, avpkt->size);
+		return;
+	}
+
+	m_nCurrentBit = 0;
+	int frame_crop_left_offset = 0;
+	int frame_crop_right_offset = 0;
+	int frame_crop_top_offset = 0;
+	int frame_crop_bottom_offset = 0;
+	int chroma_format_idc = 0;
+	int separate_colour_plane_flag = 0;
+
+	int profile_idc = ReadBits(8);
+	ReadBits(16);
+	ReadExponentialGolombCode();
+
+	if (profile_idc == 100 || profile_idc == 110 ||
+		profile_idc == 122 || profile_idc == 244 ||
+		profile_idc == 44 || profile_idc == 83 ||
+		profile_idc == 86 || profile_idc == 118) {
+
+		chroma_format_idc = ReadExponentialGolombCode();
+		if (chroma_format_idc == 3) {
+			separate_colour_plane_flag = ReadBit();
+		}
+		ReadExponentialGolombCode();
+		ReadExponentialGolombCode();
+		ReadBit();
+		int seq_scaling_matrix_present_flag = ReadBit();
+		if (seq_scaling_matrix_present_flag) {
+			for (int i = 0; i < 8; i++) {
+				int seq_scaling_list_present_flag = ReadBit();
+				if (seq_scaling_list_present_flag) {
+					int sizeOfScalingList = (i < 6) ? 16 : 64;
+					int lastScale = 8;
+					int nextScale = 8;
+					for (int j = 0; j < sizeOfScalingList; j++) {
+						if (nextScale != 0) {
+							int delta_scale = ReadSE();
+							nextScale = (lastScale + delta_scale + 256) % 256;
+						}
+						lastScale = (nextScale == 0) ? lastScale : nextScale;
+					}
+				}
+			}
+		}
+	}
+	ReadExponentialGolombCode();
+	int pic_order_cnt_type = ReadExponentialGolombCode();
+	if (pic_order_cnt_type == 0) {
+		ReadExponentialGolombCode();
+	} else if (pic_order_cnt_type == 1) {
+		ReadBit();
+		ReadSE();
+		ReadSE();
+		int num_ref_frames_in_pic_order_cnt_cycle = ReadExponentialGolombCode();
+		for (int i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++ ) {
+			ReadSE();
+		}
+	}
+	ReadExponentialGolombCode();
+	ReadBit();
+	int pic_width_in_mbs_minus1 = ReadExponentialGolombCode();
+	int pic_height_in_map_units_minus1 = ReadExponentialGolombCode();
+	int frame_mbs_only_flag = ReadBit();
+	if (!frame_mbs_only_flag) {
+		ReadBit();
+	}
+	ReadBit();
+	int frame_cropping_flag = ReadBit();
+	if (frame_cropping_flag) {
+		frame_crop_left_offset = ReadExponentialGolombCode();
+		frame_crop_right_offset = ReadExponentialGolombCode();
+		frame_crop_top_offset = ReadExponentialGolombCode();
+		frame_crop_bottom_offset = ReadExponentialGolombCode();
+	}
+
+	int SubWidthC = 0;
+	int SubHeightC = 0;
+
+	if (chroma_format_idc == 0 && separate_colour_plane_flag == 0) { //monochrome
+		SubWidthC = SubHeightC = 2;
+	} else if (chroma_format_idc == 1 && separate_colour_plane_flag == 0) { //4:2:0
+		SubWidthC = SubHeightC = 2;
+	} else if (chroma_format_idc == 2 && separate_colour_plane_flag == 0) { //4:2:2
+		SubWidthC = 2;
+		SubHeightC = 1;
+	} else if (chroma_format_idc == 3) { //4:4:4
+		if (separate_colour_plane_flag == 0) {
+		SubWidthC = SubHeightC = 1;
+		} else if (separate_colour_plane_flag == 1) {
+			SubWidthC = SubHeightC = 0;
+		}
+	}
+
+	*width = ((pic_width_in_mbs_minus1 + 1) * 16) -
+		SubWidthC * (frame_crop_right_offset + frame_crop_left_offset);
+
+	*height = ((2 - frame_mbs_only_flag)* (pic_height_in_map_units_minus1 +1) * 16) -
+		SubHeightC * ((frame_crop_bottom_offset * 2) + (frame_crop_top_offset * 2));
 }

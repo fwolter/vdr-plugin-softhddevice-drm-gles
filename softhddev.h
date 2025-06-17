@@ -41,9 +41,6 @@ extern "C" {
     /// Get number of input buffers.
     extern int VideoGetPackets(void);
 
-    /// Get parsed width and height
-    extern void ParseResolutionH264(int *, int *);
-
     /// C plugin get video render
     extern void *GetVideoRender(void);
     /// Set interlaced stream flag
