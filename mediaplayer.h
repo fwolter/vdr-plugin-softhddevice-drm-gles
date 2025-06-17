@@ -44,6 +44,7 @@ private:
 	char *Source;
 	int Entries;
 	cSoftHdDevice *Device;
+	cSoftHdAudio *Audio;
 protected:
 	virtual void Activate(bool On);
 	virtual void Action(void);

@@ -22,6 +22,9 @@
 /// @addtogroup iatomic
 /// @{
 
+#ifndef __IATOMIC_H
+#define __IATOMIC_H
+
 #define GCC_VERSION (__GNUC__ * 10000 \
 	+ __GNUC_MINOR__ * 100 \
 	+ __GNUC_PATCHLEVEL__)
@@ -90,6 +93,8 @@ typedef volatile int atomic_t;
 ///
 #define atomic_sub(val, ptr) \
     __atomic_sub_fetch(ptr, val, __ATOMIC_SEQ_CST)
+
+#endif
 
 #endif
 

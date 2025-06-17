@@ -67,6 +67,8 @@ enum IEC61937
 
 class cAudioDecoder {
 private:
+    cSoftHdAudio *Audio;
+
     AVCodecContext *AudioCtx;		///< audio codec context
     AVFrame *Frame;			///< decoded audio frame buffer
     int64_t last_pts;			///< last PTS
@@ -88,7 +90,7 @@ private:
     int UpdateFormat(void);		///< update format
 
 public:
-    cAudioDecoder(int);
+    cAudioDecoder(cSoftHdAudio *);
     virtual ~cAudioDecoder(void);
     void Open(enum AVCodecID, AVCodecParameters *, AVRational *);
 	///< Open audio decoder

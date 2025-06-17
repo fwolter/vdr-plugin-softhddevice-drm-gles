@@ -33,9 +33,10 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
-}
 
 #include "misc.h"
+}
+
 #include "audio.h"
 #include "codec_audio.h"
 
@@ -50,8 +51,11 @@ extern "C" {
 **
 **	@param mask	passthrough mask
 */
-cAudioDecoder::cAudioDecoder(int mask)
+cAudioDecoder::cAudioDecoder(cSoftHdAudio *audio)
 {
+    Audio = audio;
+    int mask = Audio->AudioGetPassthrough();
+
     if (!(Frame = av_frame_alloc()))
 	LOGFATAL("cAudioDecoder::cAudioDecoder: can't allocate audio decoder frame buffer");
     AudioCtx = NULL;
@@ -166,7 +170,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 	// FIXME: don't need to clear always
 	memset(spdif + 4 + avpkt->size / 2, 0, spdif_sz - 8 - avpkt->size);
 	// don't play with the ac-3 samples
-	AudioEnqueueSpdif(AudioCtx, spdif, spdif_sz, frame);
+	Audio->AudioEnqueueSpdif(AudioCtx, spdif, spdif_sz, frame);
 	return 1;
     }
 
@@ -215,7 +219,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 	    spdif_sz - 8 - SpdifIndex);
 
 	// don't play with the eac-3 samples
-	AudioEnqueueSpdif(AudioCtx, spdif, spdif_sz, frame);
+	Audio->AudioEnqueueSpdif(AudioCtx, spdif, spdif_sz, frame);
 	SpdifIndex = 0;
 	SpdifCount = 0;
 	return 1;
@@ -274,7 +278,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 	// FIXME: don't need to clear always
 	memset(spdif + 4 + avpkt->size, 0, burst_sz - 8 - avpkt->size);
 	// don't play with the dts samples
-	AudioEnqueueSpdif(AudioCtx, spdif, burst_sz, frame);
+	Audio->AudioEnqueueSpdif(AudioCtx, spdif, burst_sz, frame);
 	return 1;
     }
     return 0;
@@ -318,12 +322,11 @@ int cAudioDecoder::UpdateFormat(void)
 		passthrough = 1;
 	}
 
-
-	if ((err = AudioSetup(AudioCtx, HwSampleRate, HwChannels, passthrough))) {
+	if ((err = Audio->AudioSetup(AudioCtx, HwSampleRate, HwChannels, passthrough))) {
 		// try E-AC3 with non HBR
 		HwSampleRate /= 4;
 		if (AudioCtx->codec_id != AV_CODEC_ID_EAC3 ||
-		   (err = AudioSetup(AudioCtx, HwSampleRate, HwChannels, passthrough))) {
+		   (err = Audio->AudioSetup(AudioCtx, HwSampleRate, HwChannels, passthrough))) {
 			HwSampleRate = 0;
 			HwChannels = 0;
 			LOGERROR("cAudioDecoder::UpdateFormat: format change update error");
@@ -401,7 +404,7 @@ send:
 		if (DecodePassthrough(avpkt, frame))
 			return;
 
-		AudioFilter(frame, AudioCtx);
+		Audio->AudioFilter(frame, AudioCtx);
 	}
 
 	if (ret_send == AVERROR(EAGAIN))

@@ -23,10 +23,12 @@
 #ifndef __MISC_H
 #define __MISC_H
 
+/*
 #ifdef __cplusplus
 extern "C"
 {
 #endif
+*/
 
 #include <syslog.h>
 #include <stdarg.h>
@@ -81,10 +83,10 @@ static inline const char *Timestamp2String(int64_t ts)
 
 	return buf[idx];
 }
-
+/*
 #ifdef __cplusplus
 }
 #endif
-
+*/
 #endif
 

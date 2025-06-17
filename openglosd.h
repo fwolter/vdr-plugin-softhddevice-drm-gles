@@ -1,7 +1,22 @@
 #ifndef __SOFTHDDEVICE_OPENGLOSD_H
 #define __SOFTHDDEVICE_OPENGLOSD_H
 
-#include "gles_private.h"
+#include <EGL/egl.h>
+#include <EGL/eglext.h>
+#include <EGL/eglplatform.h>
+/* Hack:
+ * xlib.h via eglplatform.h: #define Status int
+ * X.h via eglplatform.h: #define CurrentTime 0L
+ *
+ * revert it, because it conflicts with vdr variables.
+ */
+#undef Status
+#undef CurrentTime
+
+#include <GLES2/gl2.h>
+#include <GLES2/gl2ext.h>
+#include <gbm.h>
+#include <drm_fourcc.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -374,8 +389,9 @@ private:
     GLint bcolor;
     int active;
     cSoftHdDevice *Device;
+    cVideoRender *Render;
 public:
-    cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputFb *oFb, GLint x, GLint y, int active, cSoftHdDevice *device);
+    cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputFb *oFb, GLint x, GLint y, int active, cSoftHdDevice *device, cVideoRender *render);
     virtual ~cOglCmdCopyBufferToOutputFb(void) {};
     virtual const char* Description(void) { return "Copy buffer to OutputFramebuffer"; }
     virtual bool Execute(void);
@@ -531,10 +547,13 @@ private:
     void Cleanup(void);
     int GetFreeSlot(void);
     void ClearSlot(int slot);
+    void eglAcquireContext(void);
+    void eglReleaseContext(void);
+    cVideoRender *Render;
 protected:
     virtual void Action(void);
 public:
-    cOglThread(cCondWait *startWait, int maxCacheSize);
+    cOglThread(cCondWait *startWait, int maxCacheSize, cVideoRender *render);
     virtual ~cOglThread();
     void Stop(void);
     void DoCmd(cOglCmd* cmd);
@@ -602,6 +621,7 @@ private:
     cSize maxPixmapSize;
     cRect *dirtyViewport;
     cSoftHdDevice *Device;
+    cVideoRender *Render;
 protected:
 public:
     cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglThread, cSoftHdDevice *device);

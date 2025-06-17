@@ -175,6 +175,7 @@ class cMenuSetupSoft:public cMenuSetupPage
     inline cOsdItem * CollapsedItem(const char *, int &, const char * = NULL);
     void Create(void);			// create sub-menu
     cSoftHdDevice *Device;
+    cSoftHdAudio *AudioDevice;
   protected:
     virtual void Store(void);
   public:
@@ -210,6 +211,7 @@ class cPluginSoftHdDevice:public cPlugin
     virtual cString SVDRPCommand(const char *, const char *, int &);
   private:
     cSoftHdDevice *Device;
+    cSoftHdAudio *Audio;
     int DoMakePrimary;	///< switch primary device to this
 };
 

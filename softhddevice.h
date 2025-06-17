@@ -29,9 +29,15 @@ extern "C"
 #include <libavcodec/avcodec.h>
 }
 
+class cAudioDecoder;
+
 //////////////////////////////////////////////////////////////////////////////
 //	cDevice
 //////////////////////////////////////////////////////////////////////////////
+
+class cVideoStream;
+class cVideoRender;
+class cSoftHdAudio;
 
 class cSoftHdDevice:public cDevice
 {
@@ -138,8 +144,27 @@ public:
     void OsdDrawARGB(int, int, int, int, int, const uint8_t *, int, int);
 
 // Audio
+    cSoftHdAudio *Audio;
+    cAudioDecoder *AudioDecoder;
+    AVPacket *AudioAvPkt;
+    enum AVCodecID AudioCodecID;
+    int AudioChannelID;
+    void ClearAudio(void);
+    volatile char NewAudioStream;
+    volatile char SkipAudio;
+
+    int VideoAudioDelay;
+    void SetVideoAudioDelay(int);
+    int GetVideoAudioDelay(void);
+
     void SetPassthrough(int);	///< Set audio passthrough mask
     void ResetChannelId(void);
+
+// Stream
+    cVideoStream *VideoStream;
+
+// Render
+    cVideoRender *Render;
 
 // Logging, statistics
     void SetLogLevel(int);

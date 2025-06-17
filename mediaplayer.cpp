@@ -41,12 +41,13 @@ extern "C"
 {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
+
+#include "misc.h"
 }
 
 #include "softhddev.h"
 #include "audio.h"
 
-#include "misc.h"
 
 //////////////////////////////////////////////////////////////////////////////
 //	cPlayer Mediaplayer
@@ -67,6 +68,7 @@ cSoftHdPlayer::cSoftHdPlayer(const char *Url, cSoftHdDevice *device)
 	Pause = 0;
 	Random = 0;
 	Device = device;
+	Audio = Device->Audio;
 //	LOGDEBUG2(L_MEDIA, "cSoftHdPlayer: Player gestartet.");
 }
 
@@ -121,7 +123,7 @@ void cSoftHdPlayer::Action(void)
 		Player(Source);
 	}
 
-	while(AudioGetClock() != AV_NOPTS_VALUE)
+	while(Audio->AudioGetClock() != AV_NOPTS_VALUE)
 		usleep(5000);
 
 	cSoftHdControl::Control()->Close = 1;
@@ -245,7 +247,7 @@ repeat:
 						av_q2d(format->streams[audio_stream_index]->time_base));
 					goto repeat;
 				}
-				CurrentTime = AudioGetClock() / 1000 - start_time;
+				CurrentTime = Audio->AudioGetClock() / 1000 - start_time;
 			}
 
 			if (video_stream_index == packet.stream_index) {

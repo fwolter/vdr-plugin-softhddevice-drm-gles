@@ -1,11 +1,12 @@
 #ifndef __BUF2RGB_H
 #define __BUF2RGB_H
 
+/*
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include "video.h"
+*/
+#include "drm_buf.h"
 
 /****************************************************************************************
 * Helpers
@@ -16,8 +17,9 @@ void alphablend(uint8_t *result, uint8_t *front, uint8_t *back, const unsigned i
 uint8_t *blitvideo(uint8_t *src, int dst_w, int dst_h, int dst_x, int dst_y, int src_w, int src_h);
 void PrintStreamData(const uint8_t *data, int size);
 
+/*
 #ifdef __cplusplus
 }
 #endif
-
+*/
 #endif

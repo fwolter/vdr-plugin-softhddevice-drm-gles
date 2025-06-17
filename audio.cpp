@@ -55,110 +55,19 @@ extern "C"
 #include <libavfilter/buffersrc.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/opt.h>
+
+#include "misc.h"
 }
 
 #include "iatomic.h"			// portable atomic_t
 
 #include "ringbuffer.h"
-#include "misc.h"
 #include "audio.h"
 #include "video.h"
 #include "codec_audio.h"
 #include "softhddev.h"
 
 #include "logger.h"
-
-//----------------------------------------------------------------------------
-//	Defines
-//----------------------------------------------------------------------------
-
-#define MIN_AUDIO_BUFFER	450	///< minimal output buffer in ms
-
-//----------------------------------------------------------------------------
-//	Variables
-//----------------------------------------------------------------------------
-
-static const char *AudioPCMDevice;	///< PCM device name
-static const char *AudioPassthroughDevice;	///< Passthrough device name
-static int AudioPassthrough;		///< Passthrough mask
-static char AudioAppendAES;		///< flag automatic append AES
-static const char *AudioMixerDevice;	///< mixer device name
-static const char *AudioMixerChannel;	///< mixer channel name
-static volatile char AudioRunning;	///< thread running / stopped
-static volatile char AudioPaused;	///< audio paused
-static volatile char AudioVideoIsReady;	///< video ready start early
-static int AudioSkip;			///< skip audio to sync to video
-
-static const int AudioBytesProSample = 2;	///< number of bytes per sample
-static int AudioBufferTime;	///< audio buffer time in ms
-
-static pthread_t AudioThread;		///< audio play thread
-static pthread_mutex_t AudioRbMutex;	///< audio condition mutex
-static pthread_mutex_t AudioStartMutex;	///< audio condition mutex
-static pthread_cond_t AudioStartCond;	///< condition variable
-static char AudioThreadStop;		///< stop audio thread
-static char AlsaPlayerStop;		///< stop audio thread
-
-static char AudioSoftVolume;		///< flag use soft volume
-static char AudioNormalize;		///< flag use volume normalize
-static char AudioCompression;		///< flag use compress volume
-static char AudioMute;			///< flag muted
-static int AudioAmplifier;		///< software volume factor
-static int AudioNormalizeFactor;	///< current normalize factor
-static const int AudioMinNormalize = 100;	///< min. normalize factor
-static int AudioMaxNormalize;		///< max. normalize factor
-static int AudioCompressionFactor;	///< current compression factor
-static int AudioMaxCompression;		///< max. compression factor
-static int AudioStereoDescent;		///< volume descent for stereo
-static int AudioVolume;			///< current volume (0 .. 1000)
-static int AudioDownMix;
-
-extern int VideoAudioDelay;		///< import audio/video delay
-
-    /// default ring buffer size ~2s 8ch 16bit (3 * 5 * 7 * 8)
-static const unsigned AudioRingBufferSize = 3 * 5 * 7 * 8 * 2 * 1000;
-
-//	Alsa variables
-static snd_pcm_t *AlsaPCMHandle;	///< alsa pcm handle
-static char AlsaCanPause;		///< hw supports pause
-static int AlsaUseMmap;			///< use mmap
-
-static snd_mixer_t *AlsaMixer;		///< alsa mixer handle
-static snd_mixer_elem_t *AlsaMixerElem;	///< alsa pcm mixer element
-static int AlsaRatio;			///< internal -> mixer ratio * 1000
-
-//	Filter variables
-static const int AudioNormSamples = 4096;	///< number of samples
-
-#define AudioNormMaxIndex 128		///< number of average values
-    /// average of n last sample blocks
-static uint32_t AudioNormAverage[AudioNormMaxIndex];
-static int AudioNormIndex;		///< index into average table
-static int AudioNormReady;		///< index counter
-static int AudioNormCounter;		///< sample counter
-
-AVFilterGraph *filter_graph;
-AVFilterContext *abuffersrc_ctx, *abuffersink_ctx;
-int FilterInit;
-float AudioEqBand[18];
-int AudioEq;
-int Filterchanged;
-
-//	ring buffer variables
-unsigned int HwSampleRate;		///< hardware sample rate in Hz
-unsigned int HwChannels;		///< hardware number of channels
-AVRational *timebase;			///< pointer to AVCodecContext pkts_timebase
-int64_t PTS;			///< pts clock
-
-cDeviceRingbuffer *AudioRingBuffer = nullptr;		///< sample ring buffer
-
-static unsigned AudioStartThreshold;	///< start play, if filled
-
-
-
-
-static int AlsaSetup(int channels, int sample_rate, int passthrough);
-
 
 //----------------------------------------------------------------------------
 //	Filter
@@ -227,12 +136,27 @@ static void AudioReorderAudioFrame(int16_t * buf, int size, int channels)
 }
 
 /**
+**	Audio constructor
+*/
+cSoftHdAudio::cSoftHdAudio(cSoftHdDevice *device)
+{
+    Device = device;
+}
+
+/**
+**	Audio denstructor
+*/
+cSoftHdAudio::~cSoftHdAudio(void)
+{
+}
+
+/**
 **	Audio normalizer.
 **
 **	@param samples	sample buffer
 **	@param count	number of bytes in sample buffer
 */
-static void AudioNormalizer(int16_t * samples, int count)
+void cSoftHdAudio::AudioNormalizer(int16_t * samples, int count)
 {
     int i;
     int l;
@@ -311,7 +235,7 @@ static void AudioNormalizer(int16_t * samples, int count)
 /**
 **	Reset normalizer.
 */
-static void AudioResetNormalizer(void)
+void cSoftHdAudio::AudioResetNormalizer(void)
 {
     int i;
 
@@ -329,7 +253,7 @@ static void AudioResetNormalizer(void)
 **	@param samples	sample buffer
 **	@param count	number of bytes in sample buffer
 */
-static void AudioCompressor(int16_t * samples, int count)
+void cSoftHdAudio::AudioCompressor(int16_t * samples, int count)
 {
     int max_sample;
     int i;
@@ -382,7 +306,7 @@ static void AudioCompressor(int16_t * samples, int count)
 /**
 **	Reset compressor.
 */
-static void AudioResetCompressor(void)
+void cSoftHdAudio::AudioResetCompressor(void)
 {
     AudioCompressionFactor = 2000;
     if (AudioCompressionFactor > AudioMaxCompression) {
@@ -398,7 +322,7 @@ static void AudioResetCompressor(void)
 **
 **	@todo FIXME: this does hard clipping
 */
-static void AudioSoftAmplifier(int16_t * samples, int count)
+void cSoftHdAudio::AudioSoftAmplifier(int16_t * samples, int count)
 {
     int i;
 
@@ -427,7 +351,7 @@ static void AudioSoftAmplifier(int16_t * samples, int count)
 **	@param band		setting frequenz bands
 **	@param onoff	set using equalizer
 */
-void AudioSetEq(int band[17], int onoff)
+void cSoftHdAudio::AudioSetEq(int band[17], int onoff)
 {
 	int i;
 
@@ -503,7 +427,7 @@ void AudioSetEq(int band[17], int onoff)
 **	@retval 1	didn't support channels, CodecDownmix set > scrap this frame, test next
 **	@retval -1	something gone wrong
 */
-static int AudioFilterInit(AVCodecContext *AudioCtx)
+int cSoftHdAudio::AudioFilterInit(AVCodecContext *AudioCtx)
 {
 	const AVFilter  *abuffer;
 	AVFilterContext *filter_ctx[3];
@@ -626,7 +550,7 @@ static int AudioFilterInit(AVCodecContext *AudioCtx)
 /**
 **	Setup audio ring.
 */
-static void AudioRingInit(void)
+void cSoftHdAudio::AudioRingInit(void)
 {
 	// ~2s 8ch 16bit
 	AudioRingBuffer = new cDeviceRingbuffer(AudioRingBufferSize);
@@ -635,7 +559,7 @@ static void AudioRingInit(void)
 /**
 **	Cleanup audio ring.
 */
-static void AudioRingExit(void)
+void cSoftHdAudio::AudioRingExit(void)
 {
 	if (AudioRingBuffer) {
 		delete AudioRingBuffer;
@@ -656,7 +580,7 @@ static void AudioRingExit(void)
 /**
 **   xrun recovery
 **/
-static void xrun_recovery(void)
+void cSoftHdAudio::xrun_recovery(void)
 {
 	int err;
 	snd_pcm_state_t state;
@@ -672,7 +596,7 @@ static void xrun_recovery(void)
 /**
 **	Flush alsa buffers.
 */
-static void AlsaFlushBuffers(void)
+void cSoftHdAudio::AlsaFlushBuffers(void)
 {
 	int err;
 	snd_pcm_state_t state;
@@ -708,7 +632,7 @@ static void AlsaFlushBuffers(void)
 **	@retval	-1	error
 **	@retval	1	running
 */
-static int AlsaPlayer(void)
+int cSoftHdAudio::AlsaPlayer(void)
 {
 	for (;;) {
 		int avail;
@@ -756,8 +680,9 @@ static int AlsaPlayer(void)
 
 		n = AudioRingBuffer->GetReadPointer(&p);
 		if (!n) {			// ring buffer empty
+// TODO render
 			LOGWARNING("AlsaPlayer: ring buffer empty Videopkts: %d",
-				VideoGetPackets());
+				Device->VideoStream->GetPackets());
 		}
 		if (n < avail) {		// not enough bytes in ring buffer
 			avail = n;
@@ -809,7 +734,7 @@ static int AlsaPlayer(void)
 
 //----------------------------------------------------------------------------
 
-static char *opendevice(const char *device, int passthrough)
+char *cSoftHdAudio::opendevice(const char *device, int passthrough)
 {
 	int err;
 	char tmp[80];
@@ -854,7 +779,7 @@ static char *opendevice(const char *device, int passthrough)
 	return (char *)device;
 }
 
-static char *finddevice(const char *devname, const char *hint, int passthrough)
+char *cSoftHdAudio::finddevice(const char *devname, const char *hint, int passthrough)
 {
 	char **hints;
 	int err;
@@ -893,7 +818,7 @@ static char *finddevice(const char *devname, const char *hint, int passthrough)
 /**
 **	Open alsa pcm device.
 */
-static void AlsaInitPCM(void)
+void cSoftHdAudio::AlsaInitPCM(void)
 {
 	char *device = NULL;
 	int err;
@@ -960,7 +885,7 @@ static void AlsaInitPCM(void)
 **
 **	@param volume	volume (0 .. 1000)
 */
-static void AlsaSetVolume(int volume)
+void cSoftHdAudio::AlsaSetVolume(int volume)
 {
     int v;
     if (AlsaMixer && AlsaMixerElem) {
@@ -973,7 +898,7 @@ static void AlsaSetVolume(int volume)
 /**
 **	Initialize alsa mixer.
 */
-static void AlsaInitMixer(void)
+void cSoftHdAudio::AlsaInitMixer(void)
 {
     const char *device;
     const char *channel;
@@ -1041,7 +966,7 @@ static void AlsaInitMixer(void)
 **
 **	@todo FIXME: remove pointer for freq + channels
 */
-static int AlsaSetup(int channels, int sample_rate, int passthrough)
+int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 {
 	snd_pcm_hw_params_t *hwparams;
 	snd_pcm_state_t state;
@@ -1129,8 +1054,8 @@ static int AlsaSetup(int channels, int sample_rate, int passthrough)
 
 	// buffer time/delay in ms
 	delay = AudioBufferTime;
-	if (VideoAudioDelay > 0) {
-		delay += VideoAudioDelay;
+	if (Device->GetVideoAudioDelay() > 0) {
+		delay += Device->GetVideoAudioDelay();
 	}
 	if (AudioStartThreshold <
 		(HwSampleRate * HwChannels * AudioBytesProSample * delay) / 1000U) {
@@ -1171,7 +1096,7 @@ static void AlsaNoopCallback( __attribute__ ((unused))
 /**
 **	Initialize alsa audio output module.
 */
-static void AlsaInit(void)
+void cSoftHdAudio::AlsaInit(void)
 {
 #ifdef ALSA_DEBUG
     (void)AlsaNoopCallback;
@@ -1180,7 +1105,7 @@ static void AlsaInit(void)
     snd_lib_error_set_handler(AlsaNoopCallback);
 #endif
 
-	AudioBufferTime = MIN_AUDIO_BUFFER;
+    AudioBufferTime = MIN_AUDIO_BUFFER;
     AlsaInitPCM();
     AlsaInitMixer();
 }
@@ -1188,7 +1113,7 @@ static void AlsaInit(void)
 /**
 **	Cleanup alsa audio output module.
 */
-static void AlsaExit(void)
+void cSoftHdAudio::AlsaExit(void)
 {
     if (AlsaPCMHandle) {
 		snd_pcm_close(AlsaPCMHandle);
@@ -1201,6 +1126,8 @@ static void AlsaExit(void)
     }
 }
 
+// --- ab hier weiter
+
 
 //----------------------------------------------------------------------------
 //	thread playback
@@ -1211,7 +1138,7 @@ static void AlsaExit(void)
 **
 **	@param dummy	unused thread argument
 */
-static void *AudioPlayHandlerThread(void *dummy)
+void *cSoftHdAudio::AudioPlayHandlerThread(void *dummy)
 {
 	for (;;) {
 		// check if we should stop the thread
@@ -1270,7 +1197,7 @@ static void *AudioPlayHandlerThread(void *dummy)
 /**
 **	Initialize audio thread.
 */
-static void AudioInitThread(void)
+void cSoftHdAudio::AudioInitThread(void)
 {
     AudioThreadStop = 0;
     pthread_mutex_init(&AudioRbMutex, NULL);
@@ -1283,7 +1210,7 @@ static void AudioInitThread(void)
 /**
 **	Cleanup audio thread.
 */
-static void AudioExitThread(void)
+void cSoftHdAudio::AudioExitThread(void)
 {
     void *retval;
 
@@ -1311,7 +1238,7 @@ static void AudioExitThread(void)
 **
 **	@param frame	audio frame
 */
-void AudioEnqueue(AVFrame *frame)
+void cSoftHdAudio::AudioEnqueue(AVFrame *frame)
 {
 	size_t n;
 	int16_t *buffer;
@@ -1385,7 +1312,7 @@ void AudioEnqueue(AVFrame *frame)
 **	@param count		number of bytes in sample buffer
 **	@param frame		decoded frame (used to get frame parameters), unref'd at the end
 */
-void AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *samples, int count, AVFrame *frame)
+void cSoftHdAudio::AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *samples, int count, AVFrame *frame)
 {
 	size_t n;
 	const uint16_t *buffer;
@@ -1457,7 +1384,7 @@ void AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *samples, int count, 
 **	@retval 0	everything ok
 **	@retval err	something gone wrong
 */
-int AudioSetup(AVCodecContext *AudioCtx, int samplerate, int channels, int passthrough)
+int cSoftHdAudio::AudioSetup(AVCodecContext *AudioCtx, int samplerate, int channels, int passthrough)
 {
 	int err = 0;
 
@@ -1481,7 +1408,7 @@ int AudioSetup(AVCodecContext *AudioCtx, int samplerate, int channels, int passt
 **	@retval	1	error, send again
 **	@retval	0	running
 */
-void AudioFilter(AVFrame *inframe, AVCodecContext *AudioCtx)
+void cSoftHdAudio::AudioFilter(AVFrame *inframe, AVCodecContext *AudioCtx)
 {
 	AVFrame *outframe = NULL;
 	int err;
@@ -1553,7 +1480,7 @@ get_frame:
 **
 **	@param video_pts	real video presentation timestamp
 */
-int AudioVideoReady(int64_t video_pts)
+int cSoftHdAudio::AudioVideoReady(int64_t video_pts)
 {
 	int64_t audio_pts;
 	int64_t used;
@@ -1574,7 +1501,7 @@ int AudioVideoReady(int64_t video_pts)
 	audio_pts = PTS * 1000 * av_q2d(*timebase) -
 				used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample;
 
-	skip = video_pts - audio_pts - VideoAudioDelay;
+	skip = video_pts - audio_pts - Device->GetVideoAudioDelay();
 
 	if (skip > 0) {
 		skip = (int64_t)skip * HwSampleRate * HwChannels * AudioBytesProSample / 1000;
@@ -1610,7 +1537,7 @@ int AudioVideoReady(int64_t video_pts)
 **
 **	@param video_pts	real video presentation timestamp
 */
-int AudioSkipInTrickSpeed(int64_t video_pts, int full)
+int cSoftHdAudio::AudioSkipInTrickSpeed(int64_t video_pts, int full)
 {
 	int64_t audio_pts;
 	int64_t used;
@@ -1637,7 +1564,7 @@ int AudioSkipInTrickSpeed(int64_t video_pts, int full)
 		audio_pts = PTS * 1000 * av_q2d(*timebase) -
 					used * 1000 / HwSampleRate / HwChannels / AudioBytesProSample;
 
-		skip = video_pts * 1000 * av_q2d(*timebase) - audio_pts - VideoAudioDelay; // in ms
+		skip = video_pts * 1000 * av_q2d(*timebase) - audio_pts - Device->GetVideoAudioDelay(); // in ms
 
 		if (skip <= 0) // audio >= video
 			break;
@@ -1667,7 +1594,7 @@ int AudioSkipInTrickSpeed(int64_t video_pts, int full)
 /**
 **	Flush audio buffers.
 */
-void AudioFlushBuffers(void)
+void cSoftHdAudio::AudioFlushBuffers(void)
 {
 	LOGDEBUG2(L_SOUND, "AudioFlushBuffers: AudioFlushBuffers");
 
@@ -1684,18 +1611,9 @@ void AudioFlushBuffers(void)
 }
 
 /**
-**	Call back to play audio polled.
-*/
-void AudioPoller(void)
-{
-    // FIXME: write poller
-//	fprintf(stderr, "FIXME: write audio poller!");
-}
-
-/**
 **	Get free bytes in audio output.
 */
-int AudioFreeBytes(void)
+int cSoftHdAudio::AudioFreeBytes(void)
 {
     return AudioRingBuffer ?
 		AudioRingBuffer->FreeBytes()
@@ -1705,7 +1623,7 @@ int AudioFreeBytes(void)
 /**
 **	Get used bytes in audio output.
 */
-int AudioUsedBytes(void)
+int cSoftHdAudio::AudioUsedBytes(void)
 {
     // FIXME: not correct, if multiple buffer are in use
     return AudioRingBuffer ?
@@ -1717,7 +1635,7 @@ int AudioUsedBytes(void)
 **
 **	@returns the audio clock in time stamps.
 */
-int64_t AudioGetClock(void)
+int64_t cSoftHdAudio::AudioGetClock(void)
 {
 	if (!AudioRunning || !HwSampleRate ||
 		!AlsaPCMHandle || PTS == AV_NOPTS_VALUE) {
@@ -1756,7 +1674,7 @@ int64_t AudioGetClock(void)
 **
 **	@param volume	volume (0 .. 1000)
 */
-void AudioSetVolume(int volume)
+void cSoftHdAudio::AudioSetVolume(int volume)
 {
     AudioVolume = volume;
     AudioMute = !volume;
@@ -1778,7 +1696,7 @@ void AudioSetVolume(int volume)
 /**
 **	Play audio.
 */
-void AudioPlay(void)
+void cSoftHdAudio::AudioPlay(void)
 {
 	int err;
 
@@ -1806,7 +1724,7 @@ void AudioPlay(void)
 /**
 **	Pause audio.
 */
-void AudioPause(void)
+void cSoftHdAudio::AudioPause(void)
 {
 	int err;
 
@@ -1837,7 +1755,7 @@ void AudioPause(void)
 **	The period size of the audio buffer is 24 ms.
 **	With streamdev sometimes extra +100ms are needed.
 */
-void AudioSetBufferTime(int delay)
+void cSoftHdAudio::AudioSetBufferTime(int delay)
 {
 	AudioBufferTime = MIN_AUDIO_BUFFER + delay;
 }
@@ -1847,7 +1765,7 @@ void AudioSetBufferTime(int delay)
 **
 **	@param onoff	enable/disable downmix.
 */
-void AudioSetDownmix(int onoff)
+void cSoftHdAudio::AudioSetDownmix(int onoff)
 {
 	if (onoff == -1) {
 		AudioDownMix ^= 1;
@@ -1861,7 +1779,7 @@ void AudioSetDownmix(int onoff)
 **
 **	@param onoff	-1 toggle, true turn on, false turn off
 */
-void AudioSetSoftvol(int onoff)
+void cSoftHdAudio::AudioSetSoftvol(int onoff)
 {
     if (onoff < 0) {
 	AudioSoftVolume ^= 1;
@@ -1876,7 +1794,7 @@ void AudioSetSoftvol(int onoff)
 **	@param onoff	-1 toggle, true turn on, false turn off
 **	@param maxfac	max. factor of normalize /1000
 */
-void AudioSetNormalize(int onoff, int maxfac)
+void cSoftHdAudio::AudioSetNormalize(int onoff, int maxfac)
 {
     if (onoff < 0) {
 	AudioNormalize ^= 1;
@@ -1892,7 +1810,7 @@ void AudioSetNormalize(int onoff, int maxfac)
 **	@param onoff	-1 toggle, true turn on, false turn off
 **	@param maxfac	max. factor of compression /1000
 */
-void AudioSetCompression(int onoff, int maxfac)
+void cSoftHdAudio::AudioSetCompression(int onoff, int maxfac)
 {
     if (onoff < 0) {
 		AudioCompression ^= 1;
@@ -1913,7 +1831,7 @@ void AudioSetCompression(int onoff, int maxfac)
 **
 **	@param delta	value (/1000) to reduce stereo volume
 */
-void AudioSetStereoDescent(int delta)
+void cSoftHdAudio::AudioSetStereoDescent(int delta)
 {
     AudioStereoDescent = delta;
     AudioSetVolume(AudioVolume);	// update channel delta
@@ -1926,7 +1844,7 @@ void AudioSetStereoDescent(int delta)
 **
 **	@note this is currently used to select alsa output module.
 */
-void AudioSetDevice(const char *device)
+void cSoftHdAudio::AudioSetDevice(const char *device)
 {
     AudioPCMDevice = device;
 }
@@ -1938,7 +1856,7 @@ void AudioSetDevice(const char *device)
 **
 **	@note this is currently usable with alsa only.
 */
-void AudioSetPassthroughDevice(const char *device)
+void cSoftHdAudio::AudioSetPassthroughDevice(const char *device)
 {
     AudioPassthroughDevice = device;
 }
@@ -1948,7 +1866,7 @@ void AudioSetPassthroughDevice(const char *device)
 **
 **	@param mask	passthrough-mask
 */
-void AudioSetPassthrough(int mask)
+void cSoftHdAudio::AudioSetPassthrough(int mask)
 {
     AudioPassthrough = mask;
 }
@@ -1960,7 +1878,7 @@ void AudioSetPassthrough(int mask)
 **
 **	@note this is currently used to select alsa output module.
 */
-void AudioSetChannel(const char *channel)
+void cSoftHdAudio::AudioSetChannel(const char *channel)
 {
     AudioMixerChannel = channel;
 }
@@ -1970,7 +1888,7 @@ void AudioSetChannel(const char *channel)
 **
 **	@param onoff	turn setting AES flag on or off
 */
-void AudioSetAutoAES(int onoff)
+void cSoftHdAudio::AudioSetAutoAES(int onoff)
 {
     if (onoff < 0) {
 	AudioAppendAES ^= 1;
@@ -1986,7 +1904,7 @@ void AudioSetAutoAES(int onoff)
 **
 **	@todo FIXME: make audio output module selectable.
 */
-void AudioInit(int passthrough)
+void cSoftHdAudio::AudioInit(int passthrough)
 {
 	AudioPassthrough = passthrough;
 	AudioRingInit();
@@ -1997,7 +1915,7 @@ void AudioInit(int passthrough)
 /**
 **	Cleanup audio output module.
 */
-void AudioExit(void)
+void cSoftHdAudio::AudioExit(void)
 {
 	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 

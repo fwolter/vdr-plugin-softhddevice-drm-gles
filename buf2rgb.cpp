@@ -8,6 +8,7 @@ extern "C" {
 
 #include "buf2rgb.h"
 #include "logger.h"
+#include "drm_buf.h"
 
 #define OPAQUE		0xff
 #define TRANSPARENT	0x00

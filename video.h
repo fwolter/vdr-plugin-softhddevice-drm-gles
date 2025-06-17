@@ -30,17 +30,41 @@
 #include <xf86drmMode.h>
 extern "C" {
 #include <libavfilter/avfilter.h>
+#include <libavutil/hwcontext_drm.h>
 }
+
+/*
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavutil/pixdesc.h>
+#include <libavfilter/buffersink.h>
+#include <libavfilter/buffersrc.h>
+#include <libavutil/opt.h>
+}
+*/
+
 
 #ifdef USE_GLES
 #include <gbm.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <EGL/eglplatform.h>
+
+/* Hack:
+ * xlib.h via eglplatform.h: #define Status int
+ * X.h via eglplatform.h: #define CurrentTime 0L
+ *
+ * revert it, because it conflicts with vdr variables.
+ */
+#undef Status
+#undef CurrentTime
 #endif
 
 #include "iatomic.h"
+#include "softhddevice.h"
 #include "softhddev.h"
+#include "glhelpers.h"
+#include "drm_buf.h"
 
 //----------------------------------------------------------------------------
 //	Defines
@@ -66,10 +90,6 @@ extern "C" {
 
 #define QUIRK_CODEC_SKIP_NUM_FRAMES	2 ///< skip QUIRK_CODEC_SKIP_NUM_FRAMES, in case QUIRK_CODEC_SKIP_FIRST_FRAMES is set
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 //----------------------------------------------------------------------------
 //	Typedefs
 //----------------------------------------------------------------------------
@@ -88,6 +108,7 @@ struct format_info
 	struct format_plane_info planes[4];
 };
 
+/*
 struct drm_buf {
 	uint32_t width, height, size[4], pitch[4], offset[4], fb_id;
 	uint32_t handle[4];		// prime handle for plane
@@ -106,6 +127,7 @@ struct drm_buf {
 	struct gbm_bo *bo;
 #endif
 };
+*/
 
 struct lastFrame {
 	AVFrame *frame;
@@ -153,191 +175,218 @@ struct grabimage {
 	int y;				///< y coord in screenshot
 };
 
-struct _Drm_Render_
+class cVideoRender
 {
-	AVFrame  *FramesDeintRb[VIDEO_SURFACES_MAX];
-	int FramesDeintWrite;			///< write pointer
-	int FramesDeintRead;			///< read pointer
-	atomic_t FramesDeintFilled;		///< how many of the buffer is used
+public:
+    cVideoRender(cSoftHdDevice *);
+    virtual ~cVideoRender(void);
 
-	AVFrame  *FramesRb[VIDEO_SURFACES_MAX];
-	int FramesWrite;			///< write pointer
-	int FramesRead;			///< read pointer
-	atomic_t FramesFilled;		///< how many of the buffer is used
+    cSoftHdDevice *Device;
+    cSoftHdAudio *Audio;
 
-	VideoStream *Stream;		///< video stream
-	int TrickSpeed;			///< current trick speed
-	int TrickCounter;			///< current trick speed counter
-	int TrickForward;		///< true, if trickspeed plays forward
-	int VideoPaused;
-	int Closing;			///< flag about closing render thread
-	int Flushing;			///< flag about flushing render thread
-	int FlushLast;			///< flag about need to clear FB in next turn
-	int FilterClosing;		///< flag about closing filter handler thread
-	int Filter_Bug;
-	int Filter_Trick;		///< FilterHandlerThread handles trickframes
-	int Filter_Still;		///< FilterHandlerThread handles trickframes
-	int Filter_Frames;
-	int FilterDeintDisabled;	///< Deinterlacer disabled flag
-	int ConfigFilterDeintDisabled;	///< Deinterlacer is disabled set via setup
-	int DisableOglOsd;		///< ogl osd disabled flag
-	int startgrab;			///< flag for triggering grabbing
-	int grabvideoready;		///< flag for finished video grabbing
-	int grabosdready;		///< flag for finished osd grabbing
-	struct grabimage *grabvideo;	///< struct with grabbed video image
-	struct grabimage *grabosd;	///< struct with grabbed osd image
-	int grabinwork;			///< grab is in work
+    int VideoDisplayWidth;
+    int VideoDisplayHeight;
+    uint32_t VideoDisplayRefresh;
 
-	int StartCounter;			///< counter for video start
-	int FramesDuped;			///< number of frames duplicated
-	int FramesDropped;			///< number of frames dropped
-	AVRational *timebase;		///< pointer to AVCodecContext pkts_timebase
-	int64_t pts;
+    pthread_cond_t WaitCleanCondition;
+    pthread_mutex_t WaitCleanMutex;
 
-	int CodecMode;			/// CODEC_BY_ID, CODEC_NO_MPEG_HW, CODEC_V4L2M2M_H264
-	int HardwareQuirks;		/// hardware specific quirks
+    pthread_mutex_t TrickSpeedMutex;
+    pthread_mutex_t PlaybackMutex;
+    pthread_mutex_t VideoClockMutex;
 
-	AVFilterGraph *filter_graph;
-	AVFilterContext *buffersrc_ctx, *buffersink_ctx;
+    pthread_t DecodeThread;		///< video decode thread
 
-	int fd_drm;
-	drmModeModeInfo mode;
-	drmModeCrtc *saved_crtc;
-	drmEventContext ev;
-	struct {
-		int x;
-		int y;
-		int width;
-		int height;
-		int is_scaled;
-	} video;
-	struct drm_buf bufs[RENDERBUFFERS];
-	struct drm_buf *buf_osd;
-	struct drm_buf buf_black;
-	int use_zpos;
-	uint64_t zpos_overlay;
-	uint64_t zpos_primary;
-	uint32_t connector_id, crtc_id, crtc_index;
-	struct plane *planes[MAX_PLANES];
-	struct lastFrame *lastframe;
-	int buffers;
-	int enqueue_buffer;
-	int OsdShown;
+    pthread_t FilterThread;
+    pthread_t GrabbingThread;
+
+    pthread_t DisplayThread;
+    pthread_mutex_t DisplayQueue;
+
+    AVFrame  *FramesDeintRb[VIDEO_SURFACES_MAX];
+    int FramesDeintWrite;			///< write pointer
+    int FramesDeintRead;			///< read pointer
+    atomic_t FramesDeintFilled;		///< how many of the buffer is used
+
+    AVFrame  *FramesRb[VIDEO_SURFACES_MAX];
+    int FramesWrite;			///< write pointer
+    int FramesRead;			///< read pointer
+    atomic_t FramesFilled;		///< how many of the buffer is used
+
+    int TrickSpeed;			///< current trick speed
+    int TrickCounter;			///< current trick speed counter
+    int TrickForward;		///< true, if trickspeed plays forward
+    int VideoPaused;
+    int Closing;			///< flag about closing render thread
+    int Flushing;			///< flag about flushing render thread
+    int FlushLast;			///< flag about need to clear FB in next turn
+    int FilterClosing;		///< flag about closing filter handler thread
+    int Filter_Bug;
+    int Filter_Trick;		///< FilterHandlerThread handles trickframes
+    int Filter_Still;		///< FilterHandlerThread handles trickframes
+    int Filter_Frames;
+    int FilterDeintDisabled;	///< Deinterlacer disabled flag
+    int ConfigFilterDeintDisabled;	///< Deinterlacer is disabled set via setup
+    int DisableOglOsd;		///< ogl osd disabled flag
+    int startgrab;			///< flag for triggering grabbing
+    int grabvideoready;		///< flag for finished video grabbing
+    int grabosdready;		///< flag for finished osd grabbing
+    struct grabimage *grabvideo;	///< struct with grabbed video image
+    struct grabimage *grabosd;	///< struct with grabbed osd image
+    int grabinwork;			///< grab is in work
+
+    int StartCounter;			///< counter for video start
+    int FramesDuped;			///< number of frames duplicated
+    int FramesDropped;			///< number of frames dropped
+    AVRational *timebase;		///< pointer to AVCodecContext pkts_timebase
+    int64_t pts;
+
+    int CodecMode;			/// CODEC_BY_ID, CODEC_NO_MPEG_HW, CODEC_V4L2M2M_H264
+    int HardwareQuirks;		/// hardware specific quirks
+
+    AVFilterGraph *filter_graph;
+    AVFilterContext *buffersrc_ctx, *buffersink_ctx;
+
+    int fd_drm;
+    drmModeModeInfo mode;
+    drmModeCrtc *saved_crtc;
+    drmEventContext ev;
+    struct {
+	int x;
+	int y;
+	int width;
+	int height;
+	int is_scaled;
+    } video;
+    struct drm_buf bufs[RENDERBUFFERS];
+    struct drm_buf *buf_osd;
+    struct drm_buf buf_black;
+    int use_zpos;
+    uint64_t zpos_overlay;
+    uint64_t zpos_primary;
+    uint32_t connector_id, crtc_id, crtc_index;
+    struct plane *planes[MAX_PLANES];
+    struct lastFrame *lastframe;
+    int buffers;
+    int enqueue_buffer;
+    int OsdShown;
 
 #ifdef USE_GLES
-	struct gbm_device *gbm_device;
-	struct gbm_surface *gbm_surface;
-	EGLSurface eglSurface;
-	EGLDisplay eglDisplay;
-	EGLContext eglContext;
-	struct gbm_bo *bo;
-	struct gbm_bo *old_bo;
-	struct gbm_bo *next_bo;
-	int GlInit;
+    struct gbm_device *gbm_device;
+    struct gbm_surface *gbm_surface;
+    EGLSurface eglSurface;
+    EGLDisplay eglDisplay;
+    EGLContext eglContext;
+    struct gbm_bo *bo;
+    struct gbm_bo *old_bo;
+    struct gbm_bo *next_bo;
+    int GlInit;
 #endif
-};
 
-    /// Video hardware decoder typedef
-typedef struct _Drm_Render_ VideoRender;
-
-    /// Video output stream typedef
-typedef struct __video_stream__ VideoStream; 		// in softhddev.h ?
-typedef struct _video_decoder_ VideoDecoder;
-
-//----------------------------------------------------------------------------
-//	Variables
-//----------------------------------------------------------------------------
-
-extern int VideoAudioDelay;		///< audio/video delay
-
-//----------------------------------------------------------------------------
-//	Prototypes
-//----------------------------------------------------------------------------
-
-    /// Allocate new video hardware decoder.
-extern VideoRender *VideoNewRender(VideoStream *);
-
-    /// Deallocate video hardware decoder.
-extern void VideoDelRender(VideoRender *);
-
-    /// Callback to negotiate the PixelFormat.
-extern enum AVPixelFormat Video_get_format(VideoRender *, AVCodecContext *,
-    const enum AVPixelFormat *);
+    void ThreadExitHandler(void *);
 
     /// Render a ffmpeg frame.
-extern int VideoRenderFrame(VideoRender *, AVCodecContext *,
-    AVFrame *, int flags);
-
-    /// Set audio delay.
-extern void VideoSetAudioDelay(int);
+    int VideoRenderFrame(AVCodecContext *, AVFrame *, int flags);
 
     /// Clear OSD.
-extern void VideoOsdClear(VideoRender *);
+    void VideoOsdClear(void);
 
     /// Draw an OSD ARGB image.
-extern void VideoOsdDrawARGB(VideoRender *, int, int, int,
-		int, int, const uint8_t *, int, int);
+    void VideoOsdDrawARGB(int, int, int, int, int, const uint8_t *, int, int);
 
     /// Set closing flag.
-extern void VideoSetClosing(VideoRender *, int);
+    void VideoSetClosing(int);
 
     /// Deal with trick play mode
-extern void VideoTrickSpeed(VideoRender *, int, int);
-extern void VideoSetTrickSpeed(VideoRender *, int, int);
-extern int VideoGetTrickSpeed(VideoRender *);
-extern int VideoGetTrickCounter(VideoRender *);
-extern int VideoGetTrickForward(VideoRender *);
-extern void VideoSetTrickCounter(VideoRender *, int);
-extern int VideoDecTrickCounter(VideoRender *);
+    void VideoTrickSpeed(int, int);
+    void VideoSetTrickSpeed(int, int);
+    int VideoGetTrickSpeed(void);
+    int VideoGetTrickCounter(void);
+    int VideoGetTrickForward(void);
+    void VideoSetTrickCounter(int);
+    int VideoDecTrickCounter(void);
 
     /// Set video output position and size
-extern void VideoSetOutputPosition(VideoRender *, int, int, int, int);
+    void VideoSetOutputPosition(int, int, int, int);
 
-extern void VideoPause(VideoRender *);
-extern void VideoResume(VideoRender *);
-extern int VideoIsPaused(VideoRender *);
+    void VideoPause(void);
+    void VideoResume(void);
+    int VideoIsPaused(void);
 
-extern void VideoPlay(VideoRender *);
+    void VideoPlay(void);
 
     /// Grab screen
-void VideoGrab(struct grabimage *, struct drm_buf *, int *, int);
-extern void VideoTriggerGrab(VideoRender *);
-extern void VideoClearGrab(VideoRender *);
-extern int VideoGrabReady(VideoRender *);
-extern int VideoGrabInWork(VideoRender *);
-extern uint8_t *VideoGetGrab(VideoRender *, int *, int *, int *, int *, int *, int);
+    void VideoGrab(struct grabimage *, struct drm_buf *, int *, int);
+    void VideoTriggerGrab(void);
+    void VideoClearGrab(void);
+    int VideoGrabReady(void);
+    int VideoGrabInWork(void);
+    uint8_t *VideoGetGrab(int *, int *, int *, int *, int *, int);
 
     /// Get decoder statistics.
-extern void VideoGetStats(VideoRender *, int *, int *, int *);
+    void VideoGetStats(int *, int *, int *);
 
     /// Get screen size
-extern void VideoGetScreenSize(VideoRender *, int *, int *, double *);
+    void VideoGetScreenSize(int *, int *, double *);
 
     /// Set display resolution
-extern void VideoSetDisplay(const char *);
+    void VideoSetDisplay(const char *);
 
     /// Get video clock.
-extern int64_t VideoGetClock(const VideoRender *);
+    int64_t VideoGetClock(void);
 
     /// Set video clock.
-extern void VideoSetClock(VideoRender *, int64_t);
+    void VideoSetClock(int64_t);
 
     /// Display handler.
-extern void VideoThreadWakeup(VideoRender *, int, int);
-extern void VideoThreadExit(void);
-extern int VideoDecodeThreadRunning(void);
+    void VideoThreadWakeup(int, int);
+    void VideoThreadExit(void);
+    int VideoDecodeThreadRunning(void);
 
-extern void VideoInit(VideoRender *);	///< Setup video module.
-extern void VideoExit(VideoRender *);		///< Cleanup and exit video module.
+    void VideoInit(void);	///< Setup video module.
+    void VideoExit(void);		///< Cleanup and exit video module.
 
-extern int VideoCodecMode(VideoRender *);
-extern void VideoSetDisableDeint(VideoRender *, int);
-extern void VideoSetDisableOglOsd(VideoRender *);
+    int VideoCodecMode(void);
+    void VideoSetDisableDeint(int);
+    void VideoSetDisableOglOsd(void);
 
-#ifdef __cplusplus
-}
+    int SetPlanePropertyRequest(drmModeAtomicReqPtr, uint32_t, const char *, uint64_t);
+    void SetPlaneZpos(drmModeAtomicReqPtr, struct plane *);
+    void SetPlane(drmModeAtomicReqPtr, struct plane *);
+    void ReadHWPlatform(void);
+    int CheckZpos(struct plane *, uint64_t);
+    int32_t find_crtc_for_connector(const drmModeRes *, const drmModeConnector *);
+    int init_gbm(int, int, uint32_t, uint64_t);
+
+    int FindDevice(void);
+    int Frame2Display(void);
+
+#ifdef USE_GLES
+    EGLConfig get_config(void);
+    int init_egl(void);
+    struct drm_buf *drm_get_buf_from_bo(struct gbm_bo *);
 #endif
+    int SetupFB(struct drm_buf *, AVDRMFrameDescriptor *);
+    void DestroyFB(struct drm_buf *);
 
+    void *GrabHandlerThread(void *);
+    void CleanDisplayThread(void);
+    int VideoDrmCommit(struct drm_buf *, int);
+    int VideoSync(AVFrame *, int *, struct drm_buf **);
+    int VideoGetFrame(AVFrame **);
+    int VideoGetBuffer(AVFrame *, struct drm_buf **);
+    int check_closing(int *, struct drm_buf **);
+    int check_pausing(int *);
+    int check_pausing_with_sync(int *);
+
+    void *DisplayHandlerThread(void *);
+    void *DecodeHandlerThread(void *);
+    void EnqueueFB(AVFrame *);
+    void *FilterHandlerThread(void *);
+    int VideoFilterInit(const AVCodecContext *, AVFrame *);
+
+    void StartVideo(void);
+};
 
 /// @}
 #endif

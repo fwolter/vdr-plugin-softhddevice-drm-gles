@@ -1,6 +1,7 @@
 #define __STL_CONFIG_H
 #include <algorithm>
 #include "openglosd.h"
+#include "glhelpers.h"
 #include <inttypes.h>
 #include <assert.h>
 #include <stdio.h>
@@ -35,8 +36,31 @@
 /****************************************************************************************
 * Helpers
 ****************************************************************************************/
+/*
+static void glCheckError(const char *stmt, const char *fname, int line) {
+    GLint err = glGetError();
+    if (err != GL_NO_ERROR)
+        LOGERROR("GL Error (0x%08x): %s failed at %s:%i", err, stmt, fname, line);
+}
+
+static void eglCheckError(const char *stmt, const char *fname, int line) {
+    EGLint err = eglGetError();
+    if (err != EGL_SUCCESS)
+        LOGERROR("EGL ERROR (0x%08x): %s failed at %s:%i", err, stmt, fname, line);
+}
+
+#define GL_CHECK(stmt) do { \
+    stmt; \
+    glCheckError(#stmt, __FILE__, __LINE__); \
+    } while (0)
+
+#define EGL_CHECK(stmt) do { \
+    stmt; \
+    eglCheckError(#stmt, __FILE__, __LINE__); \
+    } while (0)
+*/
 #ifdef WRITE_PNG
-int writeImage(char* filename, int width, int height, void *buffer, char* title)
+static int writeImage(char* filename, int width, int height, void *buffer, char* title)
 {
 	int code;
 	FILE *fp;
@@ -112,7 +136,7 @@ finalise:
 #endif
 
 #ifdef WRITE_PNG
-void writePng(int x, int y, int w, int h, bool oFb) {
+static void writePng(int x, int y, int w, int h, bool oFb) {
     GL_CHECK(glFinish());
     GLubyte result[w * h * 4];
     static int scr_nr = 0;
@@ -140,37 +164,7 @@ void ConvertColor(const GLint &colARGB, glm::vec4 &col) {
     col.b = ((colARGB & 0x000000FF)      ) / 255.0;
 }
 
-void glCheckError(const char *stmt, const char *fname, int line) {
-    GLint err = glGetError();
-    if (err != GL_NO_ERROR)
-        LOGERROR("GL Error (0x%08x): %s failed at %s:%i", err, stmt, fname, line);
-}
 
-void eglCheckError(const char *stmt, const char *fname, int line) {
-    EGLint err = eglGetError();
-    if (err != EGL_SUCCESS)
-        LOGERROR("EGL ERROR (0x%08x): %s failed at %s:%i", err, stmt, fname, line);
-}
-
-void eglAcquireContext()
-{
-    VideoRender *render = (VideoRender *)GetVideoRender();
-    if (!render) {
-        LOGFATAL("failed to get VideoRender");
-    }
-
-    EGL_CHECK(eglMakeCurrent(render->eglDisplay, render->eglSurface, render->eglSurface, render->eglContext));
-}
-
-void eglReleaseContext()
-{
-    VideoRender *render = (VideoRender *)GetVideoRender();
-    if (!render) {
-        LOGFATAL("failed to get VideoRender");
-    }
-
-    EGL_CHECK(eglMakeCurrent(render->eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
-}
 
 /****************************************************************************************
 * cShader
@@ -1287,21 +1281,17 @@ bool cOglCmdRenderFbToBufferFb::Execute(void) {
 }
 
 //------------------ cOglCmdCopyBufferToOutputFb --------------------
-cOglCmdCopyBufferToOutputFb::cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputFb *oFb, GLint x, GLint y, int active, cSoftHdDevice *device) : cOglCmd(fb) {
+cOglCmdCopyBufferToOutputFb::cOglCmdCopyBufferToOutputFb(cOglFb *fb, cOglOutputFb *oFb, GLint x, GLint y, int active, cSoftHdDevice *device, cVideoRender *render) : cOglCmd(fb) {
     this->oFb = oFb;
     this->x = (GLfloat)x;
     this->y = (GLfloat)y;
     this->bcolor = BORDERCOLOR;
     this->active = active;
     Device = device;
+    this->Render = render;
 }
 
 bool cOglCmdCopyBufferToOutputFb::Execute(void) {
-    VideoRender *render = (VideoRender *)GetVideoRender();
-    if (!render) {
-        LOGFATAL("failed to get VideoRender");
-    }
-
     GLfloat x2 = x + (GLfloat)fb->Width();
     GLfloat y2 = y + (GLfloat)fb->Height();
 
@@ -2038,11 +2028,12 @@ bool cOglCmdDropImage::Execute(void) {
 /******************************************************************************
 * cOglThread
 ******************************************************************************/
-cOglThread::cOglThread(cCondWait *startWait, int maxCacheSize) : cThread("oglThread") {
+cOglThread::cOglThread(cCondWait *startWait, int maxCacheSize, cVideoRender *render) : cThread("oglThread") {
     stalled = false;
     memCached = 0;
     this->maxCacheSize = maxCacheSize * 1024 * 1024;
     this->startWait = startWait;
+    this->Render = render;
     wait = new cCondWait();
     maxTextureSize = 0;
     for (int i = 0; i < OGL_MAX_OSDIMAGES; i++) {
@@ -2262,16 +2253,21 @@ void cOglThread::Action(void) {
     LOGDEBUG2(L_OPENGL, "OpenGL worker thread ended");
 }
 
-bool cOglThread::InitOpenGL(void) {
-    VideoRender *render = (VideoRender *)GetVideoRender();
-    if (!render) {
-        LOGFATAL("failed to get VideoRender");
-    }
+void cOglThreads::eglAcquireContext(void)
+{
+    EGL_CHECK(eglMakeCurrent(Render->eglDisplay, Render->eglSurface, Render->eglSurface, Render->eglContext));
+}
 
+void cOglThread::eglReleaseContext(void)
+{
+    EGL_CHECK(eglMakeCurrent(Render->eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
+}
+
+bool cOglThread::InitOpenGL(void) {
     LOGDEBUG2(L_OPENGL, "Init OpenGL context");
 
     // Wait for the EGL context to be created
-    while(!render->GlInit) {
+    while(!Render->GlInit) {
         LOGDEBUG2(L_OPENGL, "wait for EGL context");
         usleep(20000);
     }
@@ -2726,8 +2722,9 @@ void cOglPixmap::DrawGridRect(const cRect &Rect, int offset, int size, tColor cl
 cOglOutputFb *cOglOsd::oFb = NULL;
 
 cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglThread, cSoftHdDevice *device) : cOsd(Left, Top, Level) {
-    Device = device;
+    this->Device = device;
     this->oglThread = oglThread;
+    this->Render = Device->Render;
     bFb = NULL;
     if (Level == 10)
         isSubtitleOsd = true;
@@ -2738,8 +2735,7 @@ cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglT
     double pixel_aspect;
     dirtyViewport = new cRect();
 
-    VideoRender *render = (VideoRender *)GetVideoRender();
-    VideoGetScreenSize(render, &osdWidth, &osdHeight, &pixel_aspect);
+    Render->VideoGetScreenSize(&osdWidth, &osdHeight, &pixel_aspect);
     LOGDEBUG2(L_OSD, "New Osd %p osdLeft %d osdTop %d screenWidth %d screenHeight %d", this, Left, Top, osdWidth, osdHeight);
 
     maxPixmapSize.Set(oglThread->MaxTextureSize(), oglThread->MaxTextureSize());
@@ -2759,8 +2755,9 @@ cOglOsd::~cOglOsd() {
     LOGDEBUG2(L_OSD, "Delete Osd %p", this);
     oglThread->DoCmd(new cOglCmdFill(bFb, clrTransparent));
 
+<<<<<<< HEAD
     SetActive(false); // OsdClose() in cOglCmdCopyBufferToOutputFb()
-    oglThread->DoCmd(new cOglCmdCopyBufferToOutputFb(bFb, oFb, Left(), Top(), 0, Device));
+    oglThread->DoCmd(new cOglCmdCopyBufferToOutputFb(bFb, oFb, Left(), Top(), 0, Device, Render));
     oglThread->DoCmd(new cOglCmdDeleteFb(bFb));
     delete dirtyViewport;
 }
@@ -2898,7 +2895,7 @@ void cOglOsd::Flush(void) {
 
     oglThread->DoCmd(new cOglCmdCopyBufferToOutputFb(bFb, oFb,
                                                      Left() + (isSubtitleOsd ? oglPixmaps[0]->ViewPort().X() : 0),
-                                                     Top() + (isSubtitleOsd ? oglPixmaps[0]->ViewPort().Y() : 0), 1, Device));
+                                                     Top() + (isSubtitleOsd ? oglPixmaps[0]->ViewPort().Y() : 0), 1, Device, Render));
 }
 
 void cOglOsd::DrawScaledBitmap(int x, int y, const cBitmap &Bitmap, double FactorX, double FactorY, bool AntiAlias) {

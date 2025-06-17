@@ -43,24 +43,15 @@ extern "C" {
 */
 class cVideoDecoder {
 private:
-    VideoRender *Render;		///< video hardware decoder
+    cVideoRender *Render;		///< video hardware decoder
     AVCodecContext *VideoCtx = nullptr;	///< video codec context
-    VideoStream *Stream;
+    cVideoStream *Stream;
     int sent;
     int received;
     int last_coded_width;
     int last_coded_height;
     int FirstKeyFrame;
     pthread_mutex_t CodecLockMutex;
-
-    const unsigned char *m_pStart;
-    unsigned short m_nLength;
-    int m_nCurrentBit;
-    unsigned int ReadBit(void);
-    unsigned int ReadBits(int);
-    unsigned int ReadExponentialGolombCode(void);
-    unsigned int ReadSE(void);
-    void ParseResolutionH264(int *, int *);
 
     int GetExtraData(const AVPacket *);
 	///< Get extra data from AVPacket
@@ -70,7 +61,7 @@ private:
 	///< Find a suitable decoder
 	///< codec log fallback
 public:
-    cVideoDecoder(VideoRender *, VideoStream *);
+    cVideoDecoder(cVideoRender *, cVideoStream *);
     virtual ~cVideoDecoder(void);
     int Open(enum AVCodecID, AVCodecParameters *, AVRational *, int, int, int);
 	///< Open video codec

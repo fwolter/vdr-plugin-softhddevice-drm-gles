@@ -45,6 +45,8 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/timestamp.h>
+
+#include "buf2rgb.h"
 }
 
 #include "iatomic.h"			// portable atomic_t
@@ -53,64 +55,10 @@ extern "C" {
 #include "video.h"
 #include "codec_audio.h"
 #include "codec_video.h"
-#include "buf2rgb.h"
-
-//////////////////////////////////////////////////////////////////////////////
-//	Video
-//////////////////////////////////////////////////////////////////////////////
-
-#define VIDEO_BUFFER_SIZE (512 * 1024)	///< video PES buffer default size
-#define VIDEO_PACKET_MAX 192		///< max number of video packets
-
-/**
-**	Video output stream device structure.	Parser, decoder, display.
-*/
-struct __video_stream__
-{
-    VideoRender *Render;		///< video hardware decoder
-    cVideoDecoder *Decoder = nullptr;	///< video decoder
-
-    enum AVCodecID CodecID;		///< current codec id
-    AVCodecParameters * Par;
-    struct AVRational timebase;
-    int trickpkts;			///< how many avpkt does the decoder need in trickspeed mode?
-
-    volatile char NewStream;		///< flag new video stream
-    volatile char ClosingStream;	///< flag closing video stream
-    volatile char TrickSpeed;		///< flag trickspeed stream
-    volatile char StreamFreezed;	///< stream freezed
-    int interlaced;			///< is this an interlaced stream?
-    int StreamWait;			///< we should wait for decoding next frame
-					///< 0: no need to wait, 1: wait requested, 2: wating
-
-    AVPacket PacketRb[VIDEO_PACKET_MAX];	///< PES packet ring buffer
-    int PacketWrite;			///< ring buffer write pointer
-    int PacketRead;			///< ring buffer read pointer
-    atomic_t PacketsFilled;		///< how many of the ring buffer is used
-
-    pthread_mutex_t PktsLockMutex;	///< video packets lock mutex
-    pthread_mutex_t WaitCloseMutex;	///< mutex for closing stream
-    pthread_cond_t WaitCloseCondition;	///< condition for closing stream
-};
-
-static VideoStream MyVideoStream[1];	///< normal video stream
-
-//////////////////////////////////////////////////////////////////////////////
-//	Audio
-//////////////////////////////////////////////////////////////////////////////
-
-static volatile char NewAudioStream;	///< new audio stream
-static volatile char SkipAudio;		///< skip audio stream
-static cAudioDecoder *MyAudioDecoder;	///< audio decoder
-static enum AVCodecID AudioCodecID;	///< current codec id
-static int AudioChannelID;		///< current audio channel id
-static int AudioPassthrough;
-int DebugLogLevel;
 
     /// Minimum free space in audio buffer 8 packets for 8 channels
 #define AUDIO_MIN_BUFFER_FREE (3072 * 8 * 8)
 #define AUDIO_BUFFER_SIZE (512 * 1024)	///< audio PES buffer default size
-static AVPacket AudioAvPkt[1];		///< audio a/v packet
 
 //////////////////////////////////////////////////////////////////////////////
 //	Audio codec parser
@@ -170,7 +118,6 @@ static inline int FastMpegCheck(const uint8_t * p)
     }
     return 1;
 }
-
 
 ///
 ///	Check for Mpeg audio.
@@ -489,63 +436,80 @@ static int AdtsCheck(const uint8_t * data, int size)
     return 0;
 }
 
+//////////////////////////////////////////////////////////////////////////////
+//	cVideoStream
+//////////////////////////////////////////////////////////////////////////////
+
+/**
+**	Constructor stream
+*/
+cVideoStream::cVideoStream(cSoftHdDevice *device)
+{
+    Device = device;
+    Render = Device->Render;
+
+    LOGDEBUG("%s:", __FUNCTION__);
+}
+
+/**
+**	Constructor stream
+*/
+cVideoStream::~cVideoStream(void)
+{
+    LOGDEBUG("%s:", __FUNCTION__);
+}
+
 /**
 **	Initialize video packet ringbuffer.
-**
-**	@param stream	video stream
 */
-static void VideoPacketInit(VideoStream * stream)
+void cVideoStream::PacketInit(void)
 {
 	for (int i = 0; i < VIDEO_PACKET_MAX; ++i) {
 		AVPacket *avpkt;
 
-		avpkt = &stream->PacketRb[i];
+		avpkt = &PacketRb[i];
 		if (av_new_packet(avpkt, VIDEO_BUFFER_SIZE)) {
 			LOGFATAL("out of memory");
 		}
 		avpkt->size = 0;
 	}
 
-	atomic_set(&stream->PacketsFilled, 0);
-	stream->PacketRead = 0;
-	stream->PacketWrite = 0;
+	atomic_set(&PacketsFilled, 0);
+	PacketRead = 0;
+	PacketWrite = 0;
 }
 
 /**
 **	Cleanup video packet ringbuffer.
-**
-**	@param stream	video stream
 */
-static void VideoPacketExit(VideoStream * stream)
+void cVideoStream::PacketExit(void)
 {
-	atomic_set(&stream->PacketsFilled, 0);
+	atomic_set(&PacketsFilled, 0);
 
 	for (int i = 0; i < VIDEO_PACKET_MAX; ++i) {
-		av_packet_unref(&stream->PacketRb[i]);
+		av_packet_unref(&PacketRb[i]);
 	}
 }
 
 /**
 **	Place video data in packet ringbuffer.
 **
-**	@param stream	video stream
 **	@param pts	presentation timestamp of pes packet
 **	@param data	data of pes packet
 **	@param size	size of pes packet
 */
-static void VideoEnqueue(VideoStream * stream, int64_t pts, const void *data,
-		int size)
+void cVideoStream::Enqueue(int64_t pts, const void *data, int size)
 {
 	AVPacket *avpkt;
 
-	avpkt = &stream->PacketRb[stream->PacketWrite];
+	avpkt = &PacketRb[PacketWrite];
 
 	if (pts != AV_NOPTS_VALUE) {
 		if (avpkt->size) {
-			stream->PacketWrite = (stream->PacketWrite + 1) % VIDEO_PACKET_MAX;
-			atomic_inc(&stream->PacketsFilled);
+			PacketWrite = (PacketWrite + 1) % VIDEO_PACKET_MAX;
+			atomic_inc(&PacketsFilled);
 		}
-		avpkt = &stream->PacketRb[stream->PacketWrite];
+		avpkt = &PacketRb[PacketWrite];
 		avpkt->size = 0;
 		avpkt->pts = pts;
 		avpkt->dts = AV_NOPTS_VALUE;
@@ -570,38 +534,28 @@ static void VideoEnqueue(VideoStream * stream, int64_t pts, const void *data,
 **	@param stream	video stream
 **
 */
-static void VideoStreamClose(VideoStream * stream)
+void cVideoStream::Close(void)
 {
 	LOGDEBUG("VideoStreamClose:");
-	if (stream->Decoder) {
-		stream->Decoder->Close();
-		delete(stream->Decoder);
-		stream->Decoder = nullptr;
+	if (Decoder) {
+		Decoder->Close();
+		delete(Decoder);
+		Decoder = nullptr;
 	}
-	if (stream->Render) {
-		VideoDelRender(stream->Render);
-		stream->Render = NULL;
-	}
-	VideoPacketExit(stream);
+
+// TODO Render close
+//	if (Render) {
+//		delete(Render);
+//		Render = nullptr;
+//	}
+	PacketExit();
 }
 
-/**
-**	Clears all audio data from the decoder and ringbufffer.
-*/
-void ClearAudio(void)
-{
-	if (!SkipAudio) {
-		LOGDEBUG("ClearAudio()");
-		MyAudioDecoder->FlushBuffers();
-		AudioFlushBuffers();
-		NewAudioStream = 1;
-	}
-}
 
 /**
 **	Clears all video data from the device.
 */
-void ClearVideo(VideoStream * stream)
+void cVideoStream::ClearVideo(void)
 {
 	// ClearVideo does not come from Play() or SetPlayMode() (closing_stream_requested)
 	// but from Clear() (or StillPicture) which is directly from VDR
@@ -609,52 +563,52 @@ void ClearVideo(VideoStream * stream)
 	// The problem here is, that the reopen workaround deletes the VideoCtx for a moment,
 	// which of course is a problem for VideoDecodeInput in the separate thread, because
 	// that one wants VideoCtx....
-	if (!stream->ClosingStream) {
-		stream->StreamWait = 1;
-		while (stream->StreamWait == 1) {
+	if (!ClosingStream) {
+		StreamWait = 1;
+		while (StreamWait == 1) {
 			// don't wait, if no thread is running, which should set stream->wait = 2
 			// otherwise we run into an endless loop here
-			if (!VideoDecodeThreadRunning())
-				stream->StreamWait = 2;
+			if (!Render->VideoDecodeThreadRunning())
+				StreamWait = 2;
 			usleep(10000);
 		}
 	}
 
 	AVPacket *avpkt;
-	LOGDEBUG("ClearVideo() packets %d", atomic_read(&stream->PacketsFilled));
-	pthread_mutex_lock(&stream->PktsLockMutex);
-	atomic_set(&stream->PacketsFilled, 0);
-	stream->PacketRead = stream->PacketWrite = 0;
+	LOGDEBUG("ClearVideo() packets %d", atomic_read(&PacketsFilled));
+	pthread_mutex_lock(&PktsLockMutex);
+	atomic_set(&PacketsFilled, 0);
+	PacketRead = PacketWrite = 0;
 
-	avpkt = &stream->PacketRb[stream->PacketWrite];
+	avpkt = &PacketRb[PacketWrite];
 	avpkt->size = 0;
 	avpkt->pts = AV_NOPTS_VALUE;
 
-	if (stream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
-		if (stream->Decoder->ReopenCodec(stream->CodecID, stream->Par, &stream->timebase, 0))
+	if (Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+		if (Decoder->ReopenCodec(CodecID, Par, &timebase, 0))
 			LOGFATAL("ClearVideo: Could not reopen the decoder (flush buffers)!");
 	} else {
-		stream->Decoder->FlushBuffers();
+		Decoder->FlushBuffers();
 	}
-	pthread_mutex_unlock(&stream->PktsLockMutex);
+	pthread_mutex_unlock(&PktsLockMutex);
 
 	// no need to wait in decoding thread anymore
-	stream->StreamWait = 0;
+	StreamWait = 0;
 }
 
-int closing_stream_requested(VideoStream *stream)
+int cVideoStream::closing_stream_requested(void)
 {
-	if (stream->ClosingStream && stream->CodecID != AV_CODEC_ID_NONE) {
-		pthread_mutex_lock(&stream->WaitCloseMutex);
-		if (!MyVideoStream->TrickSpeed || !VideoGetTrickForward(stream->Render)) {
-			ClearVideo(stream);
-			stream->CodecID = AV_CODEC_ID_NONE;
-			stream->Decoder->Close();
-			stream->Par = NULL;
+	if (ClosingStream && CodecID != AV_CODEC_ID_NONE) {
+		pthread_mutex_lock(&WaitCloseMutex);
+		if (!TrickSpeed || !Render->VideoGetTrickForward()) {
+			ClearVideo();
+			CodecID = AV_CODEC_ID_NONE;
+			Decoder->Close();
+			Par = NULL;
 		}
-		stream->ClosingStream = 0;
-		pthread_cond_signal(&stream->WaitCloseCondition);
-		pthread_mutex_unlock(&stream->WaitCloseMutex);
+		ClosingStream = 0;
+		pthread_cond_signal(&WaitCloseCondition);
+		pthread_mutex_unlock(&WaitCloseMutex);
 		return -1;
 	}
 	return 0;
@@ -669,66 +623,75 @@ int closing_stream_requested(VideoStream *stream)
 **	@retval	1	stream paused
 **	@retval	-1	empty stream
 */
-int VideoDecodeInput(VideoStream * stream)
+int cVideoStream::DecodeInput(void)
 {
 	AVPacket *avpkt;
 	AVFrame *frame;
 	int ret = 0;
 	static int sent = 0;
 
-	if (closing_stream_requested(stream))
+	if (closing_stream_requested())
 		return -1;
 
-	if (stream->StreamWait) {
-		stream->StreamWait = 2; // signalise, the turn has finished and we are waiting
+	if (StreamWait) {
+		StreamWait = 2; // signalise, the turn has finished and we are waiting
 		return -1;
 	}
 
-	if (MyVideoStream->StreamFreezed) {		// stream freezed
+	if (StreamFreezed) {		// stream freezed
 //		LOGINFO("VideoDecodeInput: stream->Freezed");
 		// clear is called during freezed
 		return 1;
 	}
 
-	if (stream->NewStream && stream->CodecID != AV_CODEC_ID_NONE) {
-		if (stream->Decoder->Open(stream->CodecID, stream->Par, &stream->timebase, 0, 0, 0))
+	if (NewStream && CodecID != AV_CODEC_ID_NONE) {
+		int pWidth = 0;
+		int pHeight = 0;
+
+		// amlogic h264 decoder needs this
+		if ((CodecID == AV_CODEC_ID_H264) && (Render->HardwareQuirks & QUIRK_CODEC_NEEDS_EXT_INIT)) {
+			ParseResolutionH264(&pWidth, &pHeight);
+			LOGDEBUG2(L_CODEC, "cVideoStream::DecodeInput: Parsed width %d height %d", pWidth, pHeight);
+		}
+
+		if (Decoder->Open(CodecID, Par, &timebase, 0, pWidth, pHeight))
 			LOGFATAL("VideoDecodeInput: Could not open the decoder!");
-		stream->NewStream = 0;
+		NewStream = 0;
 	}
 
-	if (stream->CodecID != AV_CODEC_ID_NONE) {
-		pthread_mutex_lock(&stream->PktsLockMutex);
+	if (CodecID != AV_CODEC_ID_NONE) {
+		pthread_mutex_lock(&PktsLockMutex);
 		// in trickspeed wait for minimum pkts needed to decode a frame
-		int minpkts = (VideoGetTrickSpeed(stream->Render) && stream->interlaced) ? stream->trickpkts : 1;
-		if (atomic_read(&stream->PacketsFilled) < minpkts) {
-			pthread_mutex_unlock(&stream->PktsLockMutex);
+		int minpkts = (Render->VideoGetTrickSpeed() && interlaced) ? trickpkts : 1;
+		if (atomic_read(&PacketsFilled) < minpkts) {
+			pthread_mutex_unlock(&PktsLockMutex);
 			return -1;
 		}
-		avpkt = &stream->PacketRb[stream->PacketRead];
+		avpkt = &PacketRb[PacketRead];
 
 		// try sending packet to decoder
-		ret = stream->Decoder->SendPacket(avpkt);
+		ret = Decoder->SendPacket(avpkt);
 		if (ret != AVERROR(EAGAIN)) { // something went wrong or packet was sent, advance packet
-			stream->PacketRead = (stream->PacketRead + 1) % VIDEO_PACKET_MAX;
-			atomic_dec(&stream->PacketsFilled);
+			PacketRead = (PacketRead + 1) % VIDEO_PACKET_MAX;
+			atomic_dec(&PacketsFilled);
 			// in backward trickspeed force the decoder to decode the frame
-			if (ret == 0 && VideoGetTrickSpeed(stream->Render) && !VideoGetTrickForward(stream->Render)) {
+			if (ret == 0 && Render->VideoGetTrickSpeed() && !Render->VideoGetTrickForward()) {
 				sent++;
 				if (sent >= minpkts) {
-					stream->Decoder->SendPacket(NULL);
+					Decoder->SendPacket(NULL);
 					sent = 0;
 				}
 			}
 		}
 
-		pthread_mutex_unlock(&stream->PktsLockMutex);
+		pthread_mutex_unlock(&PktsLockMutex);
 
 // this is normal Playback
-		if (!VideoGetTrickSpeed(stream->Render)) {
-			if (!stream->NewStream) { // this is for mediaplayer ?
-				if (!stream->Decoder->ReceiveFrame(0, &frame)) {
-					while (VideoRenderFrame(stream->Render, stream->Decoder->GetContext(), frame, 0)) {
-						if (closing_stream_requested(stream)) {
+		if (!Render->VideoGetTrickSpeed()) {
+			if (!NewStream) { // this is for mediaplayer ?
+				if (!Decoder->ReceiveFrame(0, &frame)) {
+					while (Render->VideoRenderFrame(Decoder->GetContext(), frame, 0)) {
+						if (closing_stream_requested()) {
 							av_frame_free(&frame);
 							return -1;
 						}
@@ -739,25 +702,25 @@ int VideoDecodeInput(VideoStream * stream)
 		} else {
 receive_trickspeed:
 			// try receiving frame from decoder
-			ret = stream->Decoder->ReceiveFrame(1, &frame);
+			ret = Decoder->ReceiveFrame(1, &frame);
 			if (ret == 0) {
-				while (VideoGetTrickSpeed(stream->Render) && VideoGetTrickCounter(stream->Render) > 0) {
+				while (Render->VideoGetTrickSpeed() && Render->VideoGetTrickCounter() > 0) {
 					AVFrame *trickframe = av_frame_clone(frame);
 					if (!trickframe) {
 						LOGERROR("VideoDecodeInput: could not clone frame");
 						break;
 					}
-					LOGDEBUG2(L_TRICK, "VideoDecodeInput: Trickspeed, send another cloned trick frame %d %p", VideoGetTrickCounter(stream->Render), trickframe);
-					while (VideoRenderFrame(stream->Render, stream->Decoder->GetContext(), trickframe, FRAME_FLAG_TRICKSPEED)) {
-						if (closing_stream_requested(stream)) {
+					LOGDEBUG2(L_TRICK, "VideoDecodeInput: Trickspeed, send another cloned trick frame %d %p", Render->VideoGetTrickCounter(), trickframe);
+					while (Render->VideoRenderFrame(Decoder->GetContext(), trickframe, FRAME_FLAG_TRICKSPEED)) {
+						if (closing_stream_requested()) {
 							av_frame_free(&trickframe);
 							av_frame_free(&frame);
 							sent = 0;
 							return -1;
 						}
 					}
-					VideoDecTrickCounter(stream->Render);
-					if (closing_stream_requested(stream)) {
+					Render->VideoDecTrickCounter();
+					if (closing_stream_requested()) {
 						av_frame_free(&frame);
 						sent = 0;
 						return -1;
@@ -766,16 +729,16 @@ receive_trickspeed:
 				av_frame_free(&frame);
 				sent = 0;
 
-				int TrickSpeed = VideoGetTrickSpeed(stream->Render);
-				VideoSetTrickCounter(stream->Render, TrickSpeed);
+				int TrickSpeed = Render->VideoGetTrickSpeed();
+				Render->VideoSetTrickCounter(TrickSpeed);
 
 				goto receive_trickspeed; // try to get another frame
 			} else if (ret == AVERROR_EOF) { // needs flush / reopen
-				if (stream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
-					if (stream->Decoder->ReopenCodec(stream->CodecID, stream->Par, &stream->timebase, 0))
+				if (Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+					if (Decoder->ReopenCodec(CodecID, Par, &timebase, 0))
 						LOGFATAL("VideoDecodeInput: Could not reopen the decoder (flush buffers)!");
 				} else {
-					stream->Decoder->FlushBuffers();
+					Decoder->FlushBuffers();
 				}
 				sent = 0;
 			}
@@ -791,9 +754,9 @@ receive_trickspeed:
 **
 **	@param stream	video stream
 */
-int VideoGetPackets(void)
+int cVideoStream::GetPackets(void)
 {
-    return atomic_read(&MyVideoStream->PacketsFilled);
+    return atomic_read(&PacketsFilled);
 }
 
 
@@ -859,20 +822,197 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
 }
 #endif
 
-void *GetVideoRender()
+void cVideoStream::SetInterlaced(int interl)
 {
-	return (void *)(MyVideoStream->Render);
+//	LOGDEBUG("SetInterlaced %d", interlaced);
+	interlaced = interl;
 }
 
-void SetInterlacedStream(int interlaced)
+/**
+**	helper functions to parse resolution from stream
+*/
+unsigned int cVideoStream::ReadBit()
 {
-//	LOGDEBUG("SetInterlacedStream %d", interlaced);
-	MyVideoStream->interlaced = interlaced;
+	assert(m_nCurrentBit <= m_nLength * 8);
+	int nIndex = m_nCurrentBit / 8;
+	int nOffset = m_nCurrentBit % 8 + 1;
+
+	m_nCurrentBit++;
+	return (m_pStart[nIndex] >> (8-nOffset)) & 0x01;
 }
+
+unsigned int cVideoStream::ReadBits(int n)
+{
+	int r = 0;
+
+	for (int i = 0; i < n; i++) {
+		r |= ( ReadBit() << ( n - i - 1 ) );
+	}
+	return r;
+}
+
+unsigned int cVideoStream::ReadExponentialGolombCode()
+{
+	int r = 0;
+	int i = 0;
+
+	while((ReadBit() == 0) && (i < 32)) {
+		i++;
+	}
+
+	r = ReadBits(i);
+	r += (1 << i) - 1;
+	return r;
+}
+
+unsigned int cVideoStream::ReadSE()
+{
+	int r = ReadExponentialGolombCode();
+
+	if (r & 0x01) {
+		r = (r+1)/2;
+	} else {
+		r = -(r/2);
+	}
+	return r;
+}
+
+/**
+**	Parse h264 stream to get width and height
+**
+**	@param[out] width		video stream width
+**	@param[out] height		video stream height
+*/
+void cVideoStream::ParseResolutionH264(int *width, int *height)
+{
+	AVPacket *avpkt;
+	m_pStart = NULL;
+	int i;
+
+	while (!atomic_read(&PacketsFilled)) {
+		usleep(10000);
+	}
+
+	avpkt = &PacketRb[PacketRead];
+
+	for (i = 0; i < avpkt->size; i++) {
+		if (!avpkt->data[i] && !avpkt->data[i + 1] && avpkt->data[i + 2] == 0x01 &&
+			(avpkt->data[i + 3] == 0x67 || avpkt->data[i + 3] == 0x27)) {
+
+			m_pStart = &avpkt->data[i + 4];
+			m_nLength = avpkt->size - i - 4;
+			break;
+		}
+	}
+	if (!m_pStart) {
+		LOGDEBUG("ParseResolutionH264: No m_pStart %p Pkt %p Packets %d i %d",
+			m_pStart, avpkt, atomic_read(&PacketsFilled), i);
+//		PrintStreamData(avpkt->data, avpkt->size);
+		return;
+	}
+
+	m_nCurrentBit = 0;
+	int frame_crop_left_offset = 0;
+	int frame_crop_right_offset = 0;
+	int frame_crop_top_offset = 0;
+	int frame_crop_bottom_offset = 0;
+	int chroma_format_idc = 0;
+	int separate_colour_plane_flag = 0;
+
+	int profile_idc = ReadBits(8);
+	ReadBits(16);
+	ReadExponentialGolombCode();
+
+	if (profile_idc == 100 || profile_idc == 110 ||
+		profile_idc == 122 || profile_idc == 244 ||
+		profile_idc == 44 || profile_idc == 83 ||
+		profile_idc == 86 || profile_idc == 118) {
+
+		chroma_format_idc = ReadExponentialGolombCode();
+		if (chroma_format_idc == 3) {
+			separate_colour_plane_flag = ReadBit();
+		}
+		ReadExponentialGolombCode();
+		ReadExponentialGolombCode();
+		ReadBit();
+		int seq_scaling_matrix_present_flag = ReadBit();
+		if (seq_scaling_matrix_present_flag) {
+			for (int i = 0; i < 8; i++) {
+				int seq_scaling_list_present_flag = ReadBit();
+				if (seq_scaling_list_present_flag) {
+					int sizeOfScalingList = (i < 6) ? 16 : 64;
+					int lastScale = 8;
+					int nextScale = 8;
+					for (int j = 0; j < sizeOfScalingList; j++) {
+						if (nextScale != 0) {
+							int delta_scale = ReadSE();
+							nextScale = (lastScale + delta_scale + 256) % 256;
+						}
+						lastScale = (nextScale == 0) ? lastScale : nextScale;
+					}
+				}
+			}
+		}
+	}
+	ReadExponentialGolombCode();
+	int pic_order_cnt_type = ReadExponentialGolombCode();
+	if (pic_order_cnt_type == 0) {
+		ReadExponentialGolombCode();
+	} else if (pic_order_cnt_type == 1) {
+		ReadBit();
+		ReadSE();
+		ReadSE();
+		int num_ref_frames_in_pic_order_cnt_cycle = ReadExponentialGolombCode();
+		for (int i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++ ) {
+			ReadSE();
+		}
+	}
+	ReadExponentialGolombCode();
+	ReadBit();
+	int pic_width_in_mbs_minus1 = ReadExponentialGolombCode();
+	int pic_height_in_map_units_minus1 = ReadExponentialGolombCode();
+	int frame_mbs_only_flag = ReadBit();
+	if (!frame_mbs_only_flag) {
+		ReadBit();
+	}
+	ReadBit();
+	int frame_cropping_flag = ReadBit();
+	if (frame_cropping_flag) {
+		frame_crop_left_offset = ReadExponentialGolombCode();
+		frame_crop_right_offset = ReadExponentialGolombCode();
+		frame_crop_top_offset = ReadExponentialGolombCode();
+		frame_crop_bottom_offset = ReadExponentialGolombCode();
+	}
+
+	int SubWidthC = 0;
+	int SubHeightC = 0;
+
+	if (chroma_format_idc == 0 && separate_colour_plane_flag == 0) { //monochrome
+		SubWidthC = SubHeightC = 2;
+	} else if (chroma_format_idc == 1 && separate_colour_plane_flag == 0) { //4:2:0
+		SubWidthC = SubHeightC = 2;
+	} else if (chroma_format_idc == 2 && separate_colour_plane_flag == 0) { //4:2:2
+		SubWidthC = 2;
+		SubHeightC = 1;
+	} else if (chroma_format_idc == 3) { //4:4:4
+		if (separate_colour_plane_flag == 0) {
+		SubWidthC = SubHeightC = 1;
+		} else if (separate_colour_plane_flag == 1) {
+			SubWidthC = SubHeightC = 0;
+		}
+	}
+
+	*width = ((pic_width_in_mbs_minus1 + 1) * 16) -
+		SubWidthC * (frame_crop_right_offset + frame_crop_left_offset);
+
+	*height = ((2 - frame_mbs_only_flag)* (pic_height_in_map_units_minus1 +1) * 16) -
+		SubHeightC * ((frame_crop_bottom_offset * 2) + (frame_crop_top_offset * 2));
+}
+
 
 
 //////////////////////////////////////////////////////////////////////////////
-//	cDevice
+//	cSoftHdDevice
 //////////////////////////////////////////////////////////////////////////////
 
 /**
@@ -882,6 +1022,10 @@ cSoftHdDevice::cSoftHdDevice(void)
 {
     LOGDEBUG("%s:", __FUNCTION__);
     spuDecoder = NULL;
+
+    VideoStream = new cVideoStream(this);
+    Audio = new cSoftHdAudio(this);
+    Render = new cVideoRender(this);
 }
 
 /**
@@ -891,6 +1035,8 @@ cSoftHdDevice::~cSoftHdDevice(void)
 {
     LOGDEBUG("%s:", __FUNCTION__);
     delete spuDecoder;
+    delete Audio;
+    delete VideoStream;
 }
 
 /**
@@ -899,26 +1045,28 @@ cSoftHdDevice::~cSoftHdDevice(void)
 void cSoftHdDevice::Start(void)
 {
     LOGDEBUG("Start(void):");
-    if (!MyAudioDecoder) {
-	AudioInit(AudioPassthrough);
-	AudioSetBufferTime(ConfigAudioBufferTime);
+    if (!AudioDecoder) {
+	Audio->AudioInit(Audio->AudioGetPassthrough());
+	Audio->AudioSetBufferTime(ConfigAudioBufferTime);
+	AudioAvPkt = av_packet_alloc();
 	av_new_packet(AudioAvPkt, AUDIO_BUFFER_SIZE);
-	MyAudioDecoder = new cAudioDecoder(AudioPassthrough);
+
+	AudioDecoder = new cAudioDecoder(Audio);
 	AudioCodecID = AV_CODEC_ID_NONE;
 	AudioChannelID = -1;
 
-	if (!MyVideoStream->Decoder) {
-	    MyVideoStream->CodecID = AV_CODEC_ID_NONE;
-	}
+	if (!VideoStream->Decoder)
+	    VideoStream->CodecID = AV_CODEC_ID_NONE;
 
-	if ((MyVideoStream->Render = VideoNewRender(MyVideoStream))) {
-	    if (ConfigDisableOglOsd)
-		VideoSetDisableOglOsd(MyVideoStream->Render);
-	    VideoSetDisableDeint(MyVideoStream->Render, ConfigDisableDeint);
-	    VideoInit(MyVideoStream->Render);
-	    MyVideoStream->Decoder = new cVideoDecoder(MyVideoStream->Render, &MyVideoStream[1]);
-	    VideoPacketInit(MyVideoStream);
-	}
+//	VideoStream->SetRender(Render);
+
+	if (ConfigDisableOglOsd)
+	    Render->VideoSetDisableOglOsd();
+	Render->VideoSetDisableDeint(ConfigDisableDeint);
+	Render->VideoInit();
+
+	VideoStream->Decoder = new cVideoDecoder(Render, VideoStream);
+	VideoStream->PacketInit();
     }
 }
 
@@ -929,7 +1077,21 @@ void cSoftHdDevice::Start(void)
 */
 void cSoftHdDevice::Stop(void)
 {
+
 	LOGDEBUG("Stop(void): nothing to do.");
+}
+
+/**
+**	Clears all audio data from the decoder and ringbufffer.
+*/
+void cSoftHdDevice::ClearAudio(void)
+{
+	if (!SkipAudio) {
+		LOGDEBUG("ClearAudio()");
+		AudioDecoder->FlushBuffers();
+		Audio->AudioFlushBuffers();
+		NewAudioStream = 1;
+	}
 }
 
 /**
@@ -938,16 +1100,16 @@ void cSoftHdDevice::Stop(void)
 void cSoftHdDevice::Exit(void)
 {
     LOGDEBUG("SoftHdDeviceExit(void):");
-    AudioExit();
-    if (MyAudioDecoder) {
-	MyAudioDecoder->Close();
-	delete MyAudioDecoder;
+    Audio->AudioExit();
+    if (AudioDecoder) {
+	AudioDecoder->Close();
+	delete AudioDecoder;
     }
     NewAudioStream = 0;
-    av_packet_unref(AudioAvPkt);
+    av_packet_free(&AudioAvPkt);
 
-    VideoExit(MyVideoStream->Render);
-    VideoStreamClose(MyVideoStream);
+    Render->VideoExit();
+    VideoStream->Close();
 }
 
 /**
@@ -1014,38 +1176,38 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 
 	switch (play_mode) {
 	case 0:			// none audio/video
-		MyVideoStream->TrickSpeed = 0;
-		if (MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
-			pthread_mutex_lock(&MyVideoStream->WaitCloseMutex);
-			MyVideoStream->ClosingStream = 1;
-			while (MyVideoStream->ClosingStream)
-				pthread_cond_wait(&MyVideoStream->WaitCloseCondition, &MyVideoStream->WaitCloseMutex);
-			pthread_mutex_unlock(&MyVideoStream->WaitCloseMutex);
+		VideoStream->TrickSpeed = 0;
+		if (VideoStream->CodecID != AV_CODEC_ID_NONE) {
+			pthread_mutex_lock(&VideoStream->WaitCloseMutex);
+			VideoStream->ClosingStream = 1;
+			while (VideoStream->ClosingStream)
+				pthread_cond_wait(&VideoStream->WaitCloseCondition, &VideoStream->WaitCloseMutex);
+			pthread_mutex_unlock(&VideoStream->WaitCloseMutex);
 		}
-		VideoSetClosing(MyVideoStream->Render, 1);
+		Render->VideoSetClosing(1);
 		SkipAudio = 0;
-		AudioPlay();
+		Audio->AudioPlay();
 		ClearAudio();	// flush all AUDIO buffers
-		if (MyAudioDecoder && AudioCodecID != AV_CODEC_ID_NONE) {
+		if (AudioDecoder && AudioCodecID != AV_CODEC_ID_NONE) {
 			NewAudioStream = 1;
 		}
-		MyVideoStream->interlaced = 0; // probably not necessary
-		MyVideoStream->StreamFreezed = 0;
+		VideoStream->interlaced = 0; // probably not necessary
+		VideoStream->StreamFreezed = 0;
 		break;
 	case 1:			// audio/video
-		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
+		Render->VideoThreadWakeup(1, 1);
 		//Play(); Play is a vdr command!!!
 		break;
 	case 2:			// audio only
-		VideoThreadExit();
+		Render->VideoThreadExit();
 		break;
 	case 3:			// audio only (black screen)
 		LOGDEBUG("softhddev: FIXME: audio only, silence video errors");
-		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
+		Render->VideoThreadWakeup(1, 1);
 		//Play();
 		break;
 	case 4:			// video only
-		VideoThreadWakeup(MyVideoStream->Render, 1, 1);
+		Render->VideoThreadWakeup(1, 1);
 		//Play();
 		break;
 	default:
@@ -1064,8 +1226,8 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 int64_t cSoftHdDevice::GetSTC(void)
 {
 //    LOGDEBUG("%s:", __FUNCTION__);
-    if (MyVideoStream->Render) {
-	return VideoGetClock(MyVideoStream->Render);
+    if (Render) {
+	return Render->VideoGetClock();
     }
     // could happen during dettached
     LOGWARNING("softhddev: %s called without hw decoder", __FUNCTION__);
@@ -1089,16 +1251,16 @@ void cSoftHdDevice::TrickSpeed(int speed, bool forward)
 
     LOGDEBUG("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
 
-    VideoSetClosing(MyVideoStream->Render, 0);
-    if (MyVideoStream->StreamFreezed) {
-	LOGDEBUG("TrickSpeed: StreamFreezed %d SkipAudio %d", MyVideoStream->StreamFreezed, SkipAudio);
-	MyVideoStream->StreamFreezed = 0;
+    Render->VideoSetClosing(0);
+    if (VideoStream->StreamFreezed) {
+	LOGDEBUG("TrickSpeed: StreamFreezed %d SkipAudio %d", VideoStream->StreamFreezed, SkipAudio);
+	VideoStream->StreamFreezed = 0;
 	ClearAudio();
 	SkipAudio = 0;
     }
 
-    MyVideoStream->TrickSpeed = 1;
-    VideoTrickSpeed(MyVideoStream->Render, speed, forward);
+    VideoStream->TrickSpeed = 1;
+    Render->VideoTrickSpeed(speed, forward);
 }
 
 /**
@@ -1110,8 +1272,8 @@ void cSoftHdDevice::Clear(void)
     cDevice::Clear();
 
     LOGDEBUG("Clear(void)");
-    ClearVideo(MyVideoStream);
-    VideoSetClosing(MyVideoStream->Render, 0);
+    VideoStream->ClearVideo();
+    Render->VideoSetClosing(0);
     ClearAudio();
 }
 
@@ -1124,19 +1286,19 @@ void cSoftHdDevice::Play(void)
     cDevice::Play();
 
     LOGDEBUG("Play(void)");
-    if (MyVideoStream->TrickSpeed && MyVideoStream->CodecID != AV_CODEC_ID_NONE) {
-	pthread_mutex_lock(&MyVideoStream->WaitCloseMutex);
-	MyVideoStream->ClosingStream = 1;
-	while (MyVideoStream->ClosingStream)
-	    pthread_cond_wait(&MyVideoStream->WaitCloseCondition, &MyVideoStream->WaitCloseMutex);
-	pthread_mutex_unlock(&MyVideoStream->WaitCloseMutex);
-	VideoSetClosing(MyVideoStream->Render, 0);
+    if (VideoStream->TrickSpeed && VideoStream->CodecID != AV_CODEC_ID_NONE) {
+	pthread_mutex_lock(&VideoStream->WaitCloseMutex);
+	VideoStream->ClosingStream = 1;
+	while (VideoStream->ClosingStream)
+	    pthread_cond_wait(&VideoStream->WaitCloseCondition, &VideoStream->WaitCloseMutex);
+	pthread_mutex_unlock(&VideoStream->WaitCloseMutex);
+	Render->VideoSetClosing(0);
     }
-    MyVideoStream->TrickSpeed = 0;
+    VideoStream->TrickSpeed = 0;
     SkipAudio = 0;
-    MyVideoStream->StreamFreezed = 0;
-    AudioPlay();
-    VideoPlay(MyVideoStream->Render);
+    VideoStream->StreamFreezed = 0;
+    Audio->AudioPlay();
+    Render->VideoPlay();
 }
 
 /**
@@ -1148,9 +1310,9 @@ void cSoftHdDevice::Freeze(void)
     cDevice::Freeze();
 
     LOGDEBUG("Freeze(void)");
-    MyVideoStream->StreamFreezed = 1;
-    AudioPause();
-    VideoPause(MyVideoStream->Render);
+    VideoStream->StreamFreezed = 1;
+    Audio->AudioPause();
+    Render->VideoPause();
 }
 
 /**
@@ -1193,7 +1355,7 @@ void cSoftHdDevice::StillPicture(const uchar * data, int size)
     int head_length;
     int context = 0;
 
-    avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketWrite];
+    avpkt = &VideoStream->PacketRb[VideoStream->PacketWrite];
     avpkt->size = 0;
     avpkt->pts = AV_NOPTS_VALUE;
     pos = data;
@@ -1249,38 +1411,38 @@ void cSoftHdDevice::StillPicture(const uchar * data, int size)
 	pos += pes_length;
 	i = 0;
     }
-    atomic_inc(&MyVideoStream->PacketsFilled);
+    atomic_inc(&VideoStream->PacketsFilled);
 
-    MyVideoStream->StreamFreezed = 1;
-    if (MyVideoStream->Decoder->GetContext()) {
-	if ((int)(MyVideoStream->Decoder->GetContext()->codec_id) != codec) {
-	    MyVideoStream->Decoder->Close();
+    VideoStream->StreamFreezed = 1;
+    if (VideoStream->Decoder->GetContext()) {
+	if ((int)(VideoStream->Decoder->GetContext()->codec_id) != codec) {
+	    VideoStream->Decoder->Close();
 	}
     }
-    if (!MyVideoStream->Decoder->GetContext()) {
-	if (MyVideoStream->Decoder->Open(codec, NULL, NULL, 0, 0, 0))
+    if (!VideoStream->Decoder->GetContext()) {
+	if (VideoStream->Decoder->Open(codec, NULL, NULL, 0, 0, 0))
 	    LOGFATAL("StillPicture: Could not open the decoder!");
 	context = 1;
     }
-    AudioPause();
+    Audio->AudioPause();
 
     int ret = 0;
-    ret = MyVideoStream->Decoder->SendPacket(avpkt);
+    ret = VideoStream->Decoder->SendPacket(avpkt);
     if (ret)
 	LOGDEBUG2(L_STILL, "StillPicture: SendPacket(avpkt) returned %d", ret);
     else
 	LOGDEBUG2(L_STILL, "StillPicture: avpkt sent");
 
     // force decoder to enter draining because we only want 1 avpkt to be decoded
-    MyVideoStream->Decoder->SendPacket(NULL);
+    VideoStream->Decoder->SendPacket(NULL);
 
 receive:
-    ret = MyVideoStream->Decoder->ReceiveFrame(1, &frame);
+    ret = VideoStream->Decoder->ReceiveFrame(1, &frame);
     if (!ret) {
 	// frame received, render it and try another one (should end up with AVERROR_EOF)
 	LOGDEBUG2(L_STILL, "StillPicture: frame received");
-	while (VideoRenderFrame(MyVideoStream->Render, MyVideoStream->Decoder->GetContext(), frame, FRAME_FLAG_STILLPICTURE)) {
-	    if (MyVideoStream->ClosingStream) {
+	while (Render->VideoRenderFrame(VideoStream->Decoder->GetContext(), frame, FRAME_FLAG_STILLPICTURE)) {
+	    if (VideoStream->ClosingStream) {
 		av_frame_free(&frame);
 		break;
 	    }
@@ -1288,11 +1450,11 @@ receive:
 	goto receive;
     } else if (ret == AVERROR_EOF) {
 	// AVERROR_EOF, flush needed
-	if (MyVideoStream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
-	    if (MyVideoStream->Decoder->ReopenCodec(codec, NULL, NULL, 0))
+	if (Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+	    if (VideoStream->Decoder->ReopenCodec(codec, NULL, NULL, 0))
 		LOGFATAL("StillPicture: Could not reopen the decoder (flush buffers)!");
 	} else {
-	    MyVideoStream->Decoder->FlushBuffers();
+	    VideoStream->Decoder->FlushBuffers();
 	}
     } else {
 	// sth went wrong or AVERROR(EAGAIN)
@@ -1300,13 +1462,13 @@ receive:
     }
 
     if (context) {
-	MyVideoStream->Decoder->Close();
-	MyVideoStream->CodecID = AV_CODEC_ID_NONE;
+	VideoStream->Decoder->Close();
+	VideoStream->CodecID = AV_CODEC_ID_NONE;
     }
     ClearAudio();
-    ClearVideo(MyVideoStream);
-    MyVideoStream->StreamFreezed = 0;
-    AudioPlay();
+    VideoStream->ClearVideo();
+    VideoStream->StreamFreezed = 0;
+    Audio->AudioPlay();
 }
 
 /**
@@ -1336,12 +1498,12 @@ bool cSoftHdDevice::Poll(
 
 //	LOGDEBUG("Poll: timeout %d", timeout);
 
-	used = AudioUsedBytes();
+	used = Audio->AudioUsedBytes();
 	// FIXME: no video!
-	filled = atomic_read(&MyVideoStream->PacketsFilled);
+	filled = atomic_read(&VideoStream->PacketsFilled);
 	// soft limit + hard limit
 	full = (used > AUDIO_MIN_BUFFER_FREE && filled > 3)
-	    || AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE
+	    || Audio->AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE
 	    || filled >= VIDEO_PACKET_MAX - 10;
 
 	if (!full || !timeout) {
@@ -1367,11 +1529,11 @@ bool cSoftHdDevice::Flush(int timeout)
     LOGDEBUG("%s: %d ms", __FUNCTION__, timeout);
 
     LOGDEBUG("Flush: timeout %d", timeout);
-    if (atomic_read(&MyVideoStream->PacketsFilled)) {
+    if (atomic_read(&VideoStream->PacketsFilled)) {
 	if (timeout) {			// let display thread work
 	    usleep(timeout * 1000);
 	}
-	return !atomic_read(&MyVideoStream->PacketsFilled);
+	return !atomic_read(&VideoStream->PacketsFilled);
     }
     return 1;
 }
@@ -1415,7 +1577,7 @@ void cSoftHdDevice::SetVideoFormat(bool video_format16_9)
 */
 void cSoftHdDevice::GetVideoSize(int &width, int &height, double &aspect_ratio)
 {
-    MyVideoStream->Decoder->GetVideoSize(&width, &height, &aspect_ratio);
+    VideoStream->Decoder->GetVideoSize(&width, &height, &aspect_ratio);
 //	LOGDEBUG("GetVideoSize: %d x %d @ %f", *width, *height, *aspect_ratio);
 }
 
@@ -1426,7 +1588,7 @@ void cSoftHdDevice::GetVideoSize(int &width, int &height, double &aspect_ratio)
 */
 void cSoftHdDevice::GetOsdSize(int &width, int &height, double &pixel_aspect)
 {
-    VideoGetScreenSize(MyVideoStream->Render, &width, &height, &pixel_aspect);
+    Render->VideoGetScreenSize(&width, &height, &pixel_aspect);
 }
 
 // ----------------------------------------------------------------------------
@@ -1450,7 +1612,7 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 
     AudioAvPkt->pts = AV_NOPTS_VALUE;
 
-    if (MyVideoStream->StreamFreezed) {	// stream is freezed, don't accept new audio data
+    if (VideoStream->StreamFreezed) {	// stream is freezed, don't accept new audio data
 	LOGDEBUG("PlayAudio: StreamFreezed");
 	return 0;
     }
@@ -1462,15 +1624,15 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 
     // hard limit buffer full: don't overrun audio buffers on replay
     // stream freezed
-    if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE){
-//	LOGDEBUG("PlayAudio: Buffer is Full (%d|%d)!", AudioFreeBytes(), AUDIO_MIN_BUFFER_FREE);
+    if (Audio->AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE){
+//	LOGDEBUG("PlayAudio: Buffer is Full (%d|%d)!", Audio->AudioFreeBytes(), AUDIO_MIN_BUFFER_FREE);
 	return 0;
     }
 
     if (NewAudioStream) {
 	// this clears the audio ringbuffer indirect, open and setup does it
 	LOGDEBUG("PlayAudio: NewAudioStream");
-	MyAudioDecoder->Close();
+	AudioDecoder->Close();
 //	AudioFlushBuffers();
 //	AudioSetBufferTime(ConfigAudioBufferTime);		// ???
 	AudioCodecID = AV_CODEC_ID_NONE;
@@ -1524,7 +1686,9 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	    LOGERROR("invalid LPCM audio packet %d bytes", size);
 	    return size;
 	}
-/*	if (AudioCodecID != AV_CODEC_ID_PCM_DVD) {
+/*
+// TODO: classify
+	if (AudioCodecID != AV_CODEC_ID_PCM_DVD) {
 	    static int samplerates[] = { 48000, 96000, 44100, 32000 };
 	    int samplerate;
 	    int channels;
@@ -1533,7 +1697,7 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	    LOGDEBUG("%s: LPCM %d sr:%d bits:%d chan:%d\n",
 		__FUNCTION__, id, p[5] >> 4, (((p[5] >> 6) & 0x3) + 4) * 4,
 		(p[5] & 0x7) + 1);
-	    MyAudioDecoder->Close();
+	    AudioDecoder->Close();
 
 	    bits_per_sample = (((p[5] >> 6) & 0x3) + 4) * 4;
 	    if (bits_per_sample != 16) {
@@ -1558,7 +1722,7 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 		    (p[5] & 0x7) + 1);
 		// FIXME: support resample
 	    }
-	    //MyAudioDecoder->Open(AV_CODEC_ID_PCM_DVD);
+	    //AudioDecoder->Open(AV_CODEC_ID_PCM_DVD);
 	    AudioCodecID = AV_CODEC_ID_PCM_DVD;
 	}
 
@@ -1632,8 +1796,8 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 
 	    // new codec id, close and open new
 	    if (AudioCodecID != codec_id) {
-		MyAudioDecoder->Close();
-		MyAudioDecoder->Open(codec_id, NULL, &timebase);
+		AudioDecoder->Close();
+		AudioDecoder->Open(codec_id, NULL, &timebase);
 		AudioCodecID = codec_id;
 	    }
 	    avpkt = av_packet_alloc();
@@ -1644,7 +1808,7 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	    avpkt->data = (uint8_t *)p;
 	    avpkt->size = r;
 	    avpkt->pts = AudioAvPkt->pts;
-	    MyAudioDecoder->Decode(avpkt);
+	    AudioDecoder->Decode(avpkt);
 	    AudioAvPkt->pts = AV_NOPTS_VALUE;
 	    av_packet_free(&avpkt);
 	    p += r;
@@ -1696,7 +1860,7 @@ void cSoftHdDevice::SetVolumeDevice(int volume)
 {
     LOGDEBUG("%s: %d", __FUNCTION__, volume);
 
-    AudioSetVolume((volume * 1000) / 255);
+    Audio->AudioSetVolume((volume * 1000) / 255);
 }
 
 /**
@@ -1719,11 +1883,10 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
 {
     //LOGDEBUG("%s: %p %d", __FUNCTION__, data, length);
 
-    VideoStream * stream = MyVideoStream;
     int64_t pts = AV_NOPTS_VALUE;
     int i, n;
 
-    if (MyVideoStream->StreamFreezed) {
+    if (VideoStream->StreamFreezed) {
 	return 0;
     }
 
@@ -1733,7 +1896,7 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
     }
 
     // hard limit buffer full: needed for replay
-    if (atomic_read(&stream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
+    if (atomic_read(&VideoStream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
 	return 0;
     }
 
@@ -1748,7 +1911,7 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
     for (i = 0; (i < 2) && (i + 4 < size); i++) {
 	// ES start code 0x00 0x00 0x01
 	if (!data[i + n] && !data[i + n + 1] && data[i + n + 2] == 0x01) {
-	    if (stream->CodecID == AV_CODEC_ID_NONE) {
+	    if (VideoStream->CodecID == AV_CODEC_ID_NONE) {
 		if (data[i + n + 3] == 0xb3) {
 		    // MPEG2 I-Frame
 		    LOGDEBUG("PlayVideo: mpeg2 detected");
@@ -1764,8 +1927,8 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
 		           data[i + n + 8],
 			   data[i + n + 9],
 			   data[i + n + 10]);
-		    stream->CodecID = AV_CODEC_ID_MPEG2VIDEO;
-		    stream->trickpkts = 1;
+		    VideoStream->CodecID = AV_CODEC_ID_MPEG2VIDEO;
+		    VideoStream->trickpkts = 1;
 		    goto newstream;
 		} else if (data[i + n + 3] == 0x09 && (data[i + n + 4] == 0x10 || data[i + n + 4] == 0xF0 || data[i + n + 10] == 0x64)) {
 		    // H264 I-Frame
@@ -1782,8 +1945,8 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
 		           data[i + n + 8],
 		           data[i + n + 9],
 		           data[i + n + 10]);
-		    stream->CodecID = AV_CODEC_ID_H264;
-		    stream->trickpkts = 2;
+		    VideoStream->CodecID = AV_CODEC_ID_H264;
+		    VideoStream->trickpkts = 2;
 		    goto newstream;
 		} else if (data[i + n + 3] == 0x46 && (data[i + n + 5] == 0x10 || data[i + n + 5] == 0x50 || data[i + n + 10] == 0x40)) {
 		    // HEVC I-Frame
@@ -1800,28 +1963,28 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
 		           data[i + n + 8],
 		           data[i + n + 9],
 		           data[i + n + 10]);
-		    stream->CodecID = AV_CODEC_ID_HEVC;
-		    stream->trickpkts = 2;
+		    VideoStream->CodecID = AV_CODEC_ID_HEVC;
+		    VideoStream->trickpkts = 2;
 newstream:
-		    stream->NewStream = 1;
-		    stream->timebase.den = 90000;
-		    stream->timebase.num = 1;
-		    VideoEnqueue(stream, pts, data + i + n, size - i - n);
+		    VideoStream->NewStream = 1;
+		    VideoStream->timebase.den = 90000;
+		    VideoStream->timebase.num = 1;
+		    VideoStream->Enqueue(pts, data + i + n, size - i - n);
 		}
 	    } else {
-		VideoEnqueue(stream, pts, data + i + n, size - i - n);
+		VideoStream->Enqueue(pts, data + i + n, size - i - n);
 	    }
 	    return size;
 	}
     }
 
     // this happens when vdr sends incomplete packets and no stream is started
-    if (stream->CodecID == AV_CODEC_ID_NONE) {
+    if (VideoStream->CodecID == AV_CODEC_ID_NONE) {
 	return size;
     }
 
     // complete last frame
-    VideoEnqueue(stream, pts, data + n, size - n);
+    VideoStream->Enqueue(pts, data + n, size - n);
     return size;
 }
 
@@ -1850,21 +2013,21 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     }
 
     LOGDEBUG2(L_GRAB, "GrabImage: Start grabbing");
-    if (VideoGrabInWork(MyVideoStream->Render)) {
+    if (Render->VideoGrabInWork()) {
 	LOGDEBUG2(L_GRAB, "GrabImage: waiting for last grab...");
 	return NULL;
     }
 
-    VideoTriggerGrab(MyVideoStream->Render);
+    Render->VideoTriggerGrab();
 
     int timeout = 100;
-    while(!VideoGrabReady(MyVideoStream->Render)) {
+    while(!Render->VideoGrabReady()) {
 	usleep(10000);
 	if (timeout-- <= 0) {
 	    // TODO: This is not safe! It can occur when we get stuck in Frame2Display,
 	    // if no OSD or video frames are filled. Reset Grabbing after a timeout.
 	    LOGDEBUG2(L_GRAB, "GrabImage: Timeout!");
-	    VideoClearGrab(MyVideoStream->Render);
+	    Render->VideoClearGrab();
 	    return NULL;
 	}
     }
@@ -1873,7 +2036,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     int screenwidth;
     int screenheight;
     double pixel_aspect;
-    VideoGetScreenSize(MyVideoStream->Render, &screenwidth, &screenheight, &pixel_aspect);
+    Render->VideoGetScreenSize(&screenwidth, &screenheight, &pixel_aspect);
     int screensize = screenwidth * screenheight * 3; // we want a RGB24
 
     // set grab dimensions
@@ -1886,14 +2049,14 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     int video_x = 0, video_y = 0;	// x, y of the grabbed video
 
     // Video comes as RGB, width and height is original screen dimension (video is maybe scaled)
-    uint8_t *video = VideoGetGrab(MyVideoStream->Render, &video_size, &video_width, &video_height, &video_x, &video_y, 0);
+    uint8_t *video = Render->VideoGetGrab(&video_size, &video_width, &video_height, &video_x, &video_y, 0);
     if (!video) {
         LOGDEBUG2(L_GRAB, "GrabImage: video is NULL, create black screen!");
         video = (uint8_t *)calloc(1, screensize);
     }
 
     // OSD comes as ARGB, width and height is original screen dimension (osd is always fullscreen)
-    uint8_t *osd = VideoGetGrab(MyVideoStream->Render, NULL, NULL, NULL, NULL, NULL, 1);
+    uint8_t *osd = Render->VideoGetGrab(NULL, NULL, NULL, NULL, NULL, 1);
     if (!osd)
         LOGDEBUG2(L_GRAB, "GrabImage: osd is NULL, skip it");
 
@@ -1941,7 +2104,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     }
     free(scaledresult);
     LOGDEBUG2(L_GRAB, "GrabImage: finished %s image (%dx%d, quality %d) at %p (size %d)", jpeg ? "jpg" : "pnm", grabwidth, grabheight, jpeg ? quality : 0, grabbedimage, size);
-    VideoClearGrab(MyVideoStream->Render);
+    Render->VideoClearGrab();
     return grabbedimage;
 }
 
@@ -1970,8 +2133,8 @@ void cSoftHdDevice::ScaleVideo(const cRect & rect)
     LOGDEBUG2(L_OSD, "OSD %s: %dx%d%+d%+d",
         __FUNCTION__, rect.Width(), rect.Height(), rect.X(), rect.Y());
 
-    if (MyVideoStream->Render) {
-	VideoSetOutputPosition(MyVideoStream->Render, rect.X(), rect.Y(), rect.Width(), rect.Height());
+    if (Render) {
+	Render->VideoSetOutputPosition(rect.X(), rect.Y(), rect.Width(), rect.Height());
     }
 }
 
@@ -2020,16 +2183,16 @@ int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
 	switch (getopt(argc, argv, "-a:c:p:d:")) {
 #endif
 	    case 'a':			// audio device for pcm
-		AudioSetDevice(optarg);
+		Audio->AudioSetDevice(optarg);
 		continue;
 	    case 'c':			// channel of audio mixer
-		AudioSetChannel(optarg);
+		Audio->AudioSetChannel(optarg);
 		continue;
 	    case 'p':			// pass-through audio device
-		AudioSetPassthroughDevice(optarg);
+		Audio->AudioSetPassthroughDevice(optarg);
 		continue;
 	    case 'd':			// set display output
-		VideoSetDisplay(optarg);
+		Render->VideoSetDisplay(optarg);
 		continue;
 #ifdef USE_GLES
 	    case 'w':			// workarounds
@@ -2066,15 +2229,15 @@ int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
 
 void cSoftHdDevice::SetDisableDeint(void)
 {
-	if (MyVideoStream->Render)
-		VideoSetDisableDeint(MyVideoStream->Render, ConfigDisableDeint);
+	if (Render)
+		Render->VideoSetDisableDeint(ConfigDisableDeint);
 }
 
 void cSoftHdDevice::SetDisableOglOsd(void)
 {
 	ConfigDisableOglOsd = 1;
-	if (MyVideoStream->Render)
-		VideoSetDisableOglOsd(MyVideoStream->Render);
+	if (Render)
+		Render->VideoSetDisableOglOsd();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2086,7 +2249,7 @@ void cSoftHdDevice::SetDisableOglOsd(void)
 */
 void cSoftHdDevice::OsdClose(void)
 {
-    VideoOsdClear(MyVideoStream->Render);
+    Render->VideoOsdClear();
 }
 
 /**
@@ -2104,16 +2267,14 @@ void cSoftHdDevice::OsdClose(void)
 void cSoftHdDevice::OsdDrawARGB(int xi, int yi, int height, int width, int pitch,
 	const uint8_t * argb, int x, int y)
 {
-	VideoOsdDrawARGB(MyVideoStream->Render, xi, yi, height, width,
-			pitch, argb, x, y);
+	Render->VideoOsdDrawARGB(xi, yi, height, width, pitch, argb, x, y);
 }
 
 void cSoftHdDevice::SetPassthrough(int mask)
 {
-	AudioPassthrough = mask;
-	AudioSetPassthrough(mask);
-	if (MyAudioDecoder)
-		MyAudioDecoder->SetPassthrough(mask);
+	Audio->AudioSetPassthrough(mask);
+	if (AudioDecoder)
+		AudioDecoder->SetPassthrough(mask);
 }
 
 /**
@@ -2131,8 +2292,6 @@ void cSoftHdDevice::ResetChannelId(void)
 */
 void cSoftHdDevice::SetLogLevel(int loglevel)
 {
-	DebugLogLevel = loglevel;
-
 	if (!loglevel)
 		return;
 
@@ -2179,8 +2338,8 @@ void cSoftHdDevice::GetStats(int *duped, int *dropped, int *counter)
 	*duped = 0;
 	*dropped = 0;
 	*counter = 0;
-	if (MyVideoStream->Render) {
-		VideoGetStats(MyVideoStream->Render, duped, dropped, counter);
+	if (Render) {
+		Render->VideoGetStats(duped, dropped, counter);
 	}
 }
 
@@ -2190,25 +2349,25 @@ void cSoftHdDevice::GetStats(int *duped, int *dropped, int *counter)
 
 void cSoftHdDevice::SetAudioCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
 {
-	MyAudioDecoder->Open(codec_id, par, timebase);
+	AudioDecoder->Open(codec_id, par, timebase);
 }
 
 void cSoftHdDevice::SetVideoCodec(enum AVCodecID codec_id, AVCodecParameters * par, AVRational * timebase)
 {
-	MyVideoStream->CodecID = codec_id;
-	MyVideoStream->NewStream = 1;
-	MyVideoStream->Par = par;
-	MyVideoStream->timebase.num = timebase->num;
-	MyVideoStream->timebase.den = timebase->den;
+	VideoStream->CodecID = codec_id;
+	VideoStream->NewStream = 1;
+	VideoStream->Par = par;
+	VideoStream->timebase.num = timebase->num;
+	VideoStream->timebase.den = timebase->den;
 }
 
 int cSoftHdDevice::PlayAudioPkts(AVPacket * pkt)
 {
-	if (AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
-//		LOGERROR("PlayAudioPkts: AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
+	if (Audio->AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
+//		LOGERROR("PlayAudioPkts: Audio->AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
 		return 0;
 	}
-	MyAudioDecoder->Decode(pkt);
+	AudioDecoder->Decode(pkt);
 	return 1;
 }
 
@@ -2216,13 +2375,13 @@ int cSoftHdDevice::PlayVideoPkts(AVPacket * pkt)
 {
 	AVPacket *avpkt;
 
-	if (atomic_read(&MyVideoStream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
+	if (atomic_read(&VideoStream->PacketsFilled) >= VIDEO_PACKET_MAX - 10) {
 		return 0;
 	}
 
-	avpkt = &MyVideoStream->PacketRb[MyVideoStream->PacketWrite];
-	MyVideoStream->PacketWrite = (MyVideoStream->PacketWrite + 1) % VIDEO_PACKET_MAX;
-	atomic_inc(&MyVideoStream->PacketsFilled);
+	avpkt = &VideoStream->PacketRb[VideoStream->PacketWrite];
+	VideoStream->PacketWrite = (VideoStream->PacketWrite + 1) % VIDEO_PACKET_MAX;
+	atomic_inc(&VideoStream->PacketsFilled);
 
 	if ((size_t)pkt->size > avpkt->buf->size) {
 		LOGINFO("PlayVideoPkts: grow packet buffer size by %d",
@@ -2236,3 +2395,6 @@ int cSoftHdDevice::PlayVideoPkts(AVPacket * pkt)
 	avpkt->size = pkt->size;
 	return 1;
 }
+
+
+
