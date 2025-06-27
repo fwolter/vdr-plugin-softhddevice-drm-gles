@@ -1513,7 +1513,7 @@ receive:
 	} else if (ret == AVERROR_EOF) {
 		// AVERROR_EOF, flush needed
 		if (MyVideoStream->Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
-			if (MyVideoStream->Decoder->ReopenCodec(MyVideoStream->CodecID, MyVideoStream->Par, &MyVideoStream->timebase, 0))
+			if (MyVideoStream->Decoder->ReopenCodec(codec, NULL, NULL, 0))
 				Fatal("StillPicture: Could not reopen the decoder (flush buffers)!");
 		} else {
 			MyVideoStream->Decoder->FlushBuffers();
