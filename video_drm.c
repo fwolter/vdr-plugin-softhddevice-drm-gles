@@ -2496,6 +2496,10 @@ fillframe:
 			// set trickspeed flag of the filtered frame (scale filter and AV_PIX_FMT_YUV420P)
 			if (render->Filter_Trick)
 				fd->flags |= FRAME_FLAG_TRICKSPEED;
+			if (render->Filter_Still) {
+				fd->flags |= FRAME_FLAG_STILLPICTURE;
+				filt_frame->pts = AV_NOPTS_VALUE;
+			}
 
 			pthread_mutex_lock(&DisplayQueue);
 			if (atomic_read(&render->FramesFilled) < VIDEO_SURFACES_MAX) {
@@ -2528,6 +2532,7 @@ closing:
 	avfilter_graph_free(&render->filter_graph);
 	render->Filter_Frames = 0;
 	render->Filter_Trick = 0;
+	render->Filter_Still = 0;
 	pthread_cleanup_push(ThreadExitHandler, render);
 	pthread_cleanup_pop(1);
 	Debug("video: video filter thread stopped");
@@ -2592,6 +2597,7 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 	// progressive and trickspeed AV_PIX_FMT_YUV420P (software decoded) -> scale filter (for NV12 output)
 	// progressive and trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) doesn't get to the FilterHandlerThread
 	render->Filter_Trick = 0;
+	render->Filter_Still = 0;
 	if (interlaced && !(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE)) {
 		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
 			filter_descr = "deinterlace_v4l2m2m";
@@ -2603,6 +2609,8 @@ int VideoFilterInit(VideoRender * render, const AVCodecContext * video_ctx,
 		filter_descr = "scale";
 		if (fd->flags & FRAME_FLAG_TRICKSPEED)
 			render->Filter_Trick = 1;
+		if (fd->flags & FRAME_FLAG_STILLPICTURE)
+			render->Filter_Still = 1;
 	}
 #if LIBAVFILTER_VERSION_INT < AV_VERSION_INT(7,16,100)
 	avfilter_register_all();

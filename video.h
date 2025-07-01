@@ -170,6 +170,7 @@ struct _Drm_Render_
 	int FilterClosing;		///< flag about closing filter handler thread
 	int Filter_Bug;
 	int Filter_Trick;		///< FilterHandlerThread handles trickframes
+	int Filter_Still;		///< FilterHandlerThread handles trickframes
 	int Filter_Frames;
 	int FilterDeintDisabled;	///< Deinterlacer is disabled via setup
 	int startgrab;			///< flag for triggering grabbing
