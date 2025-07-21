@@ -572,6 +572,7 @@ static int32_t find_crtc_for_connector(VideoRender *render, const drmModeRes *re
 	return -1;
 }
 
+#ifdef USE_GLES
 static int init_gbm(VideoRender *render, int w, int h, uint32_t format, uint64_t modifier)
 {
 	render->gbm_device = gbm_create_device(render->fd_drm);
@@ -589,7 +590,6 @@ static int init_gbm(VideoRender *render, int w, int h, uint32_t format, uint64_t
 	return 0;
 }
 
-#ifdef USE_GLES
 static int init_egl(VideoRender *render)
 {
 	EGLint iMajorVersion, iMinorVersion;
