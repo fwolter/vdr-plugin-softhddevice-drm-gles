@@ -533,6 +533,8 @@ void cOglAtlasGlyph::SetKerningCache(FT_ULong prevSym, int kerning) {
 ****************************************************************************************/
 cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
     this->fontheight = height;
+    int max_atlas_width;
+    GL_CHECK(glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_atlas_width));
 
     FT_Set_Pixel_Sizes(face, 0, height);
     FT_GlyphSlot g = face->glyph;
@@ -580,7 +582,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
 
         FT_BitmapGlyph bGlyph = (FT_BitmapGlyph)ftGlyph;
 
-        if (roww + bGlyph->bitmap.width + 1 >= MAX_ATLAS_WIDTH) {
+        if (roww + bGlyph->bitmap.width + 1 >= (unsigned int)max_atlas_width) {
             w = std::max(w, roww);
             h += rowh;
             roww = 0;
@@ -598,6 +600,8 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
     /* Create a texture that will be used to hold all ASCII glyphs */
     GL_CHECK(glGenTextures(1, &tex));
     GL_CHECK(glBindTexture(GL_TEXTURE_2D, tex));
+    Debug2(L_OPENGL, "Try creating font atlas texture with w %d h %d (max %d)", w, h, max_atlas_width);
+
     GL_CHECK(glTexImage2D(
         GL_TEXTURE_2D,
         0,
@@ -659,7 +663,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
         FT_BitmapGlyph bGlyph = (FT_BitmapGlyph)ftGlyph;
 
         // pushing the glyphs to the texture
-        if (ox + bGlyph->bitmap.width + 1 >= MAX_ATLAS_WIDTH) {
+        if (ox + bGlyph->bitmap.width + 1 >= (unsigned int)max_atlas_width) {
             oy += rowh;
             rowh = 0;
             ox = 0;
