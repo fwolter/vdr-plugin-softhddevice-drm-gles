@@ -23,7 +23,7 @@
     /// vdr-plugin version number.
     /// Makefile extracts the version number for generating the file name
     /// for the distribution archive.
-static const char *const VERSION = "0.4.5";
+static const char *const VERSION = "0.4.6";
 
 #ifdef USE_GLES
 #include "openglosd.h"
