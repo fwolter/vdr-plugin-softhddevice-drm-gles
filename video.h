@@ -65,6 +65,7 @@ extern "C" {
 #include "softhddev.h"
 #include "glhelpers.h"
 #include "drm_buf.h"
+#include "threads.h"
 
 //----------------------------------------------------------------------------
 //	Defines
@@ -195,7 +196,7 @@ public:
     pthread_mutex_t PlaybackMutex;
     pthread_mutex_t VideoClockMutex;
 
-    pthread_t DecodeThread;		///< video decode thread
+    cDecodingThread *DecodeThread;
 
     pthread_t FilterThread;
     pthread_t GrabbingThread;
@@ -341,7 +342,6 @@ public:
     /// Display handler.
     void VideoThreadWakeup(int, int);
     void VideoThreadExit(void);
-    int VideoDecodeThreadRunning(void);
 
     void VideoInit(void);	///< Setup video module.
     void VideoExit(void);		///< Cleanup and exit video module.

@@ -31,6 +31,8 @@ extern "C" {
 #define VIDEO_BUFFER_SIZE (512 * 1024)	///< video PES buffer default size
 #define VIDEO_PACKET_MAX 192		///< max number of video packets
 
+class cVideoDecoder;
+
 class cVideoStream
 {
 private:

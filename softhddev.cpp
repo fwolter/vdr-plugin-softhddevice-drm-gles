@@ -568,7 +568,7 @@ void cVideoStream::ClearVideo(void)
 		while (StreamWait == 1) {
 			// don't wait, if no thread is running, which should set stream->wait = 2
 			// otherwise we run into an endless loop here
-			if (!Render->VideoDecodeThreadRunning())
+			if (!Render->DecodeThread->Active())
 				StreamWait = 2;
 			usleep(10000);
 		}

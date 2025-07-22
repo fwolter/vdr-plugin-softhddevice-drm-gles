@@ -594,7 +594,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
     /* Create a texture that will be used to hold all ASCII glyphs */
     GL_CHECK(glGenTextures(1, &tex));
     GL_CHECK(glBindTexture(GL_TEXTURE_2D, tex));
-    Debug2(L_OPENGL, "Try creating font atlas texture with w %d h %d (max %d)", w, h, max_atlas_width);
+    LOGDEBUG2(L_OPENGL, "Try creating font atlas texture with w %d h %d (max %d)", w, h, max_atlas_width);
 
     GL_CHECK(glTexImage2D(
         GL_TEXTURE_2D,
@@ -2038,7 +2038,7 @@ cOglThread::cOglThread(cCondWait *startWait, int maxCacheSize, cVideoRender *ren
     maxTextureSize = 0;
     for (int i = 0; i < OGL_MAX_OSDIMAGES; i++) {
         imageCache[i].used = false;
-        imageCache[i].texture = GL_NONE;        
+        imageCache[i].texture = GL_NONE;
         imageCache[i].width = 0;
         imageCache[i].height = 0;
     }
@@ -2755,7 +2755,6 @@ cOglOsd::~cOglOsd() {
     LOGDEBUG2(L_OSD, "Delete Osd %p", this);
     oglThread->DoCmd(new cOglCmdFill(bFb, clrTransparent));
 
-<<<<<<< HEAD
     SetActive(false); // OsdClose() in cOglCmdCopyBufferToOutputFb()
     oglThread->DoCmd(new cOglCmdCopyBufferToOutputFb(bFb, oFb, Left(), Top(), 0, Device, Render));
     oglThread->DoCmd(new cOglCmdDeleteFb(bFb));

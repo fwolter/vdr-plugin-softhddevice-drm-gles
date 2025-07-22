@@ -38,6 +38,7 @@ extern "C"
 
 #include <alsa/asoundlib.h>
 #include "ringbuffer.h"
+#include "threads.h"
 
 //----------------------------------------------------------------------------
 //	Defines
@@ -57,13 +58,11 @@ private:
 // variables
     cSoftHdDevice *Device;
 
+    cMutex AudioRbMutex;
+
     // thread
-    pthread_mutex_t AudioRbMutex;	///< audio condition mutex
+    cAudioHandlerThread *AudioThread;
     volatile char AudioRunning;	///< thread running / stopped
-    pthread_t AudioThread;		///< audio play thread
-    pthread_mutex_t AudioStartMutex;	///< audio condition mutex
-    pthread_cond_t AudioStartCond;	///< condition variable
-    char AudioThreadStop;		///< stop audio thread
 
     // common audio, alsa
     const int AudioBytesProSample = 2;	///< number of bytes per sample
@@ -171,6 +170,11 @@ public:
     void AudioExit(void);		///< cleanup and exit audio module
     void AudioPlay(void);		///< play audio
     void AudioPause(void);		///< pause audio
+    char AudioIsPaused(void) { return AudioPaused; };
+    char AudioIsRunning(void) { return AudioRunning; };
+    char AlssPlayerIsStopped(void) { return AlsaPlayerStop; };
+    void AudioSetRunning(volatile char running) { AudioRunning = running; };
+    void AlssPlayerSetStop(char stop) { AlsaPlayerStop = stop; };
 
     void AudioEnqueueSpdif(AVCodecContext *, const uint16_t *, int, AVFrame *);	///< buffer spdif audio samples
     int AudioSetup(AVCodecContext *, int , int , int);	///< setup audio (for passthrough only atm)

@@ -68,6 +68,7 @@ extern "C"
 #include "softhddev.h"
 
 #include "logger.h"
+#include "threads.h"
 
 //----------------------------------------------------------------------------
 //	Filter
@@ -700,14 +701,14 @@ int cSoftHdAudio::AlsaPlayer(void)
 
 		frames = snd_pcm_bytes_to_frames(AlsaPCMHandle, avail);
 
-		pthread_mutex_lock(&AudioRbMutex);
+		AudioRbMutex.Lock();
 		if (AlsaUseMmap) {
 			err = snd_pcm_mmap_writei(AlsaPCMHandle, p, frames);
 		} else {
 			err = snd_pcm_writei(AlsaPCMHandle, p, frames);
 		}
 		AudioRingBuffer->ReadAdvance(avail);
-		pthread_mutex_unlock(&AudioRbMutex);
+		AudioRbMutex.Unlock();
 		if (err != frames) {
 			if (err < 0) {
 				if (err == -EAGAIN) {
@@ -1128,108 +1129,6 @@ void cSoftHdAudio::AlsaExit(void)
 
 // --- ab hier weiter
 
-
-//----------------------------------------------------------------------------
-//	thread playback
-//----------------------------------------------------------------------------
-
-/**
-**	Audio play thread.
-**
-**	@param dummy	unused thread argument
-*/
-void *cSoftHdAudio::AudioPlayHandlerThread(void *dummy)
-{
-	for (;;) {
-		// check if we should stop the thread
-		if (AudioThreadStop) {
-			LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: play thread stopped");
-			return PTHREAD_CANCELED;
-		}
-
-		LOGDEBUG2(L_SOUND, "audio: wait on start condition");
-		if (!AudioPaused) {
-//			LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: => AlsaFlushBuffers");
-			AlsaFlushBuffers();
-			AudioResetCompressor();
-			AudioResetNormalizer();
-		}
-		AudioRunning = 0;
-		AlsaPlayerStop = 0;
-		pthread_mutex_lock(&AudioStartMutex);
-		LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: pthread_cond_wait");
-
-		do {
-			pthread_cond_wait(&AudioStartCond, &AudioStartMutex);
-		} while (!AudioRunning);
-
-		pthread_mutex_unlock(&AudioStartMutex);
-
-		LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: nach pthread_cond_wait ----> %dms start", (AudioUsedBytes() * 1000)
-			/ (!HwSampleRate + !HwChannels +
-			HwSampleRate * HwChannels * AudioBytesProSample));
-
-		do {
-			if (AudioThreadStop) {
-				LOGDEBUG2(L_SOUND, "audio: play thread stopped");
-				return PTHREAD_CANCELED;
-			}
-
-			if (AudioRingBuffer->UsedBytes()) {
-				// try to play some samples
-				AlsaPlayer();
-			} else {
-				LOGDEBUG2(L_SOUND, "AudioPlayHandlerThread: ring buffer is empty, HwSampleRate %d", HwSampleRate);
-				usleep(5000);
-			}
-
-			// FIXME: check AudioPaused ...Thread()
-			if (AudioPaused)
-				usleep(10000);
-
-			if (AlsaPlayerStop)
-				break;
-		} while (HwSampleRate);
-	}
-	return dummy;
-}
-
-/**
-**	Initialize audio thread.
-*/
-void cSoftHdAudio::AudioInitThread(void)
-{
-    AudioThreadStop = 0;
-    pthread_mutex_init(&AudioRbMutex, NULL);
-    pthread_mutex_init(&AudioStartMutex, NULL);
-    pthread_cond_init(&AudioStartCond, NULL);
-    pthread_create(&AudioThread, NULL, AudioPlayHandlerThread, NULL);
-    pthread_setname_np(AudioThread, "audio thread");
-}
-
-/**
-**	Cleanup audio thread.
-*/
-void cSoftHdAudio::AudioExitThread(void)
-{
-    void *retval;
-
-    LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
-
-    if (AudioThread) {
-	AudioThreadStop = 1;
-	AudioRunning = 1;		// wakeup thread, if needed
-	pthread_cond_signal(&AudioStartCond);
-	if (pthread_join(AudioThread, &retval) || retval != PTHREAD_CANCELED) {
-	    LOGERROR("audio: can't cancel play thread");
-	}
-	pthread_cond_destroy(&AudioStartCond);
-	pthread_mutex_destroy(&AudioRbMutex);
-	pthread_mutex_destroy(&AudioStartMutex);
-	AudioThread = 0;
-    }
-}
-
 //----------------------------------------------------------------------------
 //----------------------------------------------------------------------------
 
@@ -1261,13 +1160,13 @@ void cSoftHdAudio::AudioEnqueue(AVFrame *frame)
 
 	AudioReorderAudioFrame(buffer, count, frame->ch_layout.nb_channels);
 
-	pthread_mutex_lock(&AudioRbMutex);
+	AudioRbMutex.Lock();
 	n = AudioRingBuffer->Write(buffer, count);
 	if (n != (size_t) count)
 		LOGERROR("audio: AudioEnqueue: can't place %d samples in ring buffer", count);
 	PTS = frame->pts + (frame->nb_samples * timebase->den /
 		timebase->num / frame->sample_rate);
-	pthread_mutex_unlock(&AudioRbMutex);
+	AudioRbMutex.Unlock();
 
 	if (!AudioRunning && !AudioPaused) {		// check, if we can start the thread
 		int skip;
@@ -1299,7 +1198,7 @@ void cSoftHdAudio::AudioEnqueue(AVFrame *frame)
 				n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 				AudioVideoIsReady);
 			AudioRunning = 1;
-			pthread_cond_signal(&AudioStartCond);
+			AudioThread->SendStartSignal();
 		}
 	}
 	av_frame_free(&frame);
@@ -1327,14 +1226,14 @@ void cSoftHdAudio::AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *sample
 
 	buffer = samples;
 
-	pthread_mutex_lock(&AudioRbMutex);
+	AudioRbMutex.Lock();
 	n = AudioRingBuffer->Write(buffer, count);
 	if (n != (size_t) count)
 		LOGERROR("audio: AudioEnqueueSpdif: can't place %d samples in ring buffer", count);
 
 	PTS = frame->pts + (frame->nb_samples * timebase->den /
 		timebase->num / frame->sample_rate);
-	pthread_mutex_unlock(&AudioRbMutex);
+	AudioRbMutex.Unlock();
 
 	if (!AudioRunning && !AudioPaused) {		// check, if we can start the thread
 		int skip;
@@ -1366,7 +1265,7 @@ void cSoftHdAudio::AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *sample
 				n * 1000 / HwSampleRate / HwChannels / AudioBytesProSample,
 				AudioVideoIsReady);
 			AudioRunning = 1;
-			pthread_cond_signal(&AudioStartCond);
+			AudioThread->SendStartSignal();
 		}
 	}
 	av_frame_unref(frame);
@@ -1526,7 +1425,7 @@ int cSoftHdAudio::AudioVideoReady(int64_t video_pts)
 	// enough audio buffered
 	if (AudioStartThreshold < used) {
 		AudioRunning = 1;
-		pthread_cond_signal(&AudioStartCond);
+		AudioThread->SendStartSignal();
 	}
 	AudioVideoIsReady = 1;
 	return 0;
@@ -1646,7 +1545,7 @@ int64_t cSoftHdAudio::AudioGetClock(void)
 	int64_t pts;
 	int64_t ret;
 
-	pthread_mutex_lock(&AudioRbMutex);
+	AudioRbMutex.Lock();
 	// delay in frames in alsa + kernel buffers
 	if (snd_pcm_delay(AlsaPCMHandle, &delay) < 0) {
 		LOGDEBUG2(L_SOUND, "AudioGetClock: no hw delay");
@@ -1664,7 +1563,7 @@ int64_t cSoftHdAudio::AudioGetClock(void)
 			HwSampleRate / HwChannels / AudioBytesProSample;
 
 	ret = PTS * 1000 * av_q2d(*timebase) - pts;
-	pthread_mutex_unlock(&AudioRbMutex);
+	AudioRbMutex.Unlock();
 
 	return ret;
 }
@@ -1716,7 +1615,7 @@ void cSoftHdAudio::AudioPlay(void)
 	} else {
 		AudioPaused = 0;
 		if (AudioStartThreshold < AudioRingBuffer->UsedBytes()) {
-			pthread_cond_signal(&AudioStartCond);
+			AudioThread->SendStartSignal();
 		}
 	}
 }
@@ -1909,7 +1808,7 @@ void cSoftHdAudio::AudioInit(int passthrough)
 	AudioPassthrough = passthrough;
 	AudioRingInit();
 	AlsaInit();
-	AudioInitThread();
+	AudioThread = new cAudioHandlerThread(this);
 }
 
 /**
@@ -1919,7 +1818,9 @@ void cSoftHdAudio::AudioExit(void)
 {
 	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 
-	AudioExitThread();
+	AudioThread->Stop();
+	delete AudioThread;
+
 	AlsaExit();
 	AudioRingExit();
 	AudioRunning = 0;

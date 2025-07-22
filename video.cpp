@@ -67,6 +67,7 @@ extern "C" {
 #include "audio.h"
 #include "drm.h"
 //#include "openglosd.h"
+#include "threads.h"
 
 //----------------------------------------------------------------------------
 //	Helper functions
@@ -266,12 +267,12 @@ void cVideoRender::ReadHWPlatform(void)
 	}
 
 	read_ptr = txt_buf;
-	Debug2(L_DRM, "ReadHWPlatform: found \"%s\", set hardware quirks", _txt_buf);
+	LOGDEBUG2(L_DRM, "ReadHWPlatform: found \"%s\", set hardware quirks", _txt_buf);
 
 	while(read_size) {
 		if (strstr(read_ptr, "bcm2837")) {
-			Debug2(L_DRM, "ReadHWPlatform: bcm2837 (Raspberry Pi 2/3) found");
-			render->HardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
+			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2837 (Raspberry Pi 2/3) found");
+			HardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "bcm2711")) {
@@ -2153,35 +2154,6 @@ void cVideoRender::VideoOsdDrawARGB(int xi, int yi,
 //	Thread
 //----------------------------------------------------------------------------
 
-//TODO
-///
-///	Video render thread.
-///
-void *cVideoRender::DecodeHandlerThread(void *arg)
-{
-//	cVideoRender *render = (cVideoRender *)arg;
-
-	LOGDEBUG("video: decoding thread started");
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-
-	for (;;) {
-		pthread_testcancel();
-
-		// manage fill frame output ring buffer
-		if (Device->VideoStream->DecodeInput()) {
-			usleep(10000);
-		}
-	}
-	LOGDEBUG("video: decoding thread stopped");
-	pthread_exit((void *)pthread_self());
-}
-
-int cVideoRender::VideoDecodeThreadRunning(void)
-{
-	return DecodeThread;
-}
-
 ///
 ///	Exit and cleanup video threads.
 ///
@@ -2191,14 +2163,9 @@ void cVideoRender::VideoThreadExit(void)
 
 	LOGDEBUG("VideoThreadExit: cancel decoding and display thread");
 
-	if (DecodeThread) {
+	if (DecodeThread->Active()) {
 		LOGDEBUG("VideoThreadExit: cancel decode thread");
-		// FIXME: can't cancel locked
-		if (pthread_cancel(DecodeThread))
-			LOGERROR("VideoThreadExit: can't cancel decoding thread");
-		if (pthread_join(DecodeThread, &retval) || retval != PTHREAD_CANCELED)
-			LOGERROR("VideoThreadExit: can't cancel decoding thread");
-		DecodeThread = 0;
+		DecodeThread->Stop();
 	}
 
 	if (DisplayThread) {
@@ -2220,13 +2187,9 @@ void cVideoRender::VideoThreadWakeup(int decoder, int display)
 {
 	LOGDEBUG("VideoThreadWakeup: VideoThreadWakeup");
 
-	if (decoder && !DecodeThread) {
+	if (decoder && !DecodeThread->Active()) {
 		LOGDEBUG("DisplayThreadWakeup: wakeup decoding thread");
-		pthread_cond_init(&WaitCleanCondition,NULL);
-		pthread_mutex_init(&WaitCleanMutex, NULL);
-
-		pthread_create(&DecodeThread, NULL, DecodeHandlerThread, this);
-		pthread_setname_np(DecodeThread, "decoding thread");
+		DecodeThread->Start();
 	}
 
 	if (display && !DisplayThread) {
@@ -2252,6 +2215,7 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 {
 	Device = device;
 	Audio = Device->Audio;
+	DecodeThread = new cDecodingThread(Device);
 
 	atomic_set(&FramesFilled, 0);
 	atomic_set(&FramesDeintFilled, 0);
@@ -2272,6 +2236,7 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 ///
 cVideoRender::~cVideoRender(void)
 {
+	delete DecodeThread;
 //	if (!pthread_equal(pthread_self(), DecodeThread)) {
 //		LOGDEBUG("video: should only be called from inside the thread");
 //	}
