@@ -285,9 +285,28 @@ void ReadHWPlatform(VideoRender * render)
 	}
 
 	read_ptr = txt_buf;
+	// be aware: device tree string can contain \x0 bytes, so every C-string function
+	// thinks, we already reached the string's terminating null bytes
+	// so copy the string into a temporary string without the "\0"
+	char *_txt_buf = (char *) calloc(bufsize, sizeof(char));
+	char *_read_ptr = _txt_buf;
+	for (size_t i = 0; i < bufsize; i++) {
+		if (memcmp(read_ptr, "\0", sizeof(char))) {
+			memcpy(_read_ptr, read_ptr, sizeof(char));
+			_read_ptr++;
+		}
+		read_ptr++;
+	}
+
+	read_ptr = txt_buf;
+	Debug2(L_DRM, "ReadHWPlatform: found \"%s\", set hardware quirks", _txt_buf);
 
 	while(read_size) {
-
+		if (strstr(read_ptr, "bcm2837")) {
+			Debug2(L_DRM, "ReadHWPlatform: bcm2837 (Raspberry Pi 2/3) found");
+			render->HardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
+			break;
+		}
 		if (strstr(read_ptr, "bcm2711")) {
 			Debug2(L_DRM, "ReadHWPlatform: bcm2711 (Raspberry Pi 4 Model B, Compute Module 4, Pi 400) found");
 			render->HardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
