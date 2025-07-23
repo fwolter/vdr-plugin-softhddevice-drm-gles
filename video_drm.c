@@ -1310,7 +1310,7 @@ static void *GrabHandlerThread(void *arg)
 {
 	VideoRender * render = (VideoRender *)arg;
 
-	Debug("video: grabbing thread started");
+	Debug2(L_GRAB, "video: grabbing thread started");
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
@@ -1340,7 +1340,7 @@ static void *GrabHandlerThread(void *arg)
 		free(osdbuf);
 	}
 
-	Debug("video: grabbing thread ended");
+	Debug2(L_GRAB, "video: grabbing thread ended");
 	pthread_exit((void *)pthread_self());
 }
 
