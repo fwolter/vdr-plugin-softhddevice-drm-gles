@@ -2516,6 +2516,10 @@ void cOglPixmap::DrawText(const cPoint &Point, const char *s, tColor ColorFg, tC
     int cw = Width ? Width : w;
     int ch = Height ? Height : h;
 
+    // workaround for messages in SkinElchiHD
+    if (Width > ViewPort().Width() && !x)
+        x = ViewPort().Width() - w;
+
     cRect r(x, y, cw, ch);
 
     if (ColorBg != clrTransparent)
@@ -2527,15 +2531,15 @@ void cOglPixmap::DrawText(const cPoint &Point, const char *s, tColor ColorFg, tC
             if ((Alignment & taLeft) != 0) {
                 if ((Alignment & taBorder) != 0)
                     x += std::max(h / TEXT_ALIGN_BORDER, 1);
-                } else if ((Alignment & taRight) != 0) {
-                    if (w < Width)
-                        x += Width - w;
-                    if ((Alignment & taBorder) != 0)
-                        x -= std::max(h / TEXT_ALIGN_BORDER, 1);
-                } else { // taCentered
-                    if (w < Width)
-                        x += (Width - w) / 2;
-                }
+            } else if ((Alignment & taRight) != 0) {
+                if (w < Width)
+                    x += Width - w;
+                if ((Alignment & taBorder) != 0)
+                    x -= std::max(h / TEXT_ALIGN_BORDER, 1);
+            } else { // taCentered
+                if (w < Width)
+                    x += (Width - w) / 2;
+            }
         }
 
         if (Height) {
@@ -2734,7 +2738,7 @@ cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglT
     GetScreenSize(&osdWidth, &osdHeight, &pixel_aspect);
     Debug2(L_OSD, "New Osd %p osdLeft %d osdTop %d screenWidth %d screenHeight %d", this, Left, Top, osdWidth, osdHeight);
 
-    cSize maxPixmapSize(oglThread->MaxTextureSize(), oglThread->MaxTextureSize());
+    maxPixmapSize.Set(oglThread->MaxTextureSize(), oglThread->MaxTextureSize());
 
     if (!oFb) {
         oFb = new cOglOutputFb(osdWidth, osdHeight);
