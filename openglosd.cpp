@@ -2743,19 +2743,16 @@ cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglT
 }
 
 cOglOsd::~cOglOsd() {
-    if (!oglThread->Active())
+    if (!oglThread->Active() || !Active() || !bFb) {
+        delete dirtyViewport;
         return;
-
-    oglThread->DoCmd(new cOglCmdBufferFill(oFb, clrTransparent));
-
-    if (!bFb)
-        return;
+    }
 
     Debug2(L_OSD, "Delete Osd %p", this);
     oglThread->DoCmd(new cOglCmdFill(bFb, clrTransparent));
 
+    SetActive(false); // OsdClose() in cOglCmdCopyBufferToOutputFb()
     oglThread->DoCmd(new cOglCmdCopyBufferToOutputFb(bFb, oFb, Left(), Top(), 0));
-    SetActive(false); // OsdClose() in SetActive()
     oglThread->DoCmd(new cOglCmdDeleteFb(bFb));
     delete dirtyViewport;
 }
