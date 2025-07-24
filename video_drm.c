@@ -2093,6 +2093,8 @@ void VideoOsdClear(VideoRender * render)
 	render->OsdShown = 0;
 }
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 ///
 ///	Draw an OSD ARGB image.
 ///
@@ -2105,15 +2107,17 @@ void VideoOsdClear(VideoRender * render)
 ///	@param x	x-coordinate on screen of argb image
 ///	@param y	y-coordinate on screen of argb image
 ///
-void VideoOsdDrawARGB(VideoRender * render, __attribute__ ((unused)) int xi,
-		__attribute__ ((unused)) int yi, __attribute__ ((unused)) int width,
-		int height, int pitch, const uint8_t * argb, int x, int y)
+void VideoOsdDrawARGB(VideoRender * render, int xi, int yi,
+		int width, int height, int pitch,
+		const uint8_t * argb, int x, int y)
 {
 #ifdef USE_GLES
 	if (DisableOglOsd) {
+		Debug2(L_OSD, "VideoOsdDrawARGB width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d",
+		       width, height, pitch, argb, x, y, render->buf_osd->pitch[0], xi, yi);
 		for (int i = 0; i < height; ++i) {
 			memcpy(render->buf_osd->plane[0] + x * 4 + (i + y) * render->buf_osd->pitch[0],
-				argb + i * pitch, (size_t)pitch);
+				argb + i * pitch, MIN((size_t)pitch, render->buf_osd->pitch[0]));
 		}
 	} else {
 		struct drm_buf *buf;
