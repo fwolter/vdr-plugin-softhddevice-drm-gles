@@ -406,8 +406,7 @@ bool cSoftOsdProvider::StartOpenGlThread(void) {
     }
     cCondWait wait;
     LOGDEBUG2(L_OPENGL, "Trying to start OpenGL worker thread");
-// TODO render
-    oglThread.reset(new cOglThread(&wait, Device->ConfigMaxSizeGPUImageCache, render));
+    oglThread.reset(new cOglThread(&wait, Device->ConfigMaxSizeGPUImageCache, Device));
     wait.Wait();
 
     if (oglThread->Active()) {

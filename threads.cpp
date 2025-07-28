@@ -79,6 +79,51 @@ void cDecodingThread::Stop(void)
 }
 
 ///
+///	Display thread
+///
+cDisplayThread::cDisplayThread(cVideoRender *render) : cThread("display thread")
+{
+    Render = render;
+    Start();
+}
+
+cDisplayThread::~cDisplayThread(void)
+{
+}
+
+void cDisplayThread::Action(void)
+{
+    LOGDEBUG("video: display thread started");
+    while(Running())
+	int ret = Render->Frame2Display();
+
+	if (!ret) {
+	    if (Render->DrmHandleEvent() != 0)
+		LOGERROR("DisplayHandlerThread: drmHandleEvent failed!");
+	}
+
+	if (Render->ShouldClose() || Render->ShouldFlush())
+	    Render->CleanDisplayThread();
+
+    }
+    LOGDEBUG("video: display thread stopped");
+}
+
+	// manage fill frame output ring buffer
+//	if (Device->VideoStream->DecodeInput()) {
+//	    usleep(10000);
+	}
+    }
+    LOGDEBUG("video: display thread stopped");
+}
+
+void cDisplayThread::Stop(void)
+{
+    LOGDEBUG("video: Stopping display thread");
+    Cancel(2);
+}
+
+///
 ///	Audio handler thread
 ///
 cAudioHandlerThread::cAudioHandlerThread(cSoftHdAudio *audio) : cThread("audio handler thread")
@@ -143,4 +188,3 @@ void cAudioHandlerThread::SendStartSignal(void)
 {
     StartWait.Signal();
 }
-

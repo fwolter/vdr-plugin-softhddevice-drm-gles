@@ -2028,12 +2028,12 @@ bool cOglCmdDropImage::Execute(void) {
 /******************************************************************************
 * cOglThread
 ******************************************************************************/
-cOglThread::cOglThread(cCondWait *startWait, int maxCacheSize, cVideoRender *render) : cThread("oglThread") {
+cOglThread::cOglThread(cCondWait *startWait, int maxCacheSize, cSoftHdDevice *device) : cThread("oglThread") {
     stalled = false;
     memCached = 0;
     this->maxCacheSize = maxCacheSize * 1024 * 1024;
     this->startWait = startWait;
-    this->Render = render;
+    this->Render = device->Render;
     wait = new cCondWait();
     maxTextureSize = 0;
     for (int i = 0; i < OGL_MAX_OSDIMAGES; i++) {

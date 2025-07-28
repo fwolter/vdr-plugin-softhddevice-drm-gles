@@ -553,7 +553,7 @@ private:
 protected:
     virtual void Action(void);
 public:
-    cOglThread(cCondWait *startWait, int maxCacheSize, cVideoRender *render);
+    cOglThread(cCondWait *startWait, int maxCacheSize, cSoftHdDevice *device);
     virtual ~cOglThread();
     void Stop(void);
     void DoCmd(cOglCmd* cmd);

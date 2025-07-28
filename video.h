@@ -201,7 +201,7 @@ public:
     pthread_t FilterThread;
     pthread_t GrabbingThread;
 
-    pthread_t DisplayThread;
+    cDisplayThread *DisplayThread;
     pthread_mutex_t DisplayQueue;
 
     AVFrame  *FramesDeintRb[VIDEO_SURFACES_MAX];
@@ -386,6 +386,9 @@ public:
     int VideoFilterInit(const AVCodecContext *, AVFrame *);
 
     void StartVideo(void);
+    int ShouldClose(void) { return Closing; };
+    int ShouldFlush(void) { return Flushing; };
+    int DrmHandleEvent(void);
 };
 
 /// @}

@@ -25,6 +25,23 @@ protected:
 };
 
 ///
+///	Display thread
+///
+class cVideoRender;
+
+class cDisplayThread : public cThread
+{
+private:
+    cVideoRender *Render;
+public:
+    cDisplayThread(cVideoRender *);
+    virtual ~cDisplayThread(void);
+    void Stop(void);
+protected:
+    virtual void Action(void);
+};
+
+///
 ///	Audio handler thread
 ///
 

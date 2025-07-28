@@ -2011,34 +2011,9 @@ page_flip:
 	return 0;
 }
 
-
-//TODO
-///
-///	Display a video frame.
-///
-void *cVideoRender::DisplayHandlerThread(void * arg)
+int cVideoRender::DrmHandleEvent(void)
 {
-//	cVideoRender *render = (cVideoRender *)arg;
-
-	LOGDEBUG("video: display thread started");
-	pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL);
-	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-
-	while (1) {
-		pthread_testcancel();
-
-		int ret = Frame2Display();
-
-		if (!ret) {
-			if (drmHandleEvent(fd_drm, &ev) != 0)
-				LOGERROR("DisplayHandlerThread: drmHandleEvent failed!");
-		}
-
-		if (Closing || Flushing)
-			CleanDisplayThread();
-	}
-	LOGDEBUG("video: display thread stopped");
-	pthread_exit((void *)pthread_self());
+    return drmHandleEvent(fd_drm, &ev);
 }
 
 //----------------------------------------------------------------------------
@@ -2168,13 +2143,9 @@ void cVideoRender::VideoThreadExit(void)
 		DecodeThread->Stop();
 	}
 
-	if (DisplayThread) {
+	if (DisplayThread->Active()) {
 		LOGDEBUG("VideoThreadExit: cancel display thread");
-		if (pthread_cancel(DisplayThread))
-			LOGERROR("VideoThreadExit: can't cancel display thread");
-		if (pthread_join(DisplayThread, &retval) || retval != PTHREAD_CANCELED)
-			LOGERROR("VideoThreadExit: can't cancel display thread");
-		DisplayThread = 0;
+		DisplayThread->Stop();
 	}
 }
 
@@ -2192,10 +2163,9 @@ void cVideoRender::VideoThreadWakeup(int decoder, int display)
 		DecodeThread->Start();
 	}
 
-	if (display && !DisplayThread) {
+	if (display && !DisplayThread->Active()) {
 		LOGDEBUG("VideoThreadWakeup: wakeup display thread");
-		pthread_create(&DisplayThread, NULL, DisplayHandlerThread, this);
-		pthread_setname_np(DisplayThread, "display thread");
+		DisplayThread->Start();
 	}
 }
 
@@ -2820,7 +2790,7 @@ void cVideoRender::StartVideo(void)
 void cVideoRender::VideoSetClosing(int black)
 {
 	LOGDEBUG("VideoSetClosing: StartCounter %d", StartCounter);
-	if (!DisplayThread)
+	if (!DisplayThread->Active())
 		return;
 
 	pthread_mutex_lock(&WaitCleanMutex);
