@@ -2253,7 +2253,7 @@ void cOglThread::Action(void) {
     LOGDEBUG2(L_OPENGL, "OpenGL worker thread ended");
 }
 
-void cOglThreads::eglAcquireContext(void)
+void cOglThread::eglAcquireContext(void)
 {
     EGL_CHECK(eglMakeCurrent(Render->eglDisplay, Render->eglSurface, Render->eglSurface, Render->eglContext));
 }

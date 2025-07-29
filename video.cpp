@@ -1066,11 +1066,6 @@ struct drm_buf *cVideoRender::drm_get_buf_from_bo(struct gbm_bo *bo)
 }
 #endif
 
-void cVideoRender::ThreadExitHandler( __attribute__ ((unused)) void * arg)
-{
-	FilterThread = 0;
-}
-
 static const struct format_info format_info_array[] = {
 	{ DRM_FORMAT_NV12, "NV12", 2, { { 8, 1, 1 }, { 16, 2, 2 } }, },
 	{ DRM_FORMAT_YUV420, "YU12", 3, { { 8, 1, 1 }, { 8, 2, 2 }, {8, 2, 2 } }, },
@@ -1405,25 +1400,17 @@ void cVideoRender::CleanDisplayThread(void)
 
 	pthread_mutex_lock(&WaitCleanMutex);
 	// first wait for FilterThread to be closed
-	while (FilterThread) {
-		int timeout = 20;
-		usleep(1000);
-		if (!timeout--) {
-			LOGERROR("CleanDisplayThread: Wait for filter thread ending -- TIMEOUT");
-			break;
-		}
+	if (FilterThread->Active()) {
+		LOGDEBUG("CleanDisplayThread: cancel filter thread");
+		FilterThread->Stop();
 	}
 
-	pthread_mutex_lock(&DisplayQueue);
-dequeue:
-	if (atomic_read(&FramesFilled)) {
-		frame = FramesRb[FramesRead];
-		FramesRead = (FramesRead + 1) % VIDEO_SURFACES_MAX;
-		atomic_dec(&FramesFilled);
+	FramesRbLock();
+	while (atomic_read(&FramesFilled)) {
+		frame = GetFrame();
 		av_frame_free(&frame);
-		goto dequeue;
 	}
-	pthread_mutex_unlock(&DisplayQueue);
+	FramesRbUnlock();
 
 	if (Closing && lastframe->frame) {
 		av_frame_free(&lastframe->frame);
@@ -1447,7 +1434,6 @@ dequeue:
 		FlushLast = 1;
 	Flushing = 0;
 	Closing = 0;
-	FilterClosing = 0;
 	FilterDeintDisabled = ConfigFilterDeintDisabled;
 	pthread_mutex_unlock(&WaitCleanMutex);
 
@@ -1684,19 +1670,20 @@ audioclock:
 	int diff = video_pts - audio_pts - Device->GetVideoAudioDelay();
 
 	if (abs(diff) > 5000) {	// more than 5s
-		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
-			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
-			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
-
+		LOGDEBUG2(L_AV_SYNC, "More then 5s");
+//		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+//			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
+//			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+//			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 	}
 
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
-		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-			FramesDropped, FramesDuped,
-			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
-			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
-			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
+		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d)", FramesDropped, FramesDuped);
+//		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+//			FramesDropped, FramesDuped,
+//			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
+//			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+//			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 
 		if (!StartCounter)
 			StartCounter++;
@@ -1706,11 +1693,12 @@ audioclock:
 	}
 
 	if (diff > 35 && !(abs(diff) > 5000)) {	// audio is more than 35ms behind video, duplicate video frame
-		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-			FramesDropped, FramesDuped,
-			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
-			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
-			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
+		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d)", FramesDropped, FramesDuped);
+//		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+//			FramesDropped, FramesDuped,
+//			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
+//			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+//			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 
 		FramesDuped++;
 		usleep(20000);
@@ -1731,10 +1719,7 @@ int cVideoRender::VideoGetFrame(AVFrame **frame)
 {
 	AVFrame *pframe = NULL;
 
-	pframe = FramesRb[FramesRead];
-	FramesRead = (FramesRead + 1) % VIDEO_SURFACES_MAX;
-	atomic_dec(&FramesFilled);
-
+	pframe = GetFrame();
 	*frame = pframe;
 
 	if (pframe->pts == AV_NOPTS_VALUE)
@@ -2134,8 +2119,6 @@ void cVideoRender::VideoOsdDrawARGB(int xi, int yi,
 ///
 void cVideoRender::VideoThreadExit(void)
 {
-	void *retval;
-
 	LOGDEBUG("VideoThreadExit: cancel decoding and display thread");
 
 	if (DecodeThread->Active()) {
@@ -2186,13 +2169,13 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 	Device = device;
 	Audio = Device->Audio;
 	DecodeThread = new cDecodingThread(Device);
+	DisplayThread = new cDisplayThread(this);
+	FilterThread = new cFilterThread(this);
 
 	atomic_set(&FramesFilled, 0);
-	atomic_set(&FramesDeintFilled, 0);
 	Closing = 0;
 	Flushing = 0;
 	FlushLast = 0;
-	FilterClosing = 0;
 	FilterDeintDisabled = ConfigFilterDeintDisabled;
 	enqueue_buffer = 0;
 	lastframe = (struct lastFrame *)calloc(1, sizeof(struct lastFrame));
@@ -2206,6 +2189,8 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 ///
 cVideoRender::~cVideoRender(void)
 {
+	delete FilterThread;
+	delete DispayThread;
 	delete DecodeThread;
 //	if (!pthread_equal(pthread_self(), DecodeThread)) {
 //		LOGDEBUG("video: should only be called from inside the thread");
@@ -2315,306 +2300,14 @@ get_buffer:
 		return;
 	}
 
-	pthread_mutex_lock(&DisplayQueue);
-	FramesRb[FramesWrite] = frame;
-	FramesWrite = (FramesWrite + 1) % VIDEO_SURFACES_MAX;
-	atomic_inc(&FramesFilled);
-	pthread_mutex_unlock(&DisplayQueue);
+	FramesRbLock();
+	PushFrame(frame);
+	FramesRbUnlock();
 
 	if (!(ifd->flags & FRAME_FLAG_TRICKSPEED))
 		enqueue_buffer = (enqueue_buffer + 1) % (VIDEO_SURFACES_MAX + 2);
 
 	av_frame_free(&inframe);
-}
-
-//TODO
-///
-//	Filter thread.
-//
-void *cVideoRender::FilterHandlerThread(void * arg)
-{
-//	cVideoRender *render = (cVideoRender *)arg;
-
-	AVFrame *frame = 0;
-	int ret = 0;
-
-	LOGDEBUG("video: video filter thread started");
-
-	while (1) {
-		while (!atomic_read(&FramesDeintFilled) && !FilterClosing) {
-			usleep(10000);
-		}
-getinframe:
-		if (atomic_read(&FramesDeintFilled)) {
-			frame = FramesDeintRb[FramesDeintRead];
-			FramesDeintRead = (FramesDeintRead + 1) % VIDEO_SURFACES_MAX;
-			atomic_dec(&FramesDeintFilled);
-			int interlaced;
-#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
-			interlaced = frame->interlaced_frame;
-#else
-			interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
-#endif
-			if (interlaced) {
-				Filter_Frames += 2;
-			} else {
-				Filter_Frames++;
-			}
-		}
-		if (FilterClosing) {
-			if (frame) {
-				av_frame_free(&frame);
-			}
-			if (atomic_read(&FramesDeintFilled)) {
-				goto getinframe;
-			}
-			frame = NULL;
-		}
-
-		if (av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0) {
-			LOGWARNING("FilterHandlerThread: can't add_frame.");
-		} else {
-			av_frame_free(&frame);
-		}
-
-		while (1) {
-			AVFrame *filt_frame = av_frame_alloc();
-			ret = av_buffersink_get_frame(buffersink_ctx, filt_frame);
-
-			if (ret == AVERROR(EAGAIN)) {
-				av_frame_free(&filt_frame);
-				break;
-			}
-			if (ret == AVERROR_EOF) {
-				av_frame_free(&filt_frame);
-				goto closing;
-			}
-			if (ret < 0) {
-				LOGERROR("FilterHandlerThread: can't get filtered frame: %s",
-					av_err2str(ret));
-				av_frame_free(&filt_frame);
-				break;
-			}
-fillframe:
-			if (FilterClosing) {
-				av_frame_free(&filt_frame);
-				break;
-			}
-
-			FrameData *fd;
-			if (!filt_frame->opaque_ref) {
-				filt_frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
-				if (!filt_frame->opaque_ref)
-					LOGFATAL("FilterHandlerThread: cannot allocate private frame data");
-			}
-			fd = (FrameData *)filt_frame->opaque_ref->data;
-			// set trickspeed flag of the filtered frame (scale filter and AV_PIX_FMT_YUV420P)
-			if (Filter_Trick)
-				fd->flags |= FRAME_FLAG_TRICKSPEED;
-			if (Filter_Still) {
-				fd->flags |= FRAME_FLAG_STILLPICTURE;
-				filt_frame->pts = AV_NOPTS_VALUE;
-			}
-
-			pthread_mutex_lock(&DisplayQueue);
-			if (atomic_read(&FramesFilled) < VIDEO_SURFACES_MAX) {
-				if (filt_frame->format == AV_PIX_FMT_NV12) {
-					// scale filter or sw deinterlacer, no prime data, always returns NV12
-					// -> go through EnqueueFB
-					if (Filter_Bug)
-						filt_frame->pts = filt_frame->pts / 2;	// ffmpeg bug
-					Filter_Frames--;
-					pthread_mutex_unlock(&DisplayQueue);
-					EnqueueFB(filt_frame);
-				} else {
-					// hw deinterlacers, we received prime data
-					// -> put the frame into render Rb
-					FramesRb[FramesWrite] = filt_frame;
-					FramesWrite = (FramesWrite + 1) % VIDEO_SURFACES_MAX;
-					atomic_inc(&FramesFilled);
-					pthread_mutex_unlock(&DisplayQueue);
-					Filter_Frames--;
-				}
-			} else {
-				pthread_mutex_unlock(&DisplayQueue);
-				usleep(5000);
-				goto fillframe;
-			}
-		}
-	}
-
-closing:
-	avfilter_graph_free(&filter_graph);
-	Filter_Frames = 0;
-	Filter_Trick = 0;
-	Filter_Still = 0;
-	pthread_cleanup_push(ThreadExitHandler, NULL);
-	pthread_cleanup_pop(1);
-	LOGDEBUG("video: video filter thread stopped");
-	pthread_exit((void *)pthread_self());
-}
-
-///
-//	Filter init.
-//
-//	@retval 0	filter initialised
-//	@retval	-1	filter initialise failed
-//
-int cVideoRender::VideoFilterInit(const AVCodecContext * video_ctx,
-		AVFrame * frame)
-{
-	int ret;
-	char args[512];
-	const char *filter_descr = NULL;
-	filter_graph = avfilter_graph_alloc();
-	if (!filter_graph) {
-		LOGERROR("VideoFilterInit: Cannot alloc filter graph");
-		return -1;
-	}
-
-	const AVFilter *buffersrc  = avfilter_get_by_name("buffer");
-	const AVFilter *buffersink = avfilter_get_by_name("buffersink");
-	Filter_Bug = 0;
-
-	int interlaced;
-#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
-	interlaced = frame->interlaced_frame;
-#else
-	interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
-#endif
-
-	if (video_ctx->framerate.num > 0) {
-		if (video_ctx->framerate.num / video_ctx->framerate.den > 30)
-			interlaced = 0;
-		else
-			interlaced = 1;
-	}
-
-	if (video_ctx->codec_id == AV_CODEC_ID_HEVC)
-		interlaced = 0;
-
-	if (FilterDeintDisabled) {
-		if (interlaced)
-			LOGDEBUG2(L_CODEC, "VideoFilterInit: Deinterlacer wanted, but disabled in setup!");
-		interlaced = 0;
-	}
-
-	FrameData *fd;
-	if (!frame->opaque_ref) {
-		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
-		if (!frame->opaque_ref)
-			LOGFATAL("FilterHandlreThread: cannot allocate private frame data");
-	}
-	fd = (FrameData *)frame->opaque_ref->data;
-
-	// interlaced and non-trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) -> hardware deinterlacer
-	// interlaced and non-trickspeed AV_PIX_FMT_YUV420P (software decoded) -> software deinterlacer
-	// progressive and trickspeed AV_PIX_FMT_YUV420P (software decoded) -> scale filter (for NV12 output)
-	// progressive and trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) doesn't get to the FilterHandlerThread
-	Filter_Trick = 0;
-	Filter_Still = 0;
-	if (interlaced && !(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE)) {
-		if (frame->format == AV_PIX_FMT_DRM_PRIME) {
-			filter_descr = "deinterlace_v4l2m2m";
-		} else if (frame->format == AV_PIX_FMT_YUV420P) {
-			filter_descr = "bwdif=1:-1:0";
-			Filter_Bug = 1;
-		}
-	} else if (frame->format == AV_PIX_FMT_YUV420P) {
-		filter_descr = "scale";
-		if (fd->flags & FRAME_FLAG_TRICKSPEED)
-			Filter_Trick = 1;
-		if (fd->flags & FRAME_FLAG_STILLPICTURE)
-			Filter_Still = 1;
-	}
-#if LIBAVFILTER_VERSION_INT < AV_VERSION_INT(7,16,100)
-	avfilter_register_all();
-#endif
-
-	snprintf(args, sizeof(args),
-		"video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
-		video_ctx->width, video_ctx->height, frame->format,
-		video_ctx->pkt_timebase.num ? video_ctx->pkt_timebase.num : 1,
-		video_ctx->pkt_timebase.num ? video_ctx->pkt_timebase.den : 1,
-		video_ctx->sample_aspect_ratio.num != 0 ? video_ctx->sample_aspect_ratio.num : 1,
-		video_ctx->sample_aspect_ratio.num != 0 ? video_ctx->sample_aspect_ratio.den : 1);
-
-	LOGDEBUG2(L_CODEC, "VideoFilterInit: filter=\"%s\" args=\"%s\"",
-		filter_descr, args);
-
-	ret = avfilter_graph_create_filter(&buffersrc_ctx, buffersrc, "in",
-		args, NULL, filter_graph);
-	if (ret < 0) {
-		LOGERROR("VideoFilterInit: Cannot create buffer source (%d)", ret);
-		avfilter_graph_free(&filter_graph);
-		return -1;
-	}
-
-	AVBufferSrcParameters *par = av_buffersrc_parameters_alloc();
-	memset(par, 0, sizeof(*par));
-	par->format = AV_PIX_FMT_NONE;
-	par->hw_frames_ctx = frame->hw_frames_ctx;
-	ret = av_buffersrc_parameters_set(buffersrc_ctx, par);
-	if (ret < 0) {
-		LOGERROR("VideoFilterInit: Cannot av_buffersrc_parameters_set (%d)", ret);
-		av_free(par);
-		avfilter_graph_free(&filter_graph);
-		return -1;
-	}
-
-	av_free(par);
-
-	ret = avfilter_graph_create_filter(&buffersink_ctx, buffersink, "out",
-		NULL, NULL, filter_graph);
-	if (ret < 0) {
-		LOGERROR("VideoFilterInit: Cannot create buffer sink (%d)", ret);
-		avfilter_graph_free(&filter_graph);
-		return -1;
-	}
-
-	if (frame->format != AV_PIX_FMT_DRM_PRIME) {
-		enum AVPixelFormat pix_fmts[] = { AV_PIX_FMT_NV12, AV_PIX_FMT_NONE };
-		ret = av_opt_set_int_list(buffersink_ctx, "pix_fmts", pix_fmts,
-			AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
-		if (ret < 0) {
-			LOGERROR("VideoFilterInit: Cannot set output pixel format (%d)", ret);
-			avfilter_graph_free(&filter_graph);
-			return -1;
-		}
-	}
-
-	AVFilterInOut *outputs = avfilter_inout_alloc();
-	AVFilterInOut *inputs  = avfilter_inout_alloc();
-
-	outputs->name       = av_strdup("in");
-	outputs->filter_ctx = buffersrc_ctx;
-	outputs->pad_idx    = 0;
-	outputs->next       = NULL;
-
-	inputs->name       = av_strdup("out");
-	inputs->filter_ctx = buffersink_ctx;
-	inputs->pad_idx    = 0;
-	inputs->next       = NULL;
-
-	ret = avfilter_graph_parse_ptr(filter_graph, filter_descr,
-		&inputs, &outputs, NULL);
-	avfilter_inout_free(&inputs);
-	avfilter_inout_free(&outputs);
-
-	if (ret < 0) {
-		LOGERROR("VideoFilterInit: avfilter_graph_parse_ptr failed (%d)", ret);
-		avfilter_graph_free(&filter_graph);
-		return -1;
-	}
-
-	ret = avfilter_graph_config(filter_graph, NULL);
-	if (ret < 0) {
-		LOGERROR("VideoFilterInit: avfilter_graph_config failed (%d)", ret);
-		avfilter_graph_free(&filter_graph);
-		return -1;
-	}
-
-	return 0;
 }
 
 ///
@@ -2678,26 +2371,18 @@ int cVideoRender::VideoRenderFrame(AVCodecContext * video_ctx, AVFrame * frame, 
 		// AV_PIX_FMT_YUV420P, progressive -> scale filter to get NV12 frames
 		// AV_PIX_FMT_DRM_PRIME, interlaced, hw deinterlacer available -> hw deinterlacer
 		// -> put the frame into filter Rb
-		if (FilterClosing) {
-			av_frame_free(&frame);
-			return 0;
-		}
-
-		if (!FilterThread) {
+		if (!FilterThread->Active()) {
 			LOGDEBUG("VideoRenderFrame: wakeup filter thread");
-			if (VideoFilterInit(video_ctx, frame)) {
+			if (FilterThread->Init(video_ctx, frame, FilterDeintDisabled)) {
 				av_frame_free(&frame);
 				return 0;
 			} else {
-				pthread_create(&FilterThread, NULL, FilterHandlerThread, this);
-				pthread_setname_np(FilterThread, "filter thread");
+				FilterThread->Start();
 			}
 		}
 
-		if (atomic_read(&FramesDeintFilled) < VIDEO_SURFACES_MAX) {
-			FramesDeintRb[FramesDeintWrite] = frame;
-			FramesDeintWrite = (FramesDeintWrite + 1) % VIDEO_SURFACES_MAX;
-			atomic_inc(&FramesDeintFilled);
+		if (FilterThread->GetFramesDeintFilled() < VIDEO_SURFACES_MAX) {
+			FilterThread->PushFrame(frame);
 		} else {
 			usleep(10000);
 			return -1;
@@ -2708,36 +2393,56 @@ int cVideoRender::VideoRenderFrame(AVCodecContext * video_ctx, AVFrame * frame, 
 			// AV_PIX_FMT_DRM_PRIME, interlaced, hw deinterlacer not available
 			// AV_PIX_FMT_DRM_PRIME, progressive
 			// -> put the frame directly in render Rb
-			pthread_mutex_lock(&DisplayQueue);
 			if (Closing || Flushing) {
 				av_frame_free(&frame);
 				return 0;
 			}
+			FramesRbLock();
 			if (atomic_read(&FramesFilled) < VIDEO_SURFACES_MAX && !Filter_Frames) {
-				FramesRb[FramesWrite] = frame;
-				FramesWrite = (FramesWrite + 1) % VIDEO_SURFACES_MAX;
-				atomic_inc(&FramesFilled);
-				pthread_mutex_unlock(&DisplayQueue);
+				PushFrame(frame);
+				FramesRbUnlock();
 			} else {
-				pthread_mutex_unlock(&DisplayQueue);
+				FramesRbUnlock();
 				usleep(1000);
 				return -1;
 			}
 		} else {
 			// AV_PIX_FMT_DRM_NV12 ?
 			// -> go through EnqueueFB
-			pthread_mutex_lock(&DisplayQueue);
+			FramesRbLock();
 			if (atomic_read(&FramesFilled) < VIDEO_SURFACES_MAX) {
-				pthread_mutex_unlock(&DisplayQueue);
+				FramesRbUnlock();
 				EnqueueFB(frame);
 			} else {
-				pthread_mutex_unlock(&DisplayQueue);
+				FramesRbUnlock();
 				usleep(5000);
 				return -1;
 			}
 		}
 	}
 	return 0;
+}
+
+void cVideoRender::FramesRbLock(void) {
+	pthread_mutex_lock(&DisplayQueue);
+}
+
+void cVideoRender::FramesRbUnlock(void) {
+	pthread_mutex_unlock(&DisplayQueue);
+}
+
+void cVideoRender::PushFrame(AVFrame * frame) {
+	FramesRb[FramesWrite] = frame;
+	FramesWrite = (FramesWrite + 1) % VIDEO_SURFACES_MAX;
+	atomic_inc(&FramesFilled);
+}
+
+AVFrame *cVideoRender::GetFrame(void) {
+	AVFrame *frame = FramesRb[FramesRead] = frame;
+	FramesRead = (FramesRead + 1) % VIDEO_SURFACES_MAX;
+	atomic_dec(&FramesFilled);
+
+	return frame;
 }
 
 ///
@@ -2794,7 +2499,7 @@ void cVideoRender::VideoSetClosing(int black)
 		return;
 
 	pthread_mutex_lock(&WaitCleanMutex);
-	FilterClosing = 1;
+	FilterThread->Stop();
 	Flushing = !black;
 	Closing = black;
 

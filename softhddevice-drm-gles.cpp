@@ -593,7 +593,7 @@ void cMenuSetupSoft::Create(void)
 		&LogDefault, trVDR("off"), trVDR("on")));
 	if (LogDefault) {
 		Add(new cMenuEditBoolItem(tr("\040\040Standard debug logs"),
-			&LogDebug, trVDR("no"), trVDR("yes")));
+			&LogDebug_, trVDR("no"), trVDR("yes")));
 		Add(new cMenuEditBoolItem(tr("\040\040AV Sync debug logs"),
 			&LogAVSync, trVDR("no"), trVDR("yes")));
 		Add(new cMenuEditBoolItem(tr("\040\040Sound debug logs"),
@@ -796,7 +796,7 @@ cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
     //
     Logging = 0;
     LogDefault = Device->LogState;
-    LogDebug = Device->ConfigLog & L_DEBUG;
+    LogDebug_ = Device->ConfigLog & L_DEBUG;
     LogAVSync = Device->ConfigLog & L_AV_SYNC;
     LogSound = Device->ConfigLog & L_SOUND;
     LogOSD = Device->ConfigLog & L_OSD;
@@ -867,7 +867,7 @@ void cMenuSetupSoft::Store(void)
     Device->SetVideoAudioDelay(Device->ConfigVideoAudioDelay);
 
     Device->ConfigLog =
-	(LogDebug ? L_DEBUG : 0) |
+	(LogDebug_ ? L_DEBUG : 0) |
 	(LogAVSync ? L_AV_SYNC : 0) |
 	(LogSound ? L_SOUND : 0) |
 	(LogOSD ? L_OSD : 0) |

@@ -126,15 +126,21 @@ private:
     unsigned int HwSampleRate;		///< hardware sample rate in Hz
     unsigned int HwChannels;		///< hardware number of channels
     const unsigned AudioRingBufferSize = 3 * 5 * 7 * 8 * 2 * 1000;    /// default ring buffer size ~2s 8ch 16bit (3 * 5 * 7 * 8)
+public:
     cDeviceRingbuffer *AudioRingBuffer = nullptr;		///< sample ring buffer
+private:
 
     AVRational *timebase;			///< pointer to AVCodecContext pkts_timebase
 
 // methods
     void AudioNormalizer(int16_t *, int);
+public:
     void AudioResetNormalizer(void);
+private:
     void AudioCompressor(int16_t *, int);
+public:
     void AudioResetCompressor(void);
+private:
     void AudioSoftAmplifier(int16_t *, int);
 
     int AudioFilterInit(AVCodecContext *);
@@ -144,8 +150,9 @@ private:
 
     // alsa
     void xrun_recovery(void);
+public:
     void AlsaFlushBuffers(void);
-
+private:
     char *opendevice(const char *, int);
     char *finddevice(const char *, const char *, int);
     int AlsaSetup(int channels, int sample_rate, int passthrough);
@@ -154,8 +161,9 @@ private:
     void AlsaSetVolume(int);
     void AlsaInit(void);
     void AlsaExit(void);
+public:
     int AlsaPlayer(void);
-
+private:
     void *AudioPlayHandlerThread(void *);
     void AudioInitThread(void);
     void AudioExitThread(void);
@@ -172,9 +180,9 @@ public:
     void AudioPause(void);		///< pause audio
     char AudioIsPaused(void) { return AudioPaused; };
     char AudioIsRunning(void) { return AudioRunning; };
-    char AlssPlayerIsStopped(void) { return AlsaPlayerStop; };
+    char AlsaPlayerIsStopped(void) { return AlsaPlayerStop; };
     void AudioSetRunning(volatile char running) { AudioRunning = running; };
-    void AlssPlayerSetStop(char stop) { AlsaPlayerStop = stop; };
+    void AlsaPlayerSetStop(char stop) { AlsaPlayerStop = stop; };
 
     void AudioEnqueueSpdif(AVCodecContext *, const uint16_t *, int, AVFrame *);	///< buffer spdif audio samples
     int AudioSetup(AVCodecContext *, int , int , int);	///< setup audio (for passthrough only atm)

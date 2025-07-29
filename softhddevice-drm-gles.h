@@ -127,7 +127,7 @@ class cMenuSetupSoft:public cMenuSetupPage
 
     int Logging;
     int LogDefault;
-    int LogDebug;
+    int LogDebug_;
     int LogAVSync;
     int LogSound;
     int LogOSD;

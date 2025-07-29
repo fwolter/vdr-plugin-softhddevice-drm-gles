@@ -60,6 +60,7 @@ extern "C" {
 #undef CurrentTime
 #endif
 
+#include "logger.h"
 #include "iatomic.h"
 #include "softhddevice.h"
 #include "softhddev.h"
@@ -71,7 +72,7 @@ extern "C" {
 //	Defines
 //----------------------------------------------------------------------------
 
-#define VIDEO_SURFACES_MAX	3	///< video output surfaces for queue
+//#define VIDEO_SURFACES_MAX	3	///< video output surfaces for queue
 #define RENDERBUFFERS		36	///< render video buffers
 
 #define VIDEO_PLANE		0
@@ -195,19 +196,14 @@ public:
     pthread_mutex_t TrickSpeedMutex;
     pthread_mutex_t PlaybackMutex;
     pthread_mutex_t VideoClockMutex;
-
-    cDecodingThread *DecodeThread;
-
-    pthread_t FilterThread;
-    pthread_t GrabbingThread;
-
-    cDisplayThread *DisplayThread;
     pthread_mutex_t DisplayQueue;
 
-    AVFrame  *FramesDeintRb[VIDEO_SURFACES_MAX];
-    int FramesDeintWrite;			///< write pointer
-    int FramesDeintRead;			///< read pointer
-    atomic_t FramesDeintFilled;		///< how many of the buffer is used
+    cDecodingThread *DecodeThread;
+    cDisplayThread *DisplayThread;
+    cFilterThread *FilterThread;
+
+    pthread_t GrabbingThread;
+
 
     AVFrame  *FramesRb[VIDEO_SURFACES_MAX];
     int FramesWrite;			///< write pointer
@@ -221,13 +217,11 @@ public:
     int Closing;			///< flag about closing render thread
     int Flushing;			///< flag about flushing render thread
     int FlushLast;			///< flag about need to clear FB in next turn
-    int FilterClosing;		///< flag about closing filter handler thread
-    int Filter_Bug;
-    int Filter_Trick;		///< FilterHandlerThread handles trickframes
-    int Filter_Still;		///< FilterHandlerThread handles trickframes
+
     int Filter_Frames;
     int FilterDeintDisabled;	///< Deinterlacer disabled flag
     int ConfigFilterDeintDisabled;	///< Deinterlacer is disabled set via setup
+
     int DisableOglOsd;		///< ogl osd disabled flag
     int startgrab;			///< flag for triggering grabbing
     int grabvideoready;		///< flag for finished video grabbing
@@ -245,7 +239,7 @@ public:
     int CodecMode;			/// CODEC_BY_ID, CODEC_NO_MPEG_HW, CODEC_V4L2M2M_H264
     int HardwareQuirks;		/// hardware specific quirks
 
-    AVFilterGraph *filter_graph;
+//    AVFilterGraph *filter_graph;
     AVFilterContext *buffersrc_ctx, *buffersink_ctx;
 
     int fd_drm;
@@ -389,6 +383,16 @@ public:
     int ShouldClose(void) { return Closing; };
     int ShouldFlush(void) { return Flushing; };
     int DrmHandleEvent(void);
+
+    void SetFilterFrames(int frames) { Filter_Frames = frames; };
+    int GetFilterFrames(void) { return Filter_Frames; };
+
+    int GetFramesFilled(void) { return atomic_read(&FramesFilled); };
+    void PushFrame(AVFrame *);
+    AVFrame *GetFrame(void);
+    void FramesRbLock(void);
+    void FramesRbUnlock(void);
+
 };
 
 /// @}

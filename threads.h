@@ -2,6 +2,9 @@
 #define __THREADS_H
 
 #include "vdr/thread.h"
+//#include "video.h"
+
+#define VIDEO_SURFACES_MAX 3
 
 //----------------------------------------------------------------------------
 //	Thread
@@ -57,6 +60,43 @@ public:
     virtual ~cAudioHandlerThread(void);
     void Stop(void);
     void SendStartSignal(void);
+protected:
+    virtual void Action(void);
+};
+
+///
+///	Filter thread
+///
+
+class cFilterThread : public cThread
+{
+private:
+    cVideoRender *Render;
+
+    AVFilterGraph *filter_graph;
+    AVFilterContext *buffersrc_ctx;
+    AVFilterContext *buffersink_ctx;
+
+    int FilterBug;
+    int FilterTrick;
+    int FilterStill;
+
+    AVFrame *FramesDeintRb[VIDEO_SURFACES_MAX];
+    int FramesDeintFilled;
+    int FramesDeintWrite;
+    int FramesDeintRead;
+
+    AVFrame *GetFrame(void);
+
+public:
+    cFilterThread(cVideoRender *);
+    virtual ~cFilterThread(void);
+
+    int Init(const AVCodecContext *, AVFrame *, int);
+    void Stop(void);
+    int GetFramesDeintFilled(void);
+    void PushFrame(AVFrame *);
+
 protected:
     virtual void Action(void);
 };
