@@ -1,27 +1,5 @@
-/*
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavfilter/buffersink.h>
-#include <libavfilter/buffersrc.h>
-#include <libavutil/opt.h>
-}
-*/
-//#include "misc.h"
-//#include "buf2rgb.h"
-//#include <libavutil/hwcontext_drm.h>
-//#include <libavutil/pixdesc.h>
-/*
-#include "drm.h"
-//#include "openglosd.h"
-*/
 #include "logger.h"
 #include "grab.h"
-/*
-#include "vdr/thread.h"
-#include "threads.h"
-#include "video.h"
-#include "audio.h"
-*/
 //----------------------------------------------------------------------------
 //	Grab
 //----------------------------------------------------------------------------
@@ -57,4 +35,6 @@ void cSoftHdGrab::FreeBuf(void)
 	    }
 	}
 	free(buf);
+
+	buf = nullptr;
 }

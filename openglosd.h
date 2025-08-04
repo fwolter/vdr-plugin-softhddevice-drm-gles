@@ -53,7 +53,7 @@ extern "C"
 
 #include "audio.h"
 #include "video.h"
-#include "softhddev.h"
+#include "videostream.h"
 
 #include "softhddevice.h"
 

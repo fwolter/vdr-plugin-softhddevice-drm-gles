@@ -32,7 +32,7 @@ extern "C" {
 }
 
 #include "video.h"
-#include "softhddev.h"
+#include "videostream.h"
 
 //----------------------------------------------------------------------------
 //	Video

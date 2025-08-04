@@ -195,20 +195,7 @@ public:
     int64_t AudioGetClock();		///< get current audio clock
 
 
-//    void AudioSetEq(int[17], int);  /// Set audio equalizer.
-//    void AudioSetVolume(int);	///< set volume
-//    void AudioSetBufferTime(int);	///< set audio buffer time
-//    void AudioSetDownmix(int);
-//    void AudioSetSoftvol(int);	///< enable/disable softvol
-//    void AudioSetNormalize(int, int);	///< set normalize parameters
-//    void AudioSetCompression(int, int);	///< set compression parameters
-//    void AudioSetStereoDescent(int);	///< set stereo loudness descent
-//    void AudioSetDevice(const char *);	///< set PCM audio device
-//    void AudioSetPassthroughDevice(const char *);	/// set pass-through device
     int AudioGetPassthrough(void) const { return AudioPassthrough; }	/// set pass-through mask
-//    void AudioSetChannel(const char *);	///< set mixer channel
-//    void AudioSetAutoAES(int);	///< set automatic AES flag handling
-
 
     void AudioSetEq(int[17], int);  /// Set audio equalizer.
     void AudioSetVolume(int);	///< set volume

@@ -2,7 +2,6 @@
 #define __THREADS_H
 
 #include "vdr/thread.h"
-//#include "video.h"
 
 #define VIDEO_SURFACES_MAX 3
 

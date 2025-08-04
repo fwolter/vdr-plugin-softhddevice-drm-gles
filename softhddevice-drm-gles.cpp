@@ -45,7 +45,7 @@ extern "C"
 #include <libavcodec/avcodec.h>
 }
 
-#include "softhddev.h"
+#include "videostream.h"
 #include "video.h"
 #include "audio.h"
 #include "codec_audio.h"
@@ -959,16 +959,6 @@ void cMenuSetupSoft::Store(void)
 #endif
 }
 
-/**
-**	Call rgb to jpeg for C Plugin.
-*/
-//extern "C" uint8_t * CreateJpeg(uint8_t * image, int *size, int quality,
-//    int width, int height)
-//{
-//    return (uint8_t *) RgbToJpeg((uchar *) image, width, height, *size,
-//	quality);
-//}
-
 //////////////////////////////////////////////////////////////////////////////
 //	cPlugin
 //////////////////////////////////////////////////////////////////////////////
@@ -1163,7 +1153,8 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 	return true;
     }
     if (!strcasecmp(name, "AudioDelay")) {
-	Device->SetVideoAudioDelay(Device->ConfigVideoAudioDelay = atoi(value));
+	Device->ConfigVideoAudioDelay = atoi(value);
+	Device->SetVideoAudioDelay(Device->ConfigVideoAudioDelay);
 	return true;
     }
     if (!strcasecmp(name, "AudioPassthrough")) {

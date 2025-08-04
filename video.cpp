@@ -60,8 +60,8 @@ extern "C" {
 #include <libavutil/opt.h>
 
 #include "misc.h"
-#include "buf2rgb.h"
 }
+#include "buf2rgb.h"
 
 #include "video.h"
 #include "audio.h"
@@ -1395,7 +1395,7 @@ void cVideoRender::CleanDisplayThread(void)
 	FilterDeintDisabled = ConfigFilterDeintDisabled;
 	pthread_mutex_unlock(&WaitCleanMutex);
 
-	LOGDEBUG("CleanDisplayThread: DRM cleaned.");
+	LOGDEBUG("CleanDisplayThread: DRM cleaned (FramesFilled %d FilterFrames %d)", atomic_read(&FramesFilled), atomic_read(&FilterFrames));
 }
 
 ///
@@ -1515,7 +1515,7 @@ skip_video:
 	if (startgrab) {
 		if (buf_osd && OsdShown) {
 			LOGDEBUG2(L_GRAB, "Frame2Display: Trigger osd grab arrived");
-			struct drm_buf *osdBuf;
+			struct drm_buf *osdBuf = NULL;
 			VideoCloneBuf(&osdBuf, buf_osd);
 			grabOsd.SetBuf(osdBuf);
 			// should be the size on screen
@@ -1527,14 +1527,14 @@ skip_video:
 
 		if (buf) {
 			LOGDEBUG2(L_GRAB, "Frame2Display: Trigger video grab arrived");
-			struct drm_buf *videoBuf;
+			struct drm_buf *videoBuf = NULL;
 			VideoCloneBuf(&videoBuf, buf);
 			grabVideo.SetBuf(videoBuf);
 			// should be the size on screen
 			grabVideo.SetX(DispX + (DispWidth - PicWidth) / 2);
 			grabVideo.SetY(DispY + (DispHeight - PicHeight) / 2);
 			grabVideo.SetWidth(PicWidth);
-			grabVideo.SetHeight(PicWidth);
+			grabVideo.SetHeight(PicHeight);
 		}
 		grabWait.Signal();
 	}
@@ -1625,20 +1625,18 @@ audioclock:
 	int diff = video_pts - audio_pts - Device->GetVideoAudioDelay();
 
 	if (abs(diff) > 5000) {	// more than 5s
-		LOGDEBUG2(L_AV_SYNC, "More then 5s");
-//		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-//			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
-//			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
-//			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
+		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d, Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+			Device->VideoStream->GetPackets(), FilterThread->GetFramesDeintFilled(),
+			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 	}
 
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
-		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d)", FramesDropped, FramesDuped);
-//		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-//			FramesDropped, FramesDuped,
-//			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
-//			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
-//			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
+		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+			FramesDropped, FramesDuped,
+			Device->VideoStream->GetPackets(), FilterThread->GetFramesDeintFilled(),
+			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 
 		if (!StartCounter)
 			StartCounter++;
@@ -1648,12 +1646,11 @@ audioclock:
 	}
 
 	if (diff > 35 && !(abs(diff) > 5000)) {	// audio is more than 35ms behind video, duplicate video frame
-		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d)", FramesDropped, FramesDuped);
-//		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-//			FramesDropped, FramesDuped,
-//			Device->VideoStream->GetPackets(), atomic_read(&FramesDeintFilled),
-//			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
-//			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
+		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+			FramesDropped, FramesDuped,
+			Device->VideoStream->GetPackets(), FilterThread->GetFramesDeintFilled(),
+			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 
 		FramesDuped++;
 		usleep(20000);
@@ -1842,14 +1839,14 @@ int cVideoRender::Frame2Display(void)
 		goto page_flip;
 
 dequeue:
-	timeout = 25; // ms
+	timeout = 15; // ms
 	// wait for a frame in the ringbuffer
 	while (!atomic_read(&FramesFilled)) {
 		if (check_closing(&skip_video, &buf) ||
 		    check_pausing(&skip_video))
 			goto page_flip;
 
-		// wait max. 25ms in case we have an osd
+		// wait max. 15ms in case we have an osd
 		if (buf_osd && buf_osd->dirty && !timeout--) {
 			skip_video = 1;
 			LOGDEBUG2(L_DRM, "Frame2Display: no video but osd, skip video");
@@ -2123,18 +2120,6 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 {
 	Device = device;
 	Audio = Device->Audio;
-	DecodeThread = new cDecodingThread(Device);
-	DisplayThread = new cDisplayThread(this);
-	FilterThread = new cFilterThread(this);
-
-	atomic_set(&FramesFilled, 0);
-	Closing = 0;
-	Flushing = 0;
-	FlushLast = 0;
-	FilterDeintDisabled = ConfigFilterDeintDisabled;
-	enqueue_buffer = 0;
-	lastframe = (struct lastFrame *)calloc(1, sizeof(struct lastFrame));
-	VideoResume();
 }
 
 ///
@@ -2152,6 +2137,23 @@ cVideoRender::~cVideoRender(void)
 //	}
 	free(lastframe);
 }
+
+void cVideoRender::StartThreads(void)
+{
+	DecodeThread = new cDecodingThread(Device);
+	DisplayThread = new cDisplayThread(this);
+	FilterThread = new cFilterThread(this);
+
+	atomic_set(&FramesFilled, 0);
+	Closing = 0;
+	Flushing = 0;
+	FlushLast = 0;
+	FilterDeintDisabled = ConfigFilterDeintDisabled;
+	enqueue_buffer = 0;
+	lastframe = (struct lastFrame *)calloc(1, sizeof(struct lastFrame));
+	VideoResume();
+}
+
 
 void cVideoRender::EnqueueFB(AVFrame *inframe)
 {
@@ -2353,7 +2355,7 @@ int cVideoRender::VideoRenderFrame(AVCodecContext * video_ctx, AVFrame * frame, 
 				return 0;
 			}
 			FramesRbLock();
-			if (atomic_read(&FramesFilled) < VIDEO_SURFACES_MAX && !Filter_Frames) {
+			if (atomic_read(&FramesFilled) < VIDEO_SURFACES_MAX && !FilterFrames) {
 				PushFrame(frame);
 				FramesRbUnlock();
 			} else {
@@ -2706,7 +2708,7 @@ void cVideoRender::VideoClearGrab(void)
 ///
 ///	@returns the pointer to the image data
 ///
-uint8_t *cVideoRender::VideoGetGrab(int *size, int *width, int *height, int *x, int *y, int is_osd)
+cSoftHdGrab *cVideoRender::VideoGetGrab(int *size, int *width, int *height, int *x, int *y, int is_osd)
 {
 	cSoftHdGrab *grab;
 	if (is_osd)
@@ -2715,8 +2717,6 @@ uint8_t *cVideoRender::VideoGetGrab(int *size, int *width, int *height, int *x, 
 		grab = &grabVideo;
 
 	LOGDEBUG2(L_GRAB, "VideoGetGrab: %s size %d %dx%d at %d|%x %p", is_osd ? "OSD" : "VIDEO", grab->GetSize(), grab->GetWidth(), grab->GetHeight(), grab->GetX(), grab->GetY(), grab->GetData());
-	if (!grab->GetSize())
-		return NULL;
 
 	if (size)
 		*size = grab->GetSize();
@@ -2729,7 +2729,7 @@ uint8_t *cVideoRender::VideoGetGrab(int *size, int *width, int *height, int *x, 
 	if (y)
 		*y = grab->GetY();
 
-	return grab->GetData();
+	return grab;
 }
 
 ///

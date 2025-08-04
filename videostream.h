@@ -19,8 +19,8 @@
 ///
 //////////////////////////////////////////////////////////////////////////////
 
-#ifndef __SOFTHDDEV_H
-#define __SOFTHDDEV_H
+#ifndef __VIDEOSTREAM_H
+#define __VIDEOSTREAM_H
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -43,8 +43,6 @@ public:
     cVideoDecoder *Decoder;	///< video decoder
     cSoftHdDevice *Device;
     cVideoRender *Render;
-
-//    cVideoDecoder *GetDecoder(void) { return Decoder; };
 
     const unsigned char *m_pStart;
     unsigned short m_nLength;

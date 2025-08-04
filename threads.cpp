@@ -1,39 +1,10 @@
-/*
-
-#include <stdbool.h>
-#include <unistd.h>
-
-#include <inttypes.h>
-
-#include <libintl.h>
-#define _(str) gettext(str)		///< gettext shortcut
-#define _N(str) str			///< gettext_noop shortcut
-
-#ifdef USE_GLES
-#include <assert.h>
-#endif
-#include <pthread.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <drm_fourcc.h>
-*/
-
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavfilter/buffersink.h>
 #include <libavfilter/buffersrc.h>
 #include <libavutil/opt.h>
 }
-//#include "misc.h"
-//#include "buf2rgb.h"
-//#include <libavutil/hwcontext_drm.h>
-//#include <libavutil/pixdesc.h>
-/*
-#include "drm.h"
-//#include "openglosd.h"
-*/
+
 #include "logger.h"
 #include "vdr/thread.h"
 #include "threads.h"
@@ -127,6 +98,7 @@ cAudioHandlerThread::~cAudioHandlerThread(void)
 
 void cAudioHandlerThread::Action(void)
 {
+while (Running()) {
     if (!Audio->AudioIsPaused()) {
 //	LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: => AlsaFlushBuffers");
 	Audio->AlsaFlushBuffers();
@@ -162,6 +134,7 @@ void cAudioHandlerThread::Action(void)
 		break;
 
     }
+}
     LOGDEBUG("audio: audio handler thread stopped");
 }
 
@@ -195,7 +168,6 @@ cFilterThread::~cFilterThread(void)
     }
 
     avfilter_graph_free(&filter_graph);
-    LOGDEBUG("video: video filter thread stopped");
 }
 
 ///
@@ -216,7 +188,10 @@ int cFilterThread::Init(const AVCodecContext *VideoCtx, AVFrame *Frame, int disa
     }
 
     atomic_set(&FramesDeintFilled, 0);
-    Render->SetFilterFrames(0);
+    FramesDeintRead = 0;
+    FramesDeintWrite =  0;
+
+    Render->ClearFilterFrames();
     FilterBug = 0;
     FilterTrick = 0;
     FilterStill = 0;
@@ -381,79 +356,85 @@ void cFilterThread::Action(void)
 #else
 	interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
 #endif
-	if (interlaced)
-		Render->SetFilterFrames(Render->GetFilterFrames() + 2);
-	else
-		Render->SetFilterFrames(Render->GetFilterFrames() + 1);
+	if (interlaced) {
+		Render->IncFilterFrames();
+		Render->IncFilterFrames();
+	} else {
+		Render->IncFilterFrames();
+	}
 
 	if (av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0)
 	    LOGWARNING("FilterHandlerThread: can't add_frame.");
 	else
 	    av_frame_free(&frame);
 
-	AVFrame *filt_frame = av_frame_alloc();
-	ret = av_buffersink_get_frame(buffersink_ctx, filt_frame);
+	while (Running()) {
+		AVFrame *filt_frame = av_frame_alloc();
+		ret = av_buffersink_get_frame(buffersink_ctx, filt_frame);
 
-	if (ret == AVERROR(EAGAIN)) {
-	    av_frame_free(&filt_frame);
-	    continue;
-	} else if (ret == AVERROR_EOF) {
-	    av_frame_free(&filt_frame);
-	    continue;
-	} else if (ret < 0) {
-	    LOGERROR("FilterHandlerThread: can't get filtered frame: %s",
-		av_err2str(ret));
-	    av_frame_free(&filt_frame);
-	    continue;
-	}
+		if (ret == AVERROR(EAGAIN)) {
+		    av_frame_free(&filt_frame);
+		    break;
+		} else if (ret == AVERROR_EOF) {
+		    av_frame_free(&filt_frame);
+		    break;
+		} else if (ret < 0) {
+		    LOGERROR("FilterHandlerThread: can't get filtered frame: %s",
+			av_err2str(ret));
+		    av_frame_free(&filt_frame);
+		    break;
+		}
 
 // set flag of the filtered frame (scale filter and AV_PIX_FMT_YUV420P)
-	FrameData *fd;
-	if (!filt_frame->opaque_ref) {
-	    filt_frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
-	    if (!filt_frame->opaque_ref)
-		LOGFATAL("FilterHandlerThread: cannot allocate private frame data");
-	}
-	fd = (FrameData *)filt_frame->opaque_ref->data;
-	if (FilterTrick)
-	    fd->flags |= FRAME_FLAG_TRICKSPEED;
-	if (FilterStill) {
-	    fd->flags |= FRAME_FLAG_STILLPICTURE;
-	    filt_frame->pts = AV_NOPTS_VALUE;
-	}
+		FrameData *fd;
+		if (!filt_frame->opaque_ref) {
+		    filt_frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
+		    if (!filt_frame->opaque_ref)
+			LOGFATAL("FilterHandlerThread: cannot allocate private frame data");
+		}
+		fd = (FrameData *)filt_frame->opaque_ref->data;
+		if (FilterTrick)
+		    fd->flags |= FRAME_FLAG_TRICKSPEED;
+		if (FilterStill) {
+		    fd->flags |= FRAME_FLAG_STILLPICTURE;
+		    filt_frame->pts = AV_NOPTS_VALUE;
+		}
 
 // put frame into display queue
-	enqueued = 0;
-	while (Running()) {
-	    Render->FramesRbLock();
-	    if (Render->GetFramesFilled() < VIDEO_SURFACES_MAX) {
-		if (filt_frame->format == AV_PIX_FMT_NV12) {
-		    // scale filter or sw deinterlacer, no prime data, always returns NV12
-		    // -> go through EnqueueFB
-		    if (FilterBug)
-			filt_frame->pts = filt_frame->pts / 2;	// ffmpeg bug
-		    Render->FramesRbUnlock();
-		    Render->EnqueueFB(filt_frame);
-		} else {
-		    // hw deinterlacers, we received prime data
-		    // -> put the frame into render Rb
-		    Render->PushFrame(filt_frame);
-		    Render->FramesRbUnlock();
+		enqueued = 0;
+		while (Running()) {
+		    Render->FramesRbLock();
+		    if (Render->GetFramesFilled() < VIDEO_SURFACES_MAX) {
+			if (filt_frame->format == AV_PIX_FMT_NV12) {
+			    // scale filter or sw deinterlacer, no prime data, always returns NV12
+			    // -> go through EnqueueFB
+			    if (FilterBug)
+				filt_frame->pts = filt_frame->pts / 2;	// ffmpeg bug
+			    Render->DecFilterFrames();
+			    Render->FramesRbUnlock();
+			    Render->EnqueueFB(filt_frame);
+			} else {
+			    // hw deinterlacers, we received prime data
+			    // -> put the frame into render Rb
+			    Render->PushFrame(filt_frame);
+			    Render->DecFilterFrames();
+			    Render->FramesRbUnlock();
+			}
+			enqueued = 1;
+			break;
+		    } else {
+			Render->FramesRbUnlock();
+			usleep(1000);
+			continue;
+		    }
 		}
-		Render->SetFilterFrames(Render->GetFilterFrames() - 1);
-		enqueued = 1;
-	    } else {
-		Render->FramesRbUnlock();
-		usleep(5000);
-		continue;
-	    }
+
+		if (!enqueued)
+		    av_frame_free(&filt_frame);
 	}
 
-	if (!enqueued)
-	    av_frame_free(&filt_frame);
-
     }
-
+    LOGDEBUG("video: filter thread stopped");
 }
 
 int cFilterThread::GetFramesDeintFilled(void)
@@ -475,4 +456,14 @@ void cFilterThread::PushFrame(AVFrame *frame)
     FramesDeintRb[FramesDeintWrite] = frame;
     FramesDeintWrite = (FramesDeintWrite + 1) % VIDEO_SURFACES_MAX;
     atomic_inc(&FramesDeintFilled);
+}
+
+void cFilterThread::Stop(void)
+{
+    LOGDEBUG("video: Stopping filter thread");
+    Cancel(2);
+    FilterBug = 0;
+    FilterTrick = 0;
+    FilterStill = 0;
+    Render->ClearFilterFrames();
 }

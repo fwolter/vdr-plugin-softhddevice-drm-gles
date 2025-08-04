@@ -30,8 +30,8 @@ public:
     void SetWidth(int _width) { width = _width; };
     void SetHeight(int _height) { height = _height; };
 
-    int GetX(void) { return y; };
-    int GetY(void) { return x; };
+    int GetX(void) { return x; };
+    int GetY(void) { return y; };
     int GetWidth(void) { return width; };
     int GetHeight(void) { return height; };
 

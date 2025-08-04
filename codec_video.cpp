@@ -41,12 +41,12 @@ extern "C" {
 #include <libavutil/pixdesc.h>
 
 #include "misc.h"
-#include "buf2rgb.h"
 }
+#include "buf2rgb.h"
 
 #include "codec_video.h"
 #include "video.h"
-#include "softhddev.h"
+#include "videostream.h"
 
 #include "logger.h"
 

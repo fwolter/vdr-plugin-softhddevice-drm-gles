@@ -65,7 +65,7 @@ extern "C"
 #include "audio.h"
 #include "video.h"
 #include "codec_audio.h"
-#include "softhddev.h"
+#include "videostream.h"
 
 #include "logger.h"
 #include "threads.h"
@@ -1548,7 +1548,8 @@ int64_t cSoftHdAudio::AudioGetClock(void)
 	AudioRbMutex.Lock();
 	// delay in frames in alsa + kernel buffers
 	if (snd_pcm_delay(AlsaPCMHandle, &delay) < 0) {
-		LOGDEBUG2(L_SOUND, "AudioGetClock: no hw delay");
+		if (!AudioPaused)
+			LOGDEBUG2(L_SOUND, "AudioGetClock: no hw delay");
 		delay = 0L;
 	}
 
@@ -1601,8 +1602,9 @@ void cSoftHdAudio::AudioPlay(void)
 
 	if (!AudioPaused && !AlsaCanPause) {
 		LOGDEBUG2(L_SOUND, "AudioPlay: not paused, check the code");
+		return;
 	}
-	LOGDEBUG2(L_SOUND, "AudioPlay: resumed");
+	LOGDEBUG2(L_SOUND, "AudioPlay: resume");
 	if (AlsaCanPause) {
 		snd_pcm_state_t state;
 		state = snd_pcm_state(AlsaPCMHandle);

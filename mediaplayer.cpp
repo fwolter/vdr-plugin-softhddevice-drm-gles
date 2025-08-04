@@ -45,7 +45,7 @@ extern "C"
 #include "misc.h"
 }
 
-#include "softhddev.h"
+#include "videostream.h"
 #include "audio.h"
 
 

@@ -28,21 +28,11 @@
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+
 extern "C" {
 #include <libavfilter/avfilter.h>
 #include <libavutil/hwcontext_drm.h>
 }
-
-/*
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/pixdesc.h>
-#include <libavfilter/buffersink.h>
-#include <libavfilter/buffersrc.h>
-#include <libavutil/opt.h>
-}
-*/
-
 
 #ifdef USE_GLES
 #include <gbm.h>
@@ -63,7 +53,7 @@ extern "C" {
 #include "logger.h"
 #include "iatomic.h"
 #include "softhddevice.h"
-#include "softhddev.h"
+#include "videostream.h"
 #include "glhelpers.h"
 #include "drm_buf.h"
 #include "threads.h"
@@ -111,27 +101,6 @@ struct format_info
 	struct format_plane_info planes[4];
 };
 
-/*
-struct drm_buf {
-	uint32_t width, height, size[4], pitch[4], offset[4], fb_id;
-	uint32_t handle[4];		// prime handle for plane
-	int fd_prime[4];		// prime fds, correspond to obj_index
-	uint8_t *plane[4];
-	uint32_t pix_fmt;
-	AVFrame *frame;
-	int dirty;
-	int num_planes;
-	int nb_objects;
-	int obj_index[4];
-	uint32_t primehandle[4];	// primedata objects prime handles (count is nb_objects, index is obj_index)
-	int trickspeed;
-	int swbuffer;
-#ifdef USE_GLES
-	struct gbm_bo *bo;
-#endif
-};
-*/
-
 struct lastFrame {
 	AVFrame *frame;
 	struct drm_buf *buf;
@@ -170,13 +139,7 @@ struct plane {
 
 class cVideoRender
 {
-public:
-    cVideoRender(cSoftHdDevice *);
-    virtual ~cVideoRender(void);
-
-    cSoftHdDevice *Device;
-    cSoftHdAudio *Audio;
-
+private:
     int VideoDisplayWidth;
     int VideoDisplayHeight;
     uint32_t VideoDisplayRefresh;
@@ -189,12 +152,8 @@ public:
     pthread_mutex_t VideoClockMutex;
     pthread_mutex_t DisplayQueue;
 
-    cDecodingThread *DecodeThread;
     cDisplayThread *DisplayThread;
     cFilterThread *FilterThread;
-
-    pthread_t GrabbingThread;
-
 
     AVFrame  *FramesRb[VIDEO_SURFACES_MAX];
     int FramesWrite;			///< write pointer
@@ -204,12 +163,14 @@ public:
     int TrickSpeed;			///< current trick speed
     int TrickCounter;			///< current trick speed counter
     int TrickForward;		///< true, if trickspeed plays forward
+
     int VideoPaused;
     int Closing;			///< flag about closing render thread
     int Flushing;			///< flag about flushing render thread
     int FlushLast;			///< flag about need to clear FB in next turn
 
-    int Filter_Frames;
+
+    int FilterFrames;
     int FilterDeintDisabled;	///< Deinterlacer disabled flag
     int ConfigFilterDeintDisabled;	///< Deinterlacer is disabled set via setup
 
@@ -227,10 +188,6 @@ public:
     int64_t pts;
 
     int CodecMode;			/// CODEC_BY_ID, CODEC_NO_MPEG_HW, CODEC_V4L2M2M_H264
-    int HardwareQuirks;		/// hardware specific quirks
-
-//    AVFilterGraph *filter_graph;
-    AVFilterContext *buffersrc_ctx, *buffersink_ctx;
 
     int fd_drm;
     drmModeModeInfo mode;
@@ -255,20 +212,34 @@ public:
     int buffers;
     int enqueue_buffer;
     int OsdShown;
+//
 
 #ifdef USE_GLES
     struct gbm_device *gbm_device;
     struct gbm_surface *gbm_surface;
-    EGLSurface eglSurface;
-    EGLDisplay eglDisplay;
-    EGLContext eglContext;
     struct gbm_bo *bo;
     struct gbm_bo *old_bo;
     struct gbm_bo *next_bo;
+#endif
+
+public:
+    cVideoRender(cSoftHdDevice *);
+    virtual ~cVideoRender(void);
+
+    cSoftHdDevice *Device;
+    cSoftHdAudio *Audio;
+
+    cDecodingThread *DecodeThread;
+    int HardwareQuirks;		/// hardware specific quirks
+#ifdef USE_GLES
+    EGLSurface eglSurface;
+    EGLDisplay eglDisplay;
+    EGLContext eglContext;
     int GlInit;
 #endif
 
-    void ThreadExitHandler(void *);
+/// methods
+    void StartThreads(void);
 
     /// Render a ffmpeg frame.
     int VideoRenderFrame(AVCodecContext *, AVFrame *, int flags);
@@ -305,7 +276,7 @@ public:
     void VideoConvertVideoBufToRgb(void);
     void VideoConvertOsdBufToRgb(void);
     void VideoClearGrab(void);
-    uint8_t *VideoGetGrab(int *, int *, int *, int *, int *, int);
+    cSoftHdGrab *VideoGetGrab(int *, int *, int *, int *, int *, int);
 
     /// Get decoder statistics.
     void VideoGetStats(int *, int *, int *);
@@ -373,8 +344,9 @@ public:
     int ShouldFlush(void) { return Flushing; };
     int DrmHandleEvent(void);
 
-    void SetFilterFrames(int frames) { Filter_Frames = frames; };
-    int GetFilterFrames(void) { return Filter_Frames; };
+    void ClearFilterFrames(void) { FilterFrames = 0; };
+    void IncFilterFrames(void) { FilterFrames++; };
+    void DecFilterFrames(void) { FilterFrames--; };
 
     int GetFramesFilled(void) { return atomic_read(&FramesFilled); };
     void PushFrame(AVFrame *);
