@@ -2012,34 +2012,28 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
 	quality = 95;
     }
 
+    // 1. Trigger grab in video thread and wait for the buffers to be cloned
     LOGDEBUG2(L_GRAB, "GrabImage: Start grabbing");
-    if (Render->VideoGrabInWork()) {
-	LOGDEBUG2(L_GRAB, "GrabImage: waiting for last grab...");
+    cCondWait waitGrab;
+    Render->VideoTriggerGrab(&waitGrab);
+    if (!waitGrab.Wait(2000)) {
+	// timeout (2000ms more in VideoTriggerGrab)
+	Render->VideoClearGrab();
 	return NULL;
     }
 
-    Render->VideoTriggerGrab();
+    // 2. Convert the buffers to rgb and free the cloned buffers afterwards
+    Render->VideoConvertOsdBufToRgb();
+    Render->VideoConvertVideoBufToRgb();
 
-    int timeout = 100;
-    while(!Render->VideoGrabReady()) {
-	usleep(10000);
-	if (timeout-- <= 0) {
-	    // TODO: This is not safe! It can occur when we get stuck in Frame2Display,
-	    // if no OSD or video frames are filled. Reset Grabbing after a timeout.
-	    LOGDEBUG2(L_GRAB, "GrabImage: Timeout!");
-	    Render->VideoClearGrab();
-	    return NULL;
-	}
-    }
-
-    // get screen dimensions
+    // 3. get screen dimensions
     int screenwidth;
     int screenheight;
     double pixel_aspect;
     Render->VideoGetScreenSize(&screenwidth, &screenheight, &pixel_aspect);
     int screensize = screenwidth * screenheight * 3; // we want a RGB24
 
-    // set grab dimensions
+    // 4. set grab dimensions
     int grabwidth = width > 0 ? width : screenwidth;
     int grabheight = height > 0 ? height : screenheight;
 
@@ -2048,6 +2042,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     int video_height = screenheight;	// height of the grabbed video
     int video_x = 0, video_y = 0;	// x, y of the grabbed video
 
+    // 5. fetch video data
     // Video comes as RGB, width and height is original screen dimension (video is maybe scaled)
     uint8_t *video = Render->VideoGetGrab(&video_size, &video_width, &video_height, &video_x, &video_y, 0);
     if (!video) {
@@ -2055,12 +2050,13 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
         video = (uint8_t *)calloc(1, screensize);
     }
 
+    // 6. fetch osd data
     // OSD comes as ARGB, width and height is original screen dimension (osd is always fullscreen)
     uint8_t *osd = Render->VideoGetGrab(NULL, NULL, NULL, NULL, NULL, 1);
     if (!osd)
         LOGDEBUG2(L_GRAB, "GrabImage: osd is NULL, skip it");
 
-    // first step: blit the video into a full black screen if scaled
+    // 7. blit the video into a full black screen if scaled
     uint8_t *scaledvideo;
     if (video_width != screenwidth || video_height != screenheight || video_x != 0 || video_y != 0) {
         scaledvideo = blitvideo(video, screenwidth, screenheight, video_x, video_y, video_width, video_height);
@@ -2069,7 +2065,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
         scaledvideo = video;
     }
 
-    // second step: alphablend fullscreen video with osd if available
+    // 8. alphablend fullscreen video with osd if available
     uint8_t *result;
     if (!osd) {
         result = scaledvideo;
@@ -2080,7 +2076,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
         free(osd);
     }
 
-    // need to scale result to requested size width + height, if it differs from fullscreen
+    // 9. scale result to requested size width + height, if it differs from fullscreen
     int scaledsize = screensize;
     uint8_t *scaledresult;
     if (screenwidth != grabwidth || screenheight != grabheight) {
@@ -2090,7 +2086,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
         scaledresult = result;
     }
 
-    // make jpeg or pnm
+    // 10. make jpeg or pnm
     uint8_t *grabbedimage;
     if (jpeg) {
         grabbedimage = CreateJpeg(scaledresult, &size, quality, grabwidth, grabheight);
@@ -2395,6 +2391,3 @@ int cSoftHdDevice::PlayVideoPkts(AVPacket * pkt)
 	avpkt->size = pkt->size;
 	return 1;
 }
-
-
-

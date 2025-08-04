@@ -67,6 +67,7 @@ extern "C" {
 #include "glhelpers.h"
 #include "drm_buf.h"
 #include "threads.h"
+#include "grab.h"
 
 //----------------------------------------------------------------------------
 //	Defines
@@ -167,16 +168,6 @@ struct plane {
 	struct plane_properties properties;
 };
 
-struct grabimage {
-	uint8_t *result;		///< pointer to grabbed image
-	struct drm_buf *buf;		///< pointer to original buffer
-	int size;			///< returned grabbed data size
-	int width;			///< returned grab width
-	int height;			///< returned grab height
-	int x;				///< x coord in screenshot
-	int y;				///< y coord in screenshot
-};
-
 class cVideoRender
 {
 public:
@@ -223,12 +214,11 @@ public:
     int ConfigFilterDeintDisabled;	///< Deinterlacer is disabled set via setup
 
     int DisableOglOsd;		///< ogl osd disabled flag
+
     int startgrab;			///< flag for triggering grabbing
-    int grabvideoready;		///< flag for finished video grabbing
-    int grabosdready;		///< flag for finished osd grabbing
-    struct grabimage *grabvideo;	///< struct with grabbed video image
-    struct grabimage *grabosd;	///< struct with grabbed osd image
-    int grabinwork;			///< grab is in work
+    cCondWait grabWait;
+    cSoftHdGrab grabOsd;
+    cSoftHdGrab grabVideo;
 
     int StartCounter;			///< counter for video start
     int FramesDuped;			///< number of frames duplicated
@@ -311,11 +301,10 @@ public:
     void VideoPlay(void);
 
     /// Grab screen
-    void VideoGrab(struct grabimage *, struct drm_buf *, int *, int);
-    void VideoTriggerGrab(void);
+    void VideoTriggerGrab(cCondWait *wait);
+    void VideoConvertVideoBufToRgb(void);
+    void VideoConvertOsdBufToRgb(void);
     void VideoClearGrab(void);
-    int VideoGrabReady(void);
-    int VideoGrabInWork(void);
     uint8_t *VideoGetGrab(int *, int *, int *, int *, int *, int);
 
     /// Get decoder statistics.

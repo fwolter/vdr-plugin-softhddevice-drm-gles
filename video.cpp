@@ -68,6 +68,7 @@ extern "C" {
 #include "drm.h"
 //#include "openglosd.h"
 #include "threads.h"
+#include "grab.h"
 
 //----------------------------------------------------------------------------
 //	Helper functions
@@ -1277,49 +1278,6 @@ void cVideoRender::DestroyFB(struct drm_buf *buf)
 }
 
 ///
-///	Grabbing thread.
-///
-///	TODO: different threads for video and osd
-///
-void *cVideoRender::GrabHandlerThread(void *arg)
-{
-//	cVideoRender *render = (cVideoRender *)arg;
-
-	LOGDEBUG2(L_GRAB, "GrabHandlerThread: thread started");
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-	pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
-
-	struct drm_buf *videobuf = grabvideo->buf;
-	struct drm_buf *osdbuf = grabosd->buf;
-
-	VideoGrab(grabvideo, videobuf, &grabvideoready, 0);
-	VideoGrab(grabosd, osdbuf, &grabosdready, 1);
-
-	if (videobuf) {
-		for (int plane = 0; plane < videobuf->num_planes; plane++) {
-			if (videobuf->size[plane]) {
-				LOGDEBUG2(L_GRAB, "GrabHandlerThread: free videobuf %p (plane %d)", videobuf->plane[plane], plane);
-				free(videobuf->plane[plane]);
-			}
-		}
-		free(videobuf);
-	}
-
-	if (osdbuf) {
-		for (int plane = 0; plane < osdbuf->num_planes; plane++) {
-			if (osdbuf->size[plane]) {
-				LOGDEBUG2(L_GRAB, "GrabHandlerThread: free osdbuf %p (plane %d)", osdbuf->plane[plane], plane);
-				free(osdbuf->plane[plane]);
-			}
-		}
-		free(osdbuf);
-	}
-
-	LOGDEBUG2(L_GRAB, "GrabHandlerThread: thread ended");
-	pthread_exit((void *)pthread_self());
-}
-
-///
 ///	Clone drm buffer
 ///
 ///	@param dst[out]		dst video buffer
@@ -1455,12 +1413,12 @@ int cVideoRender::VideoDrmCommit(struct drm_buf *buf, int skip_video)
 	int dirty = 0; // 0: no commit, 1: osd only, 2: video only, 3: both
 	AVFrame *frame = NULL;
 
-	uint64_t DispWidth;
-	uint64_t DispHeight;
-	uint64_t DispX;
-	uint64_t DispY;
-	uint64_t PicWidth;
-	uint64_t PicHeight;
+	uint64_t DispWidth = mode.hdisplay;;
+	uint64_t DispHeight = mode.vdisplay;
+	uint64_t DispX = 0;
+	uint64_t DispY = 0;
+	uint64_t PicWidth = 0;
+	uint64_t PicHeight = 0;
 
 	drmModeAtomicReqPtr ModeReq;
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
@@ -1477,11 +1435,6 @@ int cVideoRender::VideoDrmCommit(struct drm_buf *buf, int skip_video)
 
 	// handle the video plane
 	// Get video size and position and set crtc rect
-	DispWidth = mode.hdisplay;
-	DispHeight = mode.vdisplay;
-	DispX = 0;
-	DispY = 0;
-
 	if (video.is_scaled) {
 		DispWidth = (uint64_t)video.width;
 		DispHeight = (uint64_t)video.height;
@@ -1526,15 +1479,6 @@ int cVideoRender::VideoDrmCommit(struct drm_buf *buf, int skip_video)
 	SetPlane(ModeReq, planes[VIDEO_PLANE]);
 	dirty += 2;
 
-	if (startgrab) {
-		LOGDEBUG2(L_GRAB, "Frame2Display: Trigger video grab arrived");
-		VideoCloneBuf(&grabvideo->buf, buf);
-		// should be the size on screen
-		grabvideo->x = DispX + (DispWidth - PicWidth) / 2;
-		grabvideo->y = DispY + (DispHeight - PicHeight) / 2;
-		grabvideo->width = PicWidth;
-		grabvideo->height = PicHeight;
-	}
 
 skip_video:
 	// handle the osd plane
@@ -1571,19 +1515,30 @@ skip_video:
 	if (startgrab) {
 		if (buf_osd && OsdShown) {
 			LOGDEBUG2(L_GRAB, "Frame2Display: Trigger osd grab arrived");
-			VideoCloneBuf(&grabosd->buf, buf_osd);
+			struct drm_buf *osdBuf;
+			VideoCloneBuf(&osdBuf, buf_osd);
+			grabOsd.SetBuf(osdBuf);
 			// should be the size on screen
-			grabosd->x = 0;
-			grabosd->y = 0;
-			grabosd->width = buf_osd->width;
-			grabosd->height = buf_osd->height;
+			grabOsd.SetX(0);
+			grabOsd.SetY(0);
+			grabOsd.SetWidth(buf_osd->width);
+			grabOsd.SetHeight(buf_osd->height);
 		}
-// TODO
-//		pthread_create(&GrabbingThread, NULL, GrabHandlerThread, render);
-		pthread_create(&GrabbingThread, NULL, GrabHandlerThread, this);
-		pthread_setname_np(GrabbingThread, "grabbing thread");
-		startgrab = 0;
+
+		if (buf) {
+			LOGDEBUG2(L_GRAB, "Frame2Display: Trigger video grab arrived");
+			struct drm_buf *videoBuf;
+			VideoCloneBuf(&videoBuf, buf);
+			grabVideo.SetBuf(videoBuf);
+			// should be the size on screen
+			grabVideo.SetX(DispX + (DispWidth - PicWidth) / 2);
+			grabVideo.SetY(DispY + (DispHeight - PicHeight) / 2);
+			grabVideo.SetWidth(PicWidth);
+			grabVideo.SetHeight(PicWidth);
+		}
+		grabWait.Signal();
 	}
+
 
 	// return without an atomic commit (no video frame and osd activity)
 	if (!dirty) {
@@ -2190,7 +2145,7 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 cVideoRender::~cVideoRender(void)
 {
 	delete FilterThread;
-	delete DispayThread;
+	delete DisplayThread;
 	delete DecodeThread;
 //	if (!pthread_equal(pthread_self(), DecodeThread)) {
 //		LOGDEBUG("video: should only be called from inside the thread");
@@ -2438,7 +2393,7 @@ void cVideoRender::PushFrame(AVFrame * frame) {
 }
 
 AVFrame *cVideoRender::GetFrame(void) {
-	AVFrame *frame = FramesRb[FramesRead] = frame;
+	AVFrame *frame = FramesRb[FramesRead];
 	FramesRead = (FramesRead + 1) % VIDEO_SURFACES_MAX;
 	atomic_dec(&FramesFilled);
 
@@ -2657,6 +2612,18 @@ void cVideoRender::VideoPlay(void)
 }
 
 ///
+///	Trigger grabbing in render thread
+///
+///
+void cVideoRender::VideoTriggerGrab(cCondWait *wait)
+{
+	startgrab = 1;
+	grabWait.Wait(2000);
+	startgrab = 0;
+	wait->Signal();
+}
+
+///
 ///	Grab full screen image
 ///
 ///	@param grabimage[out]	the struct to grab in
@@ -2664,84 +2631,68 @@ void cVideoRender::VideoPlay(void)
 ///	@param ready[out]	ready is set true if we finished
 ///	@param is_osd		is this an osd grab? (just for logs)
 ///
-void cVideoRender::VideoGrab(struct grabimage *grabimage, struct drm_buf *buf, int *ready, int is_osd)
+void cVideoRender::VideoConvertVideoBufToRgb(void)
 {
+	int size;
+	cSoftHdGrab *grab = &grabVideo;
+	struct drm_buf *buf = grab->GetBuf();
+
 	// early return if buf = NULL
 	if (!buf) {
-		grabimage->result = NULL;
-		grabimage->size = 0;
-		*ready = 1;
+		grab->SetData(NULL);
+		grab->SetSize(0);
 		return;
 	}
 
-	int size;
 	for (int plane = 0; plane < buf->num_planes; plane++) {
-		LOGDEBUG2(L_GRAB, "VideoGrab: %s plane %d address %p pitch %d offset %d handle %d size %d", is_osd ? "OSD" : "VIDEO",
+		LOGDEBUG2(L_GRAB, "VideoConvertVideoBufToRgb: VIDEO plane %d address %p pitch %d offset %d handle %d size %d",
 		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
-	grabimage->result = buf2rgb(buf, &size, grabimage->width, grabimage->height, is_osd ? AV_PIX_FMT_BGRA : AV_PIX_FMT_RGB24);
-	grabimage->size = size;
-	*ready = 1;
+	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_RGB24);
+	grab->SetData(result);
+	grab->SetSize(size);
+	grab->FreeBuf();
+
+	return;
 }
 
-///
-///	Trigger grabbing in render thread
-///
-///	@param hw_render	video hardware render
-///
-void cVideoRender::VideoTriggerGrab(void)
+void cVideoRender::VideoConvertOsdBufToRgb(void)
 {
-	grabinwork = 1;
-	grabvideo = (struct grabimage *)malloc(sizeof(struct grabimage));
-	grabosd = (struct grabimage *)malloc(sizeof(struct grabimage));
-	grabvideo->buf = NULL;
-	grabosd->buf = NULL;
+	int size;
+	cSoftHdGrab *grab = &grabOsd;
+	struct drm_buf *buf = grab->GetBuf();
 
-	grabvideoready = 0;
-	grabosdready = 0;
-	startgrab = 1;
+	// early return if buf = NULL
+	if (!buf) {
+		grab->SetData(NULL);
+		grab->SetSize(0);
+		return;
+	}
+
+	for (int plane = 0; plane < buf->num_planes; plane++) {
+		LOGDEBUG2(L_GRAB, "VideoGrab: OSD plane %d address %p pitch %d offset %d handle %d size %d",
+		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
+	}
+	// result's width and height are original dimensions how buffer is presented on the screen
+	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_BGRA);
+	grab->SetData(result);
+	grab->SetSize(size);
+	grab->FreeBuf();
+
+	return;
 }
 
 ///
-///	Clear grabbing struct
+///	Clear grab buffers
 ///
-///	@param hw_render	video hardware render
 ///
 void cVideoRender::VideoClearGrab(void)
 {
-	free(grabvideo);
-	free(grabosd);
-	grabvideoready = 0;
-	grabosdready = 0;
-	startgrab = 0;
-	grabinwork = 0;
-}
-
-///
-///	Check, if the grabbed image is ready
-///
-///	@param hw_render	video hardware render
-///
-///	@retval 0		grab is not ready
-///	@retval 1		grab is ready
-///
-int cVideoRender::VideoGrabReady(void)
-{
-	return (grabvideoready && grabosdready);
-}
-
-///
-///	Check, if the grab is in work
-///
-///	@param hw_render	video hardware render
-///
-///	@retval 0		grab is not in work
-///	@retval 1		grab is in work
-///
-int cVideoRender::VideoGrabInWork(void)
-{
-	return grabinwork;
+	if (grabOsd.GetBuf())
+		grabOsd.FreeBuf();
+	if (grabVideo.GetBuf())
+		grabVideo.FreeBuf();
 }
 
 ///
@@ -2757,28 +2708,28 @@ int cVideoRender::VideoGrabInWork(void)
 ///
 uint8_t *cVideoRender::VideoGetGrab(int *size, int *width, int *height, int *x, int *y, int is_osd)
 {
-	struct grabimage *grab;
+	cSoftHdGrab *grab;
 	if (is_osd)
-		grab = grabosd;
+		grab = &grabOsd;
 	else
-		grab = grabvideo;
+		grab = &grabVideo;
 
-	LOGDEBUG2(L_GRAB, "VideoGetGrab: %s size %d %dx%d at %d|%x %p", is_osd ? "OSD" : "VIDEO", grab->size, grab->width, grab->height, grab->x, grab->y, grab->result);
-	if (!grab->size)
+	LOGDEBUG2(L_GRAB, "VideoGetGrab: %s size %d %dx%d at %d|%x %p", is_osd ? "OSD" : "VIDEO", grab->GetSize(), grab->GetWidth(), grab->GetHeight(), grab->GetX(), grab->GetY(), grab->GetData());
+	if (!grab->GetSize())
 		return NULL;
 
 	if (size)
-		*size = grab->size;
+		*size = grab->GetSize();
 	if (width)
-		*width = grab->width;
+		*width = grab->GetWidth();
 	if (height)
-		*height = grab->height;
+		*height = grab->GetHeight();
 	if (x)
-		*x = grab->x;
+		*x = grab->GetX();
 	if (y)
-		*y = grab->y;
+		*y = grab->GetY();
 
-	return grab->result;
+	return grab->GetData();
 }
 
 ///
