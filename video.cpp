@@ -1849,8 +1849,12 @@ dequeue:
 	timeout = 15; // ms
 	// wait for a frame in the ringbuffer
 	while (!atomic_read(&FramesFilled)) {
-		if (check_closing(&skip_video, &buf) ||
-		    check_pausing(&skip_video))
+		if (ExitThread) {
+			LOGDEBUG2(L_DRM, "Frame2Display -> Exit Thread");
+			return 1;
+		}
+
+		if (check_closing(&skip_video, &buf) || check_pausing(&skip_video))
 			goto page_flip;
 
 		// wait max. 15ms in case we have an osd
@@ -2085,8 +2089,10 @@ void cVideoRender::VideoThreadExit(void)
 		DecodeThread->Stop();
 	}
 
+	VideoSetClosing(1);
 	if (DisplayThread->Active()) {
 		LOGDEBUG("VideoThreadExit: cancel display thread");
+		ExitThread = 1;
 		DisplayThread->Stop();
 	}
 }
@@ -2125,8 +2131,8 @@ void cVideoRender::VideoThreadWakeup(int decoder, int display)
 
 cVideoRender::cVideoRender(cSoftHdDevice *device)
 {
-	Device = device;
-	Audio = Device->Audio;
+    Device = device;
+    Audio = Device->Audio;
 }
 
 ///
@@ -2136,13 +2142,15 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 ///
 cVideoRender::~cVideoRender(void)
 {
-	delete FilterThread;
-	delete DisplayThread;
-	delete DecodeThread;
-//	if (!pthread_equal(pthread_self(), DecodeThread)) {
-//		LOGDEBUG("video: should only be called from inside the thread");
-//	}
+	LOGDEBUG2(L_DRM, "~cVideoRender");
+	if (FilterThread)
+		delete FilterThread;
+	if (DisplayThread)
+		delete DisplayThread;
+	if (DecodeThread)
+		delete DecodeThread;
 	free(lastframe);
+	LOGDEBUG2(L_DRM, "~cVideoRender deleted");
 }
 
 void cVideoRender::StartThreads(void)
@@ -2463,7 +2471,8 @@ void cVideoRender::VideoSetClosing(int black)
 		return;
 
 	pthread_mutex_lock(&WaitCleanMutex);
-	FilterThread->Stop();
+	if (FilterThread->Active())
+		FilterThread->Stop();
 	Flushing = !black;
 	Closing = black;
 

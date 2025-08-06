@@ -168,7 +168,7 @@ private:
     int Closing;			///< flag about closing render thread
     int Flushing;			///< flag about flushing render thread
     int FlushLast;			///< flag about need to clear FB in next turn
-
+    int ExitThread;
 
     int FilterFrames;
     int FilterDeintDisabled;	///< Deinterlacer disabled flag

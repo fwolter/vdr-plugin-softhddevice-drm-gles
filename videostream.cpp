@@ -165,14 +165,8 @@ void cVideoStream::Close(void)
 		Decoder = nullptr;
 	}
 
-// TODO Render close
-//	if (Render) {
-//		delete(Render);
-//		Render = nullptr;
-//	}
 	PacketExit();
 }
-
 
 /**
 **	Clears all video data from the device.

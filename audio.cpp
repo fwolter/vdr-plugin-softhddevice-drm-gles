@@ -1820,7 +1820,8 @@ void cSoftHdAudio::AudioExit(void)
 {
 	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 
-	AudioThread->Stop();
+	if (AudioThread->Active())
+		AudioThread->Stop();
 	delete AudioThread;
 
 	AlsaExit();

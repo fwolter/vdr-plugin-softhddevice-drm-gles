@@ -351,7 +351,7 @@ int cVideoDecoder::Open(enum AVCodecID codec_id, AVCodecParameters * Par,
 void cVideoDecoder::Close(void)
 {
 	pthread_mutex_lock(&CodecLockMutex);
-	if (VideoCtx) {
+	if (VideoCtx != nullptr) {
 		LOGDEBUG2(L_CODEC, "cVideoDecoder::Close: VideoCtx %p", VideoCtx);
 		last_coded_width = VideoCtx->coded_width;
 		last_coded_height = VideoCtx->coded_height;

@@ -513,7 +513,10 @@ cSoftHdDevice::cSoftHdDevice(void)
     Audio = new cSoftHdAudio(this);
     Render = new cVideoRender(this);
     VideoStream = new cVideoStream(this);
+}
 
+void cSoftHdDevice::StartThreads(void)
+{
     Render->StartThreads();
 }
 
@@ -523,9 +526,34 @@ cSoftHdDevice::cSoftHdDevice(void)
 cSoftHdDevice::~cSoftHdDevice(void)
 {
     LOGDEBUG("%s:", __FUNCTION__);
-    delete spuDecoder;
-    delete Audio;
+    Exit();
+
     delete VideoStream;
+    delete Audio;
+    delete Render;
+
+    delete spuDecoder;
+    LOGDEBUG("%s: deleted", __FUNCTION__);
+}
+
+/**
+**	Cleanup an exit.
+*/
+void cSoftHdDevice::Exit(void)
+{
+    LOGDEBUG("%s:", __FUNCTION__);
+    Audio->AudioExit();
+    if (AudioDecoder) {
+	AudioDecoder->Close();
+	delete AudioDecoder;
+    }
+    NewAudioStream = 0;
+    av_packet_free(&AudioAvPkt);
+
+    Render->VideoExit();
+    VideoStream->Close();
+
+    LOGDEBUG("%s: exited", __FUNCTION__);
 }
 
 /**
@@ -566,8 +594,7 @@ void cSoftHdDevice::Start(void)
 */
 void cSoftHdDevice::Stop(void)
 {
-
-	LOGDEBUG("Stop(void): nothing to do.");
+    LOGDEBUG("Stop(void): nothing to do");
 }
 
 /**
@@ -581,24 +608,6 @@ void cSoftHdDevice::ClearAudio(void)
 		Audio->AudioFlushBuffers();
 		NewAudioStream = 1;
 	}
-}
-
-/**
-**	Exit + cleanup.
-*/
-void cSoftHdDevice::Exit(void)
-{
-    LOGDEBUG("SoftHdDeviceExit(void):");
-    Audio->AudioExit();
-    if (AudioDecoder) {
-	AudioDecoder->Close();
-	delete AudioDecoder;
-    }
-    NewAudioStream = 0;
-    av_packet_free(&AudioAvPkt);
-
-    Render->VideoExit();
-    VideoStream->Close();
 }
 
 /**
@@ -1489,7 +1498,7 @@ newstream:
 uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     int height)
 {
-    LOGDEBUG("%s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg,
+    LOGDEBUG2(L_GRAB, "%s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg,
 	quality, width, height);
 
     if (!width || !height) {

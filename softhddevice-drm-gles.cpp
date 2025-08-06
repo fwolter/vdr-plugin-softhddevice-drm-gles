@@ -975,6 +975,7 @@ cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 
     Device = new cSoftHdDevice();
     Audio = Device->Audio;
+    Device->StartThreads();
 }
 
 /**
@@ -983,9 +984,6 @@ cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 cPluginSoftHdDevice::~cPluginSoftHdDevice(void)
 {
     LOGDEBUG("%s:", __FUNCTION__);
-
-    Device->Exit();
-    delete Device;
 }
 
 /**
