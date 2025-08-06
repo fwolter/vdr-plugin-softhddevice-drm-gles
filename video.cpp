@@ -1476,6 +1476,12 @@ int cVideoRender::VideoDrmCommit(struct drm_buf *buf, int skip_video)
 	planes[VIDEO_PLANE]->properties.src_w = buf->width;
 	planes[VIDEO_PLANE]->properties.src_h = buf->height;
 
+	// set dimensions for grab early, because we might skip this at the next frame
+	grabVideo.SetX(DispX + (DispWidth - PicWidth) / 2);
+	grabVideo.SetY(DispY + (DispHeight - PicHeight) / 2);
+	grabVideo.SetWidth(PicWidth);
+	grabVideo.SetHeight(PicHeight);
+
 	SetPlane(ModeReq, planes[VIDEO_PLANE]);
 	dirty += 2;
 
@@ -1525,16 +1531,17 @@ skip_video:
 			grabOsd.SetHeight(buf_osd->height);
 		}
 
-		if (buf) {
+		struct drm_buf *pbuf = buf ? buf : (lastframe->buf ? lastframe->buf : NULL);
+		if (pbuf) {
 			LOGDEBUG2(L_GRAB, "Frame2Display: Trigger video grab arrived");
 			struct drm_buf *videoBuf = NULL;
-			VideoCloneBuf(&videoBuf, buf);
+			VideoCloneBuf(&videoBuf, pbuf);
 			grabVideo.SetBuf(videoBuf);
 			// should be the size on screen
-			grabVideo.SetX(DispX + (DispWidth - PicWidth) / 2);
-			grabVideo.SetY(DispY + (DispHeight - PicHeight) / 2);
-			grabVideo.SetWidth(PicWidth);
-			grabVideo.SetHeight(PicHeight);
+//			grabVideo.SetX(DispX + (DispWidth - PicWidth) / 2);
+//			grabVideo.SetY(DispY + (DispHeight - PicHeight) / 2);
+//			grabVideo.SetWidth(PicWidth);
+//			grabVideo.SetHeight(PicHeight);
 		}
 		grabWait.Signal();
 	}
@@ -2716,7 +2723,7 @@ cSoftHdGrab *cVideoRender::VideoGetGrab(int *size, int *width, int *height, int 
 	else
 		grab = &grabVideo;
 
-	LOGDEBUG2(L_GRAB, "VideoGetGrab: %s size %d %dx%d at %d|%x %p", is_osd ? "OSD" : "VIDEO", grab->GetSize(), grab->GetWidth(), grab->GetHeight(), grab->GetX(), grab->GetY(), grab->GetData());
+	LOGDEBUG2(L_GRAB, "VideoGetGrab: %s size %d %dx%d at %d|%d %p", is_osd ? "OSD" : "VIDEO", grab->GetSize(), grab->GetWidth(), grab->GetHeight(), grab->GetX(), grab->GetY(), grab->GetData());
 
 	if (size)
 		*size = grab->GetSize();

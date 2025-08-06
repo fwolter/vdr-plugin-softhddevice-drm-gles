@@ -957,7 +957,7 @@ receive:
     ClearAudio();
     VideoStream->ClearVideo();
     VideoStream->StreamFreezed = 0;
-    Audio->AudioPlay();
+//    Audio->AudioPlay();
 }
 
 /**
