@@ -193,7 +193,8 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 	    // fscod2
 	    repeat = eac3_repeat[(avpkt->data[4] & 0x30) >> 4];
 	}
-	// Debug2(L_CODEC, "cAudioDecoder::DecodePassthrough: repeat %d %d\n", repeat, avpkt->size);
+//	Debug2(L_CODEC, "%s: E-AC3: set repeat to %d (fscod = %d) avpkt->size %d (spdif_sz %d)",
+//		__FUNCTION__, repeat, (avpkt->data[4] & 0x30) >> 4, avpkt->size, spdif_sz);
 
 	// copy original data for output
 	// pack upto repeat EAC-3 pakets into one IEC 61937 burst
@@ -305,13 +306,19 @@ int cAudioDecoder::UpdateFormat(void)
 	if ((Passthrough & CodecAC3 && AudioCtx->codec_id == AV_CODEC_ID_AC3) ||
 	    (Passthrough & CodecEAC3 && AudioCtx->codec_id == AV_CODEC_ID_EAC3) ||
 	    (Passthrough & CodecDTS && AudioCtx->codec_id == AV_CODEC_ID_DTS)) {
+		// E-AC3 over HDMI: some receivers need HBR
+		if (AudioCtx->codec_id == AV_CODEC_ID_EAC3)
+			HwSampleRate *= 4;
+
 		HwChannels = 2;
 		SpdifIndex = 0;
 		SpdifCount = 0;
 		passthrough = 1;
 	}
 
+
 	if ((err = AudioSetup(AudioCtx, HwSampleRate, HwChannels, passthrough))) {
+		// try E-AC3 with non HBR
 		HwSampleRate /= 4;
 		if (AudioCtx->codec_id != AV_CODEC_ID_EAC3 ||
 		   (err = AudioSetup(AudioCtx, HwSampleRate, HwChannels, passthrough))) {
