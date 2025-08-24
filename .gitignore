@@ -6,3 +6,4 @@ po/*.mo
 po/*.pot
 .dependencies
 srcdoc
+.vscode
