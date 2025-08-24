@@ -1220,7 +1220,6 @@ void cSoftHdAudio::AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *sample
 
 	if (AlsaPlayerStop) {
 //		LOGDEBUG2(L_SOUND, "AudioEnqueueSpdif: AlsaPlayerStop!!!");
-		av_frame_unref(frame);
 		return;
 	}
 
@@ -1268,7 +1267,6 @@ void cSoftHdAudio::AudioEnqueueSpdif(AVCodecContext *ctx, const uint16_t *sample
 			AudioThread->SendStartSignal();
 		}
 	}
-	av_frame_unref(frame);
 }
 
 /**
@@ -1336,6 +1334,7 @@ in:
 		err = AudioFilterInit(AudioCtx);
 		if (err) {
 			LOGDEBUG2(L_SOUND, "AudioFilter: AudioFilterInit failed!");
+			av_frame_unref(inframe);
 			return;
 		}
 	}
@@ -1346,6 +1345,7 @@ in:
 			av_strerror(err, errbuf, sizeof(errbuf));
 			LOGERROR("AudioFilter: Error submitting the frame to the filter fmt %s channels %d %s",
 				av_get_sample_fmt_name(AudioCtx->sample_fmt), AudioCtx->ch_layout.nb_channels, errbuf);
+			av_frame_unref(inframe);
 			return;
 		} else {
 			Filterchanged = 1;

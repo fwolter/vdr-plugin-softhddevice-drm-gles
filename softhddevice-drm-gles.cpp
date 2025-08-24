@@ -821,10 +821,10 @@ cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
     Audio = 0;
     AudioDelay = Device->ConfigVideoAudioDelay;
     AudioPassthroughDefault = Device->AudioPassthroughState;
-    AudioPassthroughPCM = Device->ConfigAudioPassthrough & CodecPCM;
-    AudioPassthroughAC3 = Device->ConfigAudioPassthrough & CodecAC3;
-    AudioPassthroughEAC3 = Device->ConfigAudioPassthrough & CodecEAC3;
-    AudioPassthroughDTS = Device->ConfigAudioPassthrough & CodecDTS;
+    AudioPassthroughPCM = Device->ConfigAudioPassthrough & CODEC_PCM;
+    AudioPassthroughAC3 = Device->ConfigAudioPassthrough & CODEC_AC3;
+    AudioPassthroughEAC3 = Device->ConfigAudioPassthrough & CODEC_EAC3;
+    AudioPassthroughDTS = Device->ConfigAudioPassthrough & CODEC_DTS;
     AudioDownmix = Device->ConfigAudioDownmix;
     AudioSoftvol = Device->ConfigAudioSoftvol;
     AudioNormalize = Device->ConfigAudioNormalize;
@@ -903,10 +903,10 @@ void cMenuSetupSoft::Store(void)
     if (Device->ConfigAudioDownmix != AudioDownmix) {
 	Device->ResetChannelId();
     }
-    Device->ConfigAudioPassthrough = (AudioPassthroughPCM ? CodecPCM : 0)
-	| (AudioPassthroughAC3 ? CodecAC3 : 0)
-	| (AudioPassthroughEAC3 ? CodecEAC3 : 0)
-	| (AudioPassthroughDTS ? CodecDTS : 0);
+    Device->ConfigAudioPassthrough = (AudioPassthroughPCM ? CODEC_PCM : 0)
+	| (AudioPassthroughAC3 ? CODEC_AC3 : 0)
+	| (AudioPassthroughEAC3 ? CODEC_EAC3 : 0)
+	| (AudioPassthroughDTS ? CODEC_DTS : 0);
     Device->AudioPassthroughState = AudioPassthroughDefault;
     if (Device->AudioPassthroughState) {
 	SetupStore("AudioPassthrough", Device->ConfigAudioPassthrough);
