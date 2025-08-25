@@ -142,6 +142,14 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 {
 	m_pAudio->SetTimebase(&m_pAudioCtx->pkt_timebase);
 
+/* TODO: PCM passthrough, just forward the data?
+	// PCM passthrough
+	if (m_passthroughMask & CODEC_PCM && m_pAudioCtx->codec_id == AV_CODEC_ID_PCM) {
+		m_pAudio->EnqueueSpdif(m_pAudioCtx, avpkt->data, avpkt->size, frame);
+		return 1;
+	}
+*/
+
 	// AC3 passthrough
 	if (m_passthroughMask & CODEC_AC3 && m_pAudioCtx->codec_id == AV_CODEC_ID_AC3) {
 		uint16_t *spdif = m_spdifOutput;
