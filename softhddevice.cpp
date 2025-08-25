@@ -582,7 +582,7 @@ void cSoftHdDevice::Start(void)
 	Render->VideoSetDisableDeint(ConfigDisableDeint);
 	Render->VideoInit();
 
-	VideoStream->Decoder = new cVideoDecoder(Render, VideoStream);
+	VideoStream->Decoder = new cVideoDecoder(Render);
 	VideoStream->PacketInit();
     }
 }
