@@ -1,53 +1,63 @@
-///
-///	@file codec_audio.cpp	@brief Audio decoder functions
-///
-///	Copyright (c) 2009 - 2015 by Johns.  All Rights Reserved.
-///	Copyright (c) 2018 by zille.  All Rights Reserved.
-///
-///	Contributor(s):
-///
-///	License: AGPLv3
-///
-///	This program is free software: you can redistribute it and/or modify
-///	it under the terms of the GNU Affero General Public License as
-///	published by the Free Software Foundation, either version 3 of the
-///	License.
-///
-///	This program is distributed in the hope that it will be useful,
-///	but WITHOUT ANY WARRANTY; without even the implied warranty of
-///	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-///	GNU Affero General Public License for more details.
-///
-//////////////////////////////////////////////////////////////////////////////
+/**
+ * @file logger.cpp
+ * @brief Logger functions
+ *
+ * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * License: AGPLv3
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ */
 
 #include "logger.h"
 
 std::shared_ptr<cSoftHdLogger> cSoftHdLogger::instance;
 
 /*****************************************************************************
-**	cSoftHdLogger class
-*****************************************************************************/
+ * cSoftHdLogger class
+ ****************************************************************************/
 
 /**
-**	cSoftHdLogger constructor
-*/
+ * cSoftHdLogger constructor
+ */
 cSoftHdLogger::cSoftHdLogger(void)
 {
 }
 
+/**
+ * Get an instance to the global logger
+ *
+ * @returns 	pointer to the logger instance
+ */
 std::shared_ptr<cSoftHdLogger> cSoftHdLogger::GetLogger()
 {
-    if (instance == nullptr) {
-	instance = std::shared_ptr<cSoftHdLogger>(new cSoftHdLogger());
-    }
-    return instance;
+	if (instance == nullptr)
+		instance = std::shared_ptr<cSoftHdLogger>(new cSoftHdLogger());
+
+	return instance;
 }
 
+/**
+ * Set the loglevel
+ *
+ * @param level	new loglevel
+ */
 void cSoftHdLogger::SetLogLevel(int level)
 {
-    LogLevel = level;
+	logLevel = level;
 }
 
+/**
+ * Log to LOG_ERR and abort
+ */
 void cSoftHdLogger::LogFatal(const char *format, ...)
 {
 	if (SysLogLevel <= 0)
@@ -66,6 +76,9 @@ void cSoftHdLogger::LogFatal(const char *format, ...)
 	abort();
 }
 
+/**
+ * Log to LOG_ERR
+ */
 void cSoftHdLogger::LogError(const char *format, ...)
 {
 	if (SysLogLevel <= 0)
@@ -82,6 +95,9 @@ void cSoftHdLogger::LogError(const char *format, ...)
 	va_end(ap);
 }
 
+/**
+ * Log to LOG_WARNING
+ */
 void cSoftHdLogger::LogWarning(const char *format, ...)
 {
 	if (SysLogLevel <= 1)
@@ -98,6 +114,9 @@ void cSoftHdLogger::LogWarning(const char *format, ...)
 	va_end(ap);
 }
 
+/**
+ * Log to LOG_INFO
+ */
 void cSoftHdLogger::LogInfo(const char *format, ...)
 {
 	if (SysLogLevel <= 2)
@@ -114,6 +133,9 @@ void cSoftHdLogger::LogInfo(const char *format, ...)
 	va_end(ap);
 }
 
+/**
+ * Log to LOG_DEBUG
+ */
 void cSoftHdLogger::LogDebug(const char *format, ...)
 {
 	va_list ap;
@@ -127,13 +149,18 @@ void cSoftHdLogger::LogDebug(const char *format, ...)
 	va_end(ap);
 }
 
+/**
+ * Log to LOG_DEBUG and add logging category to output
+ *
+ * TODO: rename to LogDebugCat or sth. else
+ */
 void cSoftHdLogger::LogDebug2(const int cat, const char *format, ...)
 {
 	va_list ap;
 	char fmt[256];
 	char prefix[20] = "";
 
-	switch (LogLevel & cat) {
+	switch (logLevel & cat) {
 	case L_AV_SYNC:
 		strcpy(prefix, "[AV_Sync]");
 		break;
