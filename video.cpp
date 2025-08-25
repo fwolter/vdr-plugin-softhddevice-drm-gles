@@ -1537,11 +1537,7 @@ skip_video:
 			struct drm_buf *videoBuf = NULL;
 			VideoCloneBuf(&videoBuf, pbuf);
 			grabVideo.SetBuf(videoBuf);
-			// should be the size on screen
-//			grabVideo.SetX(DispX + (DispWidth - PicWidth) / 2);
-//			grabVideo.SetY(DispY + (DispHeight - PicHeight) / 2);
-//			grabVideo.SetWidth(PicWidth);
-//			grabVideo.SetHeight(PicHeight);
+			// dimensions have already been set earlier
 		}
 		grabWait.Signal();
 	}
