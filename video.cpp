@@ -1629,7 +1629,7 @@ audioclock:
 
 	if (abs(diff) > 5000) {	// more than 5s
 		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d, Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
-			Device->VideoStream->GetPackets(), FilterThread->GetFramesDeintFilled(),
+			Device->VideoStream->GetPacketsFilled(), FilterThread->GetFramesDeintFilled(),
 			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 	}
@@ -1637,7 +1637,7 @@ audioclock:
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
 		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			FramesDropped, FramesDuped,
-			Device->VideoStream->GetPackets(), FilterThread->GetFramesDeintFilled(),
+			Device->VideoStream->GetPacketsFilled(), FilterThread->GetFramesDeintFilled(),
 			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 
@@ -1651,7 +1651,7 @@ audioclock:
 	if (diff > 35 && !(abs(diff) > 5000)) {	// audio is more than 35ms behind video, duplicate video frame
 		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
 			FramesDropped, FramesDuped,
-			Device->VideoStream->GetPackets(), FilterThread->GetFramesDeintFilled(),
+			Device->VideoStream->GetPacketsFilled(), FilterThread->GetFramesDeintFilled(),
 			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 

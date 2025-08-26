@@ -683,7 +683,7 @@ int cSoftHdAudio::AlsaPlayer(void)
 		if (!n) {			// ring buffer empty
 // TODO render
 			LOGWARNING("AlsaPlayer: ring buffer empty Videopkts: %d",
-				Device->VideoStream->GetPackets());
+				Device->VideoStream->GetPacketsFilled());
 		}
 		if (n < avail) {		// not enough bytes in ring buffer
 			avail = n;
