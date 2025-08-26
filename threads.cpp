@@ -99,35 +99,35 @@ cAudioHandlerThread::~cAudioHandlerThread(void)
 void cAudioHandlerThread::Action(void)
 {
     while (Running()) {
-	if (!Audio->AudioIsPaused()) {
-//	    LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: => AlsaFlushBuffers");
-	    Audio->AlsaFlushBuffers();
-	    Audio->AudioResetCompressor();
-	    Audio->AudioResetNormalizer();
+	if (!Audio->IsPaused()) {
+//	    LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: => FlushAlsaBuffers");
+	    Audio->FlushAlsaBuffers();
+	    Audio->ResetCompressor();
+	    Audio->ResetNormalizer();
 	}
-	Audio->AudioSetRunning(0);
-	Audio->AlsaPlayerSetStop(0);
+	Audio->SetRunning(0);
+	Audio->StartAlsaPlayer();
 
 	// wait for sync start, if audio isn't running
-	if (!Audio->AudioIsRunning()) {
+	if (!Audio->IsRunning()) {
 	    LOGDEBUG2(L_SOUND, "audio: wait on start condition");
 	    StartWait.Wait();
 	}
 
 	LOGDEBUG("audio: audio handler thread started");
 	while(Running()) {
-	    if (Audio->AudioRingBuffer->UsedBytes()) {
+	    if (Audio->GetUsedBytes()) {
 		// try to play some samples
-		Audio->AlsaPlayer();
+		Audio->PlayWithAlsa();
 	    } else {
 //		LOGDEBUG2(L_SOUND, "AudioPlayHandlerThread: ring buffer is empty");
 		usleep(5000);
 	    }
 
-	    if (Audio->AudioIsPaused())
+	    if (Audio->IsPaused())
 		usleep(10000);
 
-	    if (Audio->AlsaPlayerIsStopped())
+	    if (!Audio->AlsaPlayerRunning())
 		break;
 	}
     }
@@ -136,8 +136,8 @@ void cAudioHandlerThread::Action(void)
 
 void cAudioHandlerThread::Stop(void)
 {
-    Audio->AudioSetRunning(1);
-    Audio->AlsaPlayerSetStop(1);
+    Audio->SetRunning(1);
+    Audio->StopAlsaPlayer();
     StartWait.Signal();
     LOGDEBUG("audio: Stopping audio handler thread");
     Cancel(2);

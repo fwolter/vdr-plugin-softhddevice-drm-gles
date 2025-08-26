@@ -540,7 +540,7 @@ cSoftHdDevice::~cSoftHdDevice(void)
 void cSoftHdDevice::Exit(void)
 {
     LOGDEBUG("%s:", __FUNCTION__);
-    Audio->AudioExit();
+    Audio->Exit();
     if (AudioDecoder) {
 	AudioDecoder->Close();
 	delete AudioDecoder;
@@ -561,8 +561,8 @@ void cSoftHdDevice::Start(void)
 {
     LOGDEBUG("Start(void):");
     if (!AudioDecoder) {
-	Audio->AudioInit(Audio->AudioGetPassthrough());
-	Audio->AudioSetBufferTime(ConfigAudioBufferTime);
+	Audio->Init(Audio->GetPassthrough());
+	Audio->SetBufferTimeInMs(ConfigAudioBufferTime);
 	AudioAvPkt = av_packet_alloc();
 	av_new_packet(AudioAvPkt, AUDIO_BUFFER_SIZE);
 
@@ -603,7 +603,7 @@ void cSoftHdDevice::ClearAudio(void)
 	if (!SkipAudio) {
 		LOGDEBUG("ClearAudio()");
 		AudioDecoder->FlushBuffers();
-		Audio->AudioFlushBuffers();
+		Audio->FlushBuffers();
 		NewAudioStream = 1;
 	}
 }
@@ -677,7 +677,7 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 			VideoStream->RequestClose(5000);
 		Render->VideoSetClosing(1);
 		SkipAudio = 0;
-		Audio->AudioPlay();
+		Audio->Resume();
 		ClearAudio();	// flush all AUDIO buffers
 		if (AudioDecoder && AudioCodecID != AV_CODEC_ID_NONE) {
 			NewAudioStream = 1;
@@ -784,7 +784,7 @@ void cSoftHdDevice::Play(void)
     VideoStream->SetTrickSpeed(0);
     SkipAudio = 0;
     VideoStream->WakeUp();
-    Audio->AudioPlay();
+    Audio->Resume();
     Render->VideoPlay();
 }
 
@@ -798,7 +798,7 @@ void cSoftHdDevice::Freeze(void)
 
     LOGDEBUG("Freeze(void)");
     VideoStream->Freeze();
-    Audio->AudioPause();
+    Audio->Pause();
     Render->VideoPause();
 }
 
@@ -911,7 +911,7 @@ void cSoftHdDevice::StillPicture(const uchar * data, int size)
 	    LOGFATAL("StillPicture: Could not open the decoder!");
 	context = 1;
     }
-    Audio->AudioPause();
+    Audio->Pause();
 
     int ret = 0;
     ret = VideoStream->Decoder()->SendPacket(avpkt);
@@ -955,7 +955,7 @@ receive:
     ClearAudio();
     VideoStream->ClearVideo();
     VideoStream->WakeUp();
-//    Audio->AudioPlay();
+//    Audio->Resume();
 }
 
 /**
@@ -985,12 +985,12 @@ bool cSoftHdDevice::Poll(
 
 //	LOGDEBUG("Poll: timeout %d", timeout);
 
-	used = Audio->AudioUsedBytes();
+	used = Audio->GetUsedBytes();
 	// FIXME: no video!
 	filled = VideoStream->GetPacketsFilled();
 	// soft limit + hard limit
 	full = (used > AUDIO_MIN_BUFFER_FREE && filled > 3)
-	    || Audio->AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE
+	    || Audio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE
 	    || filled >= VIDEO_PACKET_MAX - 10;
 
 	if (!full || !timeout) {
@@ -1111,8 +1111,8 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 
     // hard limit buffer full: don't overrun audio buffers on replay
     // stream freezed
-    if (Audio->AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE){
-//	LOGDEBUG("PlayAudio: Buffer is Full (%d|%d)!", Audio->AudioFreeBytes(), AUDIO_MIN_BUFFER_FREE);
+    if (Audio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE){
+//	LOGDEBUG("PlayAudio: Buffer is Full (%d|%d)!", Audio->GetFreeBytes(), AUDIO_MIN_BUFFER_FREE);
 	return 0;
     }
 
@@ -1120,8 +1120,8 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	// this clears the audio ringbuffer indirect, open and setup does it
 	LOGDEBUG("PlayAudio: NewAudioStream");
 	AudioDecoder->Close();
-//	AudioFlushBuffers();
-//	AudioSetBufferTime(ConfigAudioBufferTime);		// ???
+//	FlushBuffers();
+//	SetBufferTimeInMs(ConfigAudioBufferTime);		// ???
 	AudioCodecID = AV_CODEC_ID_NONE;
 	AudioChannelID = -1;
 	NewAudioStream = 0;
@@ -1173,65 +1173,14 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	    LOGERROR("invalid LPCM audio packet %d bytes", size);
 	    return size;
 	}
-/*
-// TODO: classify
-	if (AudioCodecID != AV_CODEC_ID_PCM_DVD) {
-	    static int samplerates[] = { 48000, 96000, 44100, 32000 };
-	    int samplerate;
-	    int channels;
-	    int bits_per_sample;
 
-	    LOGDEBUG("%s: LPCM %d sr:%d bits:%d chan:%d\n",
-		__FUNCTION__, id, p[5] >> 4, (((p[5] >> 6) & 0x3) + 4) * 4,
-		(p[5] & 0x7) + 1);
-	    AudioDecoder->Close();
-
-	    bits_per_sample = (((p[5] >> 6) & 0x3) + 4) * 4;
-	    if (bits_per_sample != 16) {
-		LOGERROR(_
-		    ("LPCM %d bits per sample aren't supported"),
-		    bits_per_sample);
-		// FIXME: handle unsupported formats.
-	    }
-	    samplerate = samplerates[p[5] >> 4];
-	    channels = (p[5] & 0x7) + 1;
-
-	    // FIXME: ConfigAudioBufferTime + x
-//	    AudioSetBufferTime(400);
-//	    AudioSetup(&samplerate, &channels, 0);
-	    if (samplerate != samplerates[p[5] >> 4]) {
-		LOGERROR("LPCM %d sample-rate is unsupported",
-		    samplerates[p[5] >> 4]);
-		// FIXME: support resample
-	    }
-	    if (channels != (p[5] & 0x7) + 1) {
-		LOGERROR("LPCM %d channels are unsupported",
-		    (p[5] & 0x7) + 1);
-		// FIXME: support resample
-	    }
-	    //AudioDecoder->Open(AV_CODEC_ID_PCM_DVD);
-	    AudioCodecID = AV_CODEC_ID_PCM_DVD;
-	}
-
-	if (AudioAvPkt->pts != (int64_t) AV_NOPTS_VALUE) {
-//	    AudioSetClock(AudioAvPkt->pts);
-	    AudioAvPkt->pts = AV_NOPTS_VALUE;
-	}
-	swab(p + 7, AudioAvPkt->data, n - 7);
-	Audiofilter(AudioAvPkt->data, n - 7, NULL);		// Das muss in ein AVFrame gepackt werden!!!
-*/
 	return size;
     }
     // DVD track header
     if ((id & 0xF0) == 0x80 && (p[0] & 0xF0) == 0x80) {
 	p += 4;
 	n -= 4;				// skip track header
-/*
-	if (AudioCodecID == AV_CODEC_ID_NONE) {
-	    // FIXME: ConfigAudioBufferTime + x
-	    AudioSetBufferTime(400);
-	}
-*/
+
     }
     // append new packet, to partial old data
     memcpy(AudioAvPkt->data + AudioAvPkt->stream_index, p, n);
@@ -1347,7 +1296,7 @@ void cSoftHdDevice::SetVolumeDevice(int volume)
 {
     LOGDEBUG("%s: %d", __FUNCTION__, volume);
 
-    Audio->AudioSetVolume((volume * 1000) / 255);
+    Audio->SetVolume((volume * 1000) / 255);
 }
 
 /**
@@ -1671,13 +1620,13 @@ int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
 	switch (getopt(argc, argv, "-a:c:p:d:")) {
 #endif
 	    case 'a':			// audio device for pcm
-		Audio->AudioSetDevice(optarg);
+		Audio->SetDevice(optarg);
 		continue;
 	    case 'c':			// channel of audio mixer
-		Audio->AudioSetChannel(optarg);
+		Audio->SetChannel(optarg);
 		continue;
 	    case 'p':			// pass-through audio device
-		Audio->AudioSetPassthroughDevice(optarg);
+		Audio->SetPassthroughDevice(optarg);
 		continue;
 	    case 'd':			// set display output
 		Render->VideoSetDisplay(optarg);
@@ -1760,7 +1709,7 @@ void cSoftHdDevice::OsdDrawARGB(int xi, int yi, int height, int width, int pitch
 
 void cSoftHdDevice::SetPassthrough(int mask)
 {
-	Audio->AudioSetPassthrough(mask);
+	Audio->SetPassthrough(mask);
 	if (AudioDecoder)
 		AudioDecoder->SetPassthrough(mask);
 }
@@ -1850,8 +1799,8 @@ void cSoftHdDevice::SetVideoCodec(enum AVCodecID codec_id, AVCodecParameters * p
 
 int cSoftHdDevice::PlayAudioPkts(AVPacket * pkt)
 {
-	if (Audio->AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
-//		LOGERROR("PlayAudioPkts: Audio->AudioFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
+	if (Audio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
+//		LOGERROR("PlayAudioPkts: Audio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
 		return 0;
 	}
 	AudioDecoder->Decode(pkt);

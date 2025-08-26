@@ -916,24 +916,24 @@ void cMenuSetupSoft::Store(void)
 	Device->SetPassthrough(0);
     }
     SetupStore("AudioDownmix", Device->ConfigAudioDownmix = AudioDownmix);
-    AudioDevice->AudioSetDownmix(Device->ConfigAudioDownmix);
+    AudioDevice->SetDownmix(Device->ConfigAudioDownmix);
     SetupStore("AudioSoftvol", Device->ConfigAudioSoftvol = AudioSoftvol);
-    AudioDevice->AudioSetSoftvol(Device->ConfigAudioSoftvol);
+    AudioDevice->SetSoftvol(Device->ConfigAudioSoftvol);
     SetupStore("AudioNormalize", Device->ConfigAudioNormalize = AudioNormalize);
     SetupStore("AudioMaxNormalize", Device->ConfigAudioMaxNormalize =
 	AudioMaxNormalize);
-    AudioDevice->AudioSetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
+    AudioDevice->SetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
     SetupStore("AudioCompression", Device->ConfigAudioCompression = AudioCompression);
     SetupStore("AudioMaxCompression", Device->ConfigAudioMaxCompression =
 	AudioMaxCompression);
-    AudioDevice->AudioSetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
+    AudioDevice->SetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
     SetupStore("AudioStereoDescent", Device->ConfigAudioStereoDescent =
 	AudioStereoDescent);
-    AudioDevice->AudioSetStereoDescent(Device->ConfigAudioStereoDescent);
+    AudioDevice->SetStereoDescent(Device->ConfigAudioStereoDescent);
     SetupStore("AudioBufferTime", Device->ConfigAudioBufferTime = AudioBufferTime);
-    AudioDevice->AudioSetBufferTime(Device->ConfigAudioBufferTime);
+    AudioDevice->SetBufferTimeInMs(Device->ConfigAudioBufferTime);
     SetupStore("AudioAutoAES", Device->ConfigAudioAutoAES = AudioAutoAES);
-    AudioDevice->AudioSetAutoAES(Device->ConfigAudioAutoAES);
+    AudioDevice->SetAutoAES(Device->ConfigAudioAutoAES);
 	SetupStore("AudioEq", Device->ConfigAudioEq = AudioEq);
 	SetupStore("AudioEqBand01b", Device->SetupAudioEqBand[0] = AudioEqBand[0]);
 	SetupStore("AudioEqBand02b", Device->SetupAudioEqBand[1] = AudioEqBand[1]);
@@ -953,7 +953,7 @@ void cMenuSetupSoft::Store(void)
 	SetupStore("AudioEqBand16b", Device->SetupAudioEqBand[15] = AudioEqBand[15]);
 	SetupStore("AudioEqBand17b", Device->SetupAudioEqBand[16] = AudioEqBand[16]);
 	SetupStore("AudioEqBand18b", Device->SetupAudioEqBand[17] = AudioEqBand[17]);
-    AudioDevice->AudioSetEq(Device->SetupAudioEqBand, Device->ConfigAudioEq);
+    AudioDevice->SetEq(Device->SetupAudioEqBand, Device->ConfigAudioEq);
 #ifdef USE_GLES
     SetupStore("MaxSizeGPUImageCache", Device->ConfigMaxSizeGPUImageCache = MaxSizeGPUImageCache);
 #endif
@@ -1169,36 +1169,36 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 	return true;
     }
     if (!strcasecmp(name, "AudioDownmix")) {
-	Audio->AudioSetDownmix(Device->ConfigAudioDownmix = atoi(value));
+	Audio->SetDownmix(Device->ConfigAudioDownmix = atoi(value));
 	return true;
     }
     if (!strcasecmp(name, "AudioSoftvol")) {
-	Audio->AudioSetSoftvol(Device->ConfigAudioSoftvol = atoi(value));
+	Audio->SetSoftvol(Device->ConfigAudioSoftvol = atoi(value));
 	return true;
     }
     if (!strcasecmp(name, "AudioNormalize")) {
 	Device->ConfigAudioNormalize = atoi(value);
-	Audio->AudioSetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
+	Audio->SetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
 	return true;
     }
     if (!strcasecmp(name, "AudioMaxNormalize")) {
 	Device->ConfigAudioMaxNormalize = atoi(value);
-	Audio->AudioSetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
+	Audio->SetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
 	return true;
     }
     if (!strcasecmp(name, "AudioCompression")) {
 	Device->ConfigAudioCompression = atoi(value);
-	Audio->AudioSetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
+	Audio->SetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
 	return true;
     }
     if (!strcasecmp(name, "AudioMaxCompression")) {
 	Device->ConfigAudioMaxCompression = atoi(value);
-	Audio->AudioSetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
+	Audio->SetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
 	return true;
     }
     if (!strcasecmp(name, "AudioStereoDescent")) {
 	Device->ConfigAudioStereoDescent = atoi(value);
-	Audio->AudioSetStereoDescent(Device->ConfigAudioStereoDescent);
+	Audio->SetStereoDescent(Device->ConfigAudioStereoDescent);
 	return true;
     }
     if (!strcasecmp(name, "AudioBufferTime")) {
@@ -1207,7 +1207,7 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
     }
     if (!strcasecmp(name, "AudioAutoAES")) {
 	Device->ConfigAudioAutoAES = atoi(value);
-	Audio->AudioSetAutoAES(Device->ConfigAudioAutoAES);
+	Audio->SetAutoAES(Device->ConfigAudioAutoAES);
 	return true;
     }
     if (!strcasecmp(name, "AudioEq")) {
@@ -1284,7 +1284,7 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
     }
     if (!strcasecmp(name, "AudioEqBand18b")) {
 	Device->SetupAudioEqBand[17] = atoi(value);
-	Audio->AudioSetEq(Device->SetupAudioEqBand, Device->ConfigAudioEq);
+	Audio->SetEq(Device->SetupAudioEqBand, Device->ConfigAudioEq);
 	return true;
     }
 #ifdef USE_GLES

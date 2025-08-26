@@ -46,7 +46,7 @@ cAudioDecoder::cAudioDecoder(cSoftHdAudio *audio)
 {
 	m_pAudio = audio;
 
-	int mask = m_pAudio->AudioGetPassthrough();
+	int mask = m_pAudio->GetPassthrough();
 
 	if (!(m_pFrame = av_frame_alloc()))
 		LOGFATAL("%s: can't allocate audio decoder frame buffer", __FUNCTION__);
@@ -133,13 +133,15 @@ void cAudioDecoder::Close(void)
  * @param avpkt		undecoded audio packet
  * @param frame		decoded audio frame
  *
- * @returns 0			codec is not supported for passthrough, use AudioFilter to handle the data
+ * @returns 0			codec is not supported for passthrough, use Filter to handle the data
  * @returns -1			sth went wrong, data will be discarded
  * @returns 1			data accepted
  *						if finished, spdif header was created and data was sent to passthrough device
  */
 int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 {
+	m_pAudio->SetTimebase(&m_pAudioCtx->pkt_timebase);
+
 	// AC3 passthrough
 	if (m_passthroughMask & CODEC_AC3 && m_pAudioCtx->codec_id == AV_CODEC_ID_AC3) {
 		uint16_t *spdif = m_spdifOutput;
@@ -160,7 +162,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		swab(avpkt->data, spdif + 4, avpkt->size);
 		memset(spdif + 4 + avpkt->size / 2, 0, spdifSize - 8 - avpkt->size);
 
-		m_pAudio->AudioEnqueueSpdif(m_pAudioCtx, spdif, spdifSize, frame);
+		m_pAudio->EnqueueRawData(spdif, spdifSize, frame);
 		return 1;
 	}
 
@@ -206,7 +208,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		spdif[3] = htole16(m_spdifIndex * 8);
 		memset(spdif + 4 + m_spdifIndex / 2, 0, spdifSize - 8 - m_spdifIndex);
 
-		m_pAudio->AudioEnqueueSpdif(m_pAudioCtx, spdif, spdifSize, frame);
+		m_pAudio->EnqueueRawData(spdif, spdifSize, frame);
 		m_spdifIndex = 0;
 		m_spdifRepeatCount = 0;
 		return 1;
@@ -262,7 +264,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		swab(avpkt->data, spdif + 4, avpkt->size);
 		memset(spdif + 4 + avpkt->size, 0, burstSz - 8 - avpkt->size);
 
-		m_pAudio->AudioEnqueueSpdif(m_pAudioCtx, spdif, burstSz, frame);
+		m_pAudio->EnqueueRawData(spdif, burstSz, frame);
 		return 1;
 	}
 
@@ -275,7 +277,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
  * Setup audio, if format changed
  *
  * @return 		0 if new audio was correctly set up,
- *				otherwise return value of cSoftHdAudio::AudioSetup()
+ *				otherwise return value of cSoftHdAudio::Setup()
  */
 int cAudioDecoder::UpdateFormat(void)
 {
@@ -311,12 +313,12 @@ int cAudioDecoder::UpdateFormat(void)
 		isPassthrough = 1;
 	}
 
-	if ((err = m_pAudio->AudioSetup(m_pAudioCtx, m_currentHwSampleRate, m_currentHwNumChannels, isPassthrough))) {
+	if ((err = m_pAudio->Setup(m_pAudioCtx, m_currentHwSampleRate, m_currentHwNumChannels, isPassthrough))) {
 		// E-AC3 over HDMI: try without HBR
 		m_currentHwSampleRate /= 4;
 
 		if (m_pAudioCtx->codec_id != AV_CODEC_ID_EAC3 ||
-			(err = m_pAudio->AudioSetup(m_pAudioCtx, m_currentHwSampleRate, m_currentHwNumChannels, isPassthrough))) {
+			(err = m_pAudio->Setup(m_pAudioCtx, m_currentHwSampleRate, m_currentHwNumChannels, isPassthrough))) {
 
 			m_currentHwSampleRate = 0;
 			m_currentHwNumChannels = 0;
@@ -398,7 +400,7 @@ void cAudioDecoder::Decode(const AVPacket * avpkt)
 				return;
 			}
 
-			m_pAudio->AudioFilter(frame, m_pAudioCtx);
+			m_pAudio->Filter(frame, m_pAudioCtx);
 		}
 
 	} while (retSend == AVERROR(EAGAIN));

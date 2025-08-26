@@ -1582,9 +1582,9 @@ int cVideoRender::VideoSync(AVFrame *frame, int *skip_video, struct drm_buf **bu
 
 	if(!StartCounter && !Closing) {
 		LOGDEBUG("VideoSync: start PTS %s", Timestamp2String(video_pts));
-		Audio->AudioSkipInTrickSpeed(frame->pts, 0);
+		Audio->Skip(frame->pts, 0);
 avready:
-		if (Audio->AudioVideoReady(video_pts)) {
+		if (Audio->VideoReady(video_pts)) {
 			usleep(10000);
 
 			// check for close/flush request or pause
@@ -1618,7 +1618,7 @@ audioclock:
 		return 0;
 	}
 
-	audio_pts = Audio->AudioGetClock();
+	audio_pts = Audio->GetClock();
 
 	if (audio_pts == (int64_t)AV_NOPTS_VALUE) {
 		usleep(20000);
@@ -1628,17 +1628,17 @@ audioclock:
 	int diff = video_pts - audio_pts - Device->GetVideoAudioDelay();
 
 	if (abs(diff) > 5000) {	// more than 5s
-		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d, Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d, Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			Device->VideoStream->GetPacketsFilled(), FilterThread->GetFramesDeintFilled(),
-			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+			atomic_read(&FramesFilled), Audio->GetUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 	}
 
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
-		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			FramesDropped, FramesDuped,
 			Device->VideoStream->GetPacketsFilled(), FilterThread->GetFramesDeintFilled(),
-			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+			atomic_read(&FramesFilled), Audio->GetUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 
 		if (!StartCounter)
@@ -1649,10 +1649,10 @@ audioclock:
 	}
 
 	if (diff > 35 && !(abs(diff) > 5000)) {	// audio is more than 35ms behind video, duplicate video frame
-		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d AudioUsedBytes %d audio %s video %s Delay %dms diff %dms",
+		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			FramesDropped, FramesDuped,
 			Device->VideoStream->GetPacketsFilled(), FilterThread->GetFramesDeintFilled(),
-			atomic_read(&FramesFilled), Audio->AudioUsedBytes(), Timestamp2String(audio_pts),
+			atomic_read(&FramesFilled), Audio->GetUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), Device->GetVideoAudioDelay(), diff);
 
 		FramesDuped++;
@@ -1802,7 +1802,7 @@ int cVideoRender::check_pausing_with_sync(int *skip_video) {
 	if (!VideoIsPaused())
 		return 0;
 
-	int64_t audio_pts = Audio->AudioGetClock();
+	int64_t audio_pts = Audio->GetClock();
 	int64_t video_pts = VideoGetClock() * 1000 * av_q2d(*timebase);
 	if (video_pts == AV_NOPTS_VALUE || audio_pts == AV_NOPTS_VALUE) {
 		usleep(10000);
@@ -1884,13 +1884,13 @@ dequeue:
 
 	// skip old audio in trickspeed
 	if (fd->flags & FRAME_FLAG_TRICKSPEED) {
-		Audio->AudioSkipInTrickSpeed(frame->pts, 0);
+		Audio->Skip(frame->pts, 0);
 		goto skip_sync;
 	}
 
 	// skip old audio after trickspeed
 	if (lastframe->frame && lastframe->trickspeed) {
-		Audio->AudioSkipInTrickSpeed(frame->pts, 1);
+		Audio->Skip(frame->pts, 1);
 		goto skip_sync;
 	}
 

@@ -123,7 +123,7 @@ void cSoftHdPlayer::Action(void)
 		Player(Source);
 	}
 
-	while(Audio->AudioGetClock() != AV_NOPTS_VALUE)
+	while(Audio->GetClock() != AV_NOPTS_VALUE)
 		usleep(5000);
 
 	cSoftHdControl::Control()->Close = 1;
@@ -247,7 +247,7 @@ repeat:
 						av_q2d(format->streams[audio_stream_index]->time_base));
 					goto repeat;
 				}
-				CurrentTime = Audio->AudioGetClock() / 1000 - start_time;
+				CurrentTime = Audio->GetClock() / 1000 - start_time;
 			}
 
 			if (video_stream_index == packet.stream_index) {
