@@ -2232,19 +2232,19 @@ void cOglThread::Action(void) {
 
 void cOglThread::eglAcquireContext(void)
 {
-    EGL_CHECK(eglMakeCurrent(Render->eglDisplay, Render->eglSurface, Render->eglSurface, Render->eglContext));
+    EGL_CHECK(eglMakeCurrent(Render->EglDisplay(), Render->EglSurface(), Render->EglSurface(), Render->EglContext()));
 }
 
 void cOglThread::eglReleaseContext(void)
 {
-    EGL_CHECK(eglMakeCurrent(Render->eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
+    EGL_CHECK(eglMakeCurrent(Render->EglDisplay(), EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
 }
 
 bool cOglThread::InitOpenGL(void) {
     LOGDEBUG2(L_OPENGL, "Init OpenGL context");
 
     // Wait for the EGL context to be created
-    while(!Render->GlInit) {
+    while(!Render->GlInitiated()) {
         LOGDEBUG2(L_OPENGL, "wait for EGL context");
         usleep(20000);
     }
@@ -2712,7 +2712,7 @@ cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglT
     double pixel_aspect;
     dirtyViewport = new cRect();
 
-    Render->VideoGetScreenSize(&osdWidth, &osdHeight, &pixel_aspect);
+    Render->GetScreenSize(&osdWidth, &osdHeight, &pixel_aspect);
     LOGDEBUG2(L_OSD, "New Osd %p osdLeft %d osdTop %d screenWidth %d screenHeight %d", this, Left, Top, osdWidth, osdHeight);
 
     maxPixmapSize.Set(oglThread->MaxTextureSize(), oglThread->MaxTextureSize());

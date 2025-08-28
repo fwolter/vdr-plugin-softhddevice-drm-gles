@@ -63,7 +63,7 @@ void cDisplayThread::Action(void)
 {
     LOGDEBUG("video: display thread started");
     while(Running()) {
-	int ret = Render->Frame2Display();
+	int ret = Render->DisplayFrame();
 
 	if (!ret) {
 	    if (Render->DrmHandleEvent() != 0)
@@ -71,7 +71,7 @@ void cDisplayThread::Action(void)
 	}
 
 	if (Render->ShouldClose() || Render->ShouldFlush())
-	    Render->CleanDisplayThread();
+	    Render->CleanUp();
 
     }
     LOGDEBUG("video: display thread stopped");
@@ -182,7 +182,7 @@ int cFilterThread::Init(const AVCodecContext *VideoCtx, AVFrame *Frame, int disa
     FramesDeintRead = 0;
     FramesDeintWrite =  0;
 
-    Render->ClearFilterFrames();
+    Render->ClearFramesToFilter();
     FilterBug = 0;
     FilterTrick = 0;
     FilterStill = 0;
@@ -339,7 +339,7 @@ void cFilterThread::Action(void)
 	}
 
 // filter frame
-	frame = GetFrame();
+	frame = RbGetFrame();
 
 	int interlaced;
 #if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
@@ -348,10 +348,10 @@ void cFilterThread::Action(void)
 	interlaced = frame->flags & AV_FRAME_FLAG_INTERLACED;
 #endif
 	if (interlaced) {
-		Render->IncFilterFrames();
-		Render->IncFilterFrames();
+		Render->IncFramesToFilter();
+		Render->IncFramesToFilter();
 	} else {
-		Render->IncFilterFrames();
+		Render->IncFramesToFilter();
 	}
 
 	if (av_buffersrc_add_frame_flags(buffersrc_ctx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0)
@@ -401,14 +401,14 @@ void cFilterThread::Action(void)
 			    // -> go through EnqueueFB
 			    if (FilterBug)
 				filt_frame->pts = filt_frame->pts / 2;	// ffmpeg bug
-			    Render->DecFilterFrames();
+			    Render->DecFramesToFilter();
 			    Render->FramesRbUnlock();
 			    Render->EnqueueFB(filt_frame);
 			} else {
 			    // hw deinterlacers, we received prime data
 			    // -> put the frame into render Rb
-			    Render->PushFrame(filt_frame);
-			    Render->DecFilterFrames();
+			    Render->RbPushFrame(filt_frame);
+			    Render->DecFramesToFilter();
 			    Render->FramesRbUnlock();
 			}
 			enqueued = 1;
@@ -433,7 +433,7 @@ int cFilterThread::GetFramesDeintFilled(void)
     return atomic_read(&FramesDeintFilled);
 }
 
-AVFrame *cFilterThread::GetFrame(void)
+AVFrame *cFilterThread::RbGetFrame(void)
 {
     AVFrame *frame = FramesDeintRb[FramesDeintRead];
     FramesDeintRead = (FramesDeintRead + 1) % VIDEO_SURFACES_MAX;
@@ -442,7 +442,7 @@ AVFrame *cFilterThread::GetFrame(void)
     return frame;
 }
 
-void cFilterThread::PushFrame(AVFrame *frame)
+void cFilterThread::RbPushFrame(AVFrame *frame)
 {
     FramesDeintRb[FramesDeintWrite] = frame;
     FramesDeintWrite = (FramesDeintWrite + 1) % VIDEO_SURFACES_MAX;
@@ -456,10 +456,10 @@ void cFilterThread::Stop(void)
     FilterBug = 0;
     FilterTrick = 0;
     FilterStill = 0;
-    Render->ClearFilterFrames();
+    Render->ClearFramesToFilter();
 
     while (GetFramesDeintFilled()) {
-	AVFrame *frame = GetFrame();
+	AVFrame *frame = RbGetFrame();
 	av_frame_free(&frame);
     }
 

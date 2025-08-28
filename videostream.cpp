@@ -172,7 +172,7 @@ void cVideoStream::ClearVideo(void)
 		while (m_wait == 1) {
 			// don't wait, if no thread is running, which should set stream->wait = 2
 			// otherwise we run into an endless loop here
-			if (!m_pRender->DecodeThread->Active())
+			if (!m_pRender->DecodingThreadIsActive())
 				m_wait = 2;
 			usleep(10000);
 		}
@@ -188,7 +188,7 @@ void cVideoStream::ClearVideo(void)
 	avpkt->size = 0;
 	avpkt->pts = AV_NOPTS_VALUE;
 
-	if (m_pRender->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+	if (m_pRender->HardwareQuirks() & QUIRK_CODEC_FLUSH_WORKAROUND) {
 		if (m_pDecoder->ReopenCodec(m_codecId, m_pPar, &m_timebase, 0))
 			LOGFATAL("%s: Could not reopen the decoder (flush buffers)!", __FUNCTION__);
 	} else {
@@ -205,7 +205,7 @@ void cVideoStream::ClearVideo(void)
  */
 void cVideoStream::Close(void)
 {
-	if (!m_trickSpeed || !m_pRender->VideoGetTrickForward()) {
+	if (!m_trickSpeed || !m_pRender->GetTrickForward()) {
 		ClearVideo();
 		m_codecId = AV_CODEC_ID_NONE;
 		m_pDecoder->Close();
@@ -252,7 +252,7 @@ int cVideoStream::DecodeInput(void)
 		int height = 0;
 
 		// amlogic h264 decoder needs this
-		if ((m_codecId == AV_CODEC_ID_H264) && (m_pRender->HardwareQuirks & QUIRK_CODEC_NEEDS_EXT_INIT)) {
+		if ((m_codecId == AV_CODEC_ID_H264) && (m_pRender->HardwareQuirks() & QUIRK_CODEC_NEEDS_EXT_INIT)) {
 			if (!atomic_read(&m_packetsFilled))
 				return -1;
 
@@ -270,7 +270,7 @@ int cVideoStream::DecodeInput(void)
 	if (m_codecId != AV_CODEC_ID_NONE) {
 		m_pktsMutex.Lock();
 		// in trickspeed wait for minimum pkts needed to decode a frame
-		int minPkts = (m_pRender->VideoGetTrickSpeed() && m_interlaced) ? m_trickpkts : 1;
+		int minPkts = (m_pRender->GetTrickSpeed() && m_interlaced) ? m_trickpkts : 1;
 		if (atomic_read(&m_packetsFilled) < minPkts) {
 			m_pktsMutex.Unlock();
 			return -1;
@@ -283,7 +283,7 @@ int cVideoStream::DecodeInput(void)
 			m_packetRead = (m_packetRead + 1) % VIDEO_PACKET_MAX;
 			atomic_dec(&m_packetsFilled);
 			// in backward trickspeed force the decoder to decode the frame
-			if (ret == 0 && m_pRender->VideoGetTrickSpeed() && !m_pRender->VideoGetTrickForward()) {
+			if (ret == 0 && m_pRender->GetTrickSpeed() && !m_pRender->GetTrickForward()) {
 				sent++;
 				if (sent >= minPkts) {
 					m_pDecoder->SendPacket(NULL);
@@ -294,10 +294,10 @@ int cVideoStream::DecodeInput(void)
 		m_pktsMutex.Unlock();
 
 // this is normal Playback
-		if (!m_pRender->VideoGetTrickSpeed()) {
+		if (!m_pRender->GetTrickSpeed()) {
 			if (!m_newStream) { // this is for mediaplayer ?
 				if (!m_pDecoder->ReceiveFrame(0, &frame)) {
-					while (m_pRender->VideoRenderFrame(m_pDecoder->GetContext(), frame, 0)) {
+					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), frame, 0)) {
 						if (CloseRequested()) {
 							Close();
 							av_frame_free(&frame);
@@ -312,14 +312,14 @@ receive_trickspeed:
 			// try receiving frame from decoder
 			ret = m_pDecoder->ReceiveFrame(1, &frame);
 			if (ret == 0) {
-				while (m_pRender->VideoGetTrickSpeed() && m_pRender->VideoGetTrickCounter() > 0) {
+				while (m_pRender->GetTrickSpeed() && m_pRender->GetTrickCounter() > 0) {
 					AVFrame *trickframe = av_frame_clone(frame);
 					if (!trickframe) {
 						LOGERROR("%s: could not clone frame", __FUNCTION__);
 						break;
 					}
-					LOGDEBUG2(L_TRICK, "%s: Trickspeed, send another cloned trick frame %d %p", __FUNCTION__, m_pRender->VideoGetTrickCounter(), trickframe);
-					while (m_pRender->VideoRenderFrame(m_pDecoder->GetContext(), trickframe, FRAME_FLAG_TRICKSPEED)) {
+					LOGDEBUG2(L_TRICK, "%s: Trickspeed, send another cloned trick frame %d %p", __FUNCTION__, m_pRender->GetTrickCounter(), trickframe);
+					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), trickframe, FRAME_FLAG_TRICKSPEED)) {
 						if (CloseRequested()) {
 							Close();
 							av_frame_free(&trickframe);
@@ -328,7 +328,7 @@ receive_trickspeed:
 							return -1;
 						}
 					}
-					m_pRender->VideoDecTrickCounter();
+					m_pRender->DecTrickCounter();
 					if (CloseRequested()) {
 						Close();
 						av_frame_free(&frame);
@@ -339,12 +339,12 @@ receive_trickspeed:
 				av_frame_free(&frame);
 				sent = 0;
 
-				int trickSpeed = m_pRender->VideoGetTrickSpeed();
-				m_pRender->VideoSetTrickCounter(trickSpeed);
+				int trickSpeed = m_pRender->GetTrickSpeed();
+				m_pRender->SetTrickCounter(trickSpeed);
 
 				goto receive_trickspeed; // try to get another frame
 			} else if (ret == AVERROR_EOF) { // needs flush / reopen
-				if (m_pRender->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+				if (m_pRender->HardwareQuirks() & QUIRK_CODEC_FLUSH_WORKAROUND) {
 					if (m_pDecoder->ReopenCodec(m_codecId, m_pPar, &m_timebase, 0))
 						LOGFATAL("%s: Could not reopen the decoder (flush buffers)!", __FUNCTION__);
 				} else {

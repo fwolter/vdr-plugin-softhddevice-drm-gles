@@ -548,7 +548,7 @@ void cSoftHdDevice::Exit(void)
     NewAudioStream = 0;
     av_packet_free(&AudioAvPkt);
 
-    Render->VideoExit();
+    Render->Exit();
     VideoStream->Exit();
 
     LOGDEBUG("%s: exited", __FUNCTION__);
@@ -576,9 +576,9 @@ void cSoftHdDevice::Start(void)
 //	VideoStream->SetRender(Render);
 
 	if (ConfigDisableOglOsd)
-	    Render->VideoSetDisableOglOsd();
-	Render->VideoSetDisableDeint(ConfigDisableDeint);
-	Render->VideoInit();
+	    Render->DisableOglOsd();
+	Render->DisableDeint(ConfigDisableDeint);
+	Render->Init();
 
 	VideoStream->SetDecoder(new cVideoDecoder(Render));
 	VideoStream->InitPacketRb();
@@ -675,7 +675,7 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 		VideoStream->SetTrickSpeed(0);
 		if (VideoStream->GetCodecId() != AV_CODEC_ID_NONE)
 			VideoStream->RequestClose(5000);
-		Render->VideoSetClosing(1);
+		Render->SetClosing(1);
 		SkipAudio = 0;
 		Audio->Resume();
 		ClearAudio();	// flush all AUDIO buffers
@@ -686,19 +686,23 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 		VideoStream->WakeUp();
 		break;
 	case 1:			// audio/video
-		Render->VideoThreadWakeup(1, 1);
+		Render->WakeupDecodingThread();
+		Render->WakeupDisplayThread();
 		//Play(); Play is a vdr command!!!
 		break;
 	case 2:			// audio only
-		Render->VideoThreadExit();
+		Render->ExitDecodingThread();
+		Render->ExitDisplayThread();
 		break;
 	case 3:			// audio only (black screen)
 		LOGDEBUG("softhddev: FIXME: audio only, silence video errors");
-		Render->VideoThreadWakeup(1, 1);
+		Render->WakeupDecodingThread();
+		Render->WakeupDisplayThread();
 		//Play();
 		break;
 	case 4:			// video only
-		Render->VideoThreadWakeup(1, 1);
+		Render->WakeupDecodingThread();
+		Render->WakeupDisplayThread();
 		//Play();
 		break;
 	default:
@@ -718,7 +722,7 @@ int64_t cSoftHdDevice::GetSTC(void)
 {
 //    LOGDEBUG("%s:", __FUNCTION__);
     if (Render) {
-	return Render->VideoGetClock();
+	return Render->GetVideoClock();
     }
     // could happen during dettached
     LOGWARNING("softhddev: %s called without hw decoder", __FUNCTION__);
@@ -742,7 +746,7 @@ void cSoftHdDevice::TrickSpeed(int speed, bool forward)
 
     LOGDEBUG("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
 
-    Render->VideoSetClosing(0);
+    Render->SetClosing(0);
     if (VideoStream->IsFreezed()) {
 	LOGDEBUG("TrickSpeed: StreamFreezed %d SkipAudio %d", VideoStream->IsFreezed(), SkipAudio);
 	VideoStream->WakeUp();
@@ -751,7 +755,9 @@ void cSoftHdDevice::TrickSpeed(int speed, bool forward)
     }
 
     VideoStream->SetTrickSpeed(1);
-    Render->VideoTrickSpeed(speed, forward);
+    Render->SetTrickSpeed(speed, forward);
+	if (Render->VideoIsPaused())
+		Render->StartVideo();
 }
 
 /**
@@ -764,7 +770,7 @@ void cSoftHdDevice::Clear(void)
 
     LOGDEBUG("Clear(void)");
     VideoStream->ClearVideo();
-    Render->VideoSetClosing(0);
+    Render->SetClosing(0);
     ClearAudio();
 }
 
@@ -779,13 +785,14 @@ void cSoftHdDevice::Play(void)
     LOGDEBUG("Play(void)");
     if (VideoStream->GetTrickSpeed() && VideoStream->GetCodecId() != AV_CODEC_ID_NONE) {
 	VideoStream->RequestClose(5000);
-	Render->VideoSetClosing(0);
+	Render->SetClosing(0);
     }
     VideoStream->SetTrickSpeed(0);
     SkipAudio = 0;
     VideoStream->WakeUp();
     Audio->Resume();
-    Render->VideoPlay();
+	Render->SetTrickSpeed(0, 1);
+    Render->StartVideo();
 }
 
 /**
@@ -799,7 +806,7 @@ void cSoftHdDevice::Freeze(void)
     LOGDEBUG("Freeze(void)");
     VideoStream->Freeze();
     Audio->Pause();
-    Render->VideoPause();
+    Render->PauseVideo();
 }
 
 /**
@@ -928,7 +935,7 @@ receive:
     if (!ret) {
 	// frame received, render it and try another one (should end up with AVERROR_EOF)
 	LOGDEBUG2(L_STILL, "StillPicture: frame received");
-	while (Render->VideoRenderFrame(VideoStream->Decoder()->GetContext(), frame, FRAME_FLAG_STILLPICTURE)) {
+	while (Render->RenderFrame(VideoStream->Decoder()->GetContext(), frame, FRAME_FLAG_STILLPICTURE)) {
 	    if (VideoStream->IsClosing()) {
 		av_frame_free(&frame);
 		break;
@@ -937,7 +944,7 @@ receive:
 	goto receive;
     } else if (ret == AVERROR_EOF) {
 	// AVERROR_EOF, flush needed
-	if (Render->HardwareQuirks & QUIRK_CODEC_FLUSH_WORKAROUND) {
+	if (Render->HardwareQuirks() & QUIRK_CODEC_FLUSH_WORKAROUND) {
 	    if (VideoStream->Decoder()->ReopenCodec(codec, NULL, NULL, 0))
 		LOGFATAL("StillPicture: Could not reopen the decoder (flush buffers)!");
 	} else {
@@ -1075,7 +1082,7 @@ void cSoftHdDevice::GetVideoSize(int &width, int &height, double &aspect_ratio)
 */
 void cSoftHdDevice::GetOsdSize(int &width, int &height, double &pixel_aspect)
 {
-    Render->VideoGetScreenSize(&width, &height, &pixel_aspect);
+    Render->GetScreenSize(&width, &height, &pixel_aspect);
 }
 
 // ----------------------------------------------------------------------------
@@ -1450,22 +1457,22 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     // 1. Trigger grab in video thread and wait for the buffers to be cloned
     LOGDEBUG2(L_GRAB, "GrabImage: Start grabbing");
     cCondWait waitGrab;
-    Render->VideoTriggerGrab(&waitGrab);
+    Render->TriggerGrab(&waitGrab);
     if (!waitGrab.Wait(2000)) {
-	// timeout (2000ms more in VideoTriggerGrab)
-	Render->VideoClearGrab();
+	// timeout (2000ms more in TriggerGrab)
+	Render->ClearGrab();
 	return NULL;
     }
 
     // 2. Convert the buffers to rgb and free the cloned buffers afterwards
-    Render->VideoConvertOsdBufToRgb();
-    Render->VideoConvertVideoBufToRgb();
+    Render->ConvertOsdBufToRgb();
+    Render->ConvertVideoBufToRgb();
 
     // 3. get screen dimensions
     int screenwidth;
     int screenheight;
     double pixel_aspect;
-    Render->VideoGetScreenSize(&screenwidth, &screenheight, &pixel_aspect);
+    Render->GetScreenSize(&screenwidth, &screenheight, &pixel_aspect);
     int screensize = screenwidth * screenheight * 3; // we want a RGB24
 
     // 4. set grab dimensions
@@ -1479,7 +1486,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
 
     // 5. fetch video data
     // Video comes as RGB, width and height is original screen dimension (video is maybe scaled)
-    cSoftHdGrab *videoGrab = Render->VideoGetGrab(&video_size, &video_width, &video_height, &video_x, &video_y, 0);
+    cSoftHdGrab *videoGrab = Render->GetGrab(&video_size, &video_width, &video_height, &video_x, &video_y, 0);
     uint8_t *video = NULL;
     if (videoGrab->GetSize())
 	video = videoGrab->GetData();
@@ -1490,7 +1497,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
 
     // 6. fetch osd data
     // OSD comes as ARGB, width and height is original screen dimension (osd is always fullscreen)
-    cSoftHdGrab *osdGrab = Render->VideoGetGrab(NULL, NULL, NULL, NULL, NULL, 1);
+    cSoftHdGrab *osdGrab = Render->GetGrab(NULL, NULL, NULL, NULL, NULL, 1);
     uint8_t *osd = NULL;
     if (osdGrab->GetSize())
 	osd = osdGrab->GetData();;
@@ -1571,7 +1578,7 @@ void cSoftHdDevice::ScaleVideo(const cRect & rect)
         __FUNCTION__, rect.Width(), rect.Height(), rect.X(), rect.Y());
 
     if (Render) {
-	Render->VideoSetOutputPosition(rect.X(), rect.Y(), rect.Width(), rect.Height());
+	Render->SetVideoOutputPosition(rect.X(), rect.Y(), rect.Width(), rect.Height());
     }
 }
 
@@ -1629,7 +1636,7 @@ int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
 		Audio->SetPassthroughDevice(optarg);
 		continue;
 	    case 'd':			// set display output
-		Render->VideoSetDisplay(optarg);
+		Render->SetDisplayResolution(optarg);
 		continue;
 #ifdef USE_GLES
 	    case 'w':			// workarounds
@@ -1667,14 +1674,14 @@ int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
 void cSoftHdDevice::SetDisableDeint(void)
 {
 	if (Render)
-		Render->VideoSetDisableDeint(ConfigDisableDeint);
+		Render->DisableDeint(ConfigDisableDeint);
 }
 
 void cSoftHdDevice::SetDisableOglOsd(void)
 {
 	ConfigDisableOglOsd = 1;
 	if (Render)
-		Render->VideoSetDisableOglOsd();
+		Render->DisableOglOsd();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1686,7 +1693,7 @@ void cSoftHdDevice::SetDisableOglOsd(void)
 */
 void cSoftHdDevice::OsdClose(void)
 {
-    Render->VideoOsdClear();
+    Render->OsdClear();
 }
 
 /**
@@ -1704,7 +1711,7 @@ void cSoftHdDevice::OsdClose(void)
 void cSoftHdDevice::OsdDrawARGB(int xi, int yi, int height, int width, int pitch,
 	const uint8_t * argb, int x, int y)
 {
-	Render->VideoOsdDrawARGB(xi, yi, height, width, pitch, argb, x, y);
+	Render->OsdDrawARGB(xi, yi, height, width, pitch, argb, x, y);
 }
 
 void cSoftHdDevice::SetPassthrough(int mask)
@@ -1776,7 +1783,7 @@ void cSoftHdDevice::GetStats(int *duped, int *dropped, int *counter)
 	*dropped = 0;
 	*counter = 0;
 	if (Render) {
-		Render->VideoGetStats(duped, dropped, counter);
+		Render->GetStats(duped, dropped, counter);
 	}
 }
 

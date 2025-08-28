@@ -217,9 +217,9 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 {
 	int swcodec = forceSoftwareDecoder;
 
-	if ((m_pRender->VideoCodecMode() & CODEC_DISABLE_MPEG_HW && codecId == AV_CODEC_ID_MPEG2VIDEO))
+	if ((m_pRender->HardwareQuirks() & QUIRK_CODEC_DISABLE_MPEG_HW && codecId == AV_CODEC_ID_MPEG2VIDEO))
 		swcodec = 1;
-	if ((m_pRender->VideoCodecMode() & CODEC_DISABLE_H264_HW && codecId == AV_CODEC_ID_H264))
+	if ((m_pRender->HardwareQuirks() & QUIRK_CODEC_DISABLE_H264_HW && codecId == AV_CODEC_ID_H264))
 		swcodec = 1;
 
 	LOGDEBUG2(L_CODEC, "%s: Try to open decoder for CodecID %s%s", __FUNCTION__,
@@ -536,7 +536,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 	// codec artifacts workaround for amlogic H264:
 	// skip QUIRK_CODEC_SKIP_NUM_FRAMES key frames
 	if (m_pVideoCtx->codec_id == AV_CODEC_ID_H264 &&
-	   (m_pRender->HardwareQuirks & QUIRK_CODEC_SKIP_FIRST_FRAMES) && m_cntStartKeyFrames) {
+	   (m_pRender->HardwareQuirks() & QUIRK_CODEC_SKIP_FIRST_FRAMES) && m_cntStartKeyFrames) {
 #if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
 		if (pFrame->key_frame) {
 			LOGDEBUG2(L_CODEC, "%s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,

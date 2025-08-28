@@ -85,7 +85,7 @@ private:
     int FramesDeintWrite;
     int FramesDeintRead;
 
-    AVFrame *GetFrame(void);
+    AVFrame *RbGetFrame(void);
 
 public:
     cFilterThread(cVideoRender *);
@@ -94,7 +94,7 @@ public:
     int Init(const AVCodecContext *, AVFrame *, int);
     void Stop(void);
     int GetFramesDeintFilled(void);
-    void PushFrame(AVFrame *);
+    void RbPushFrame(AVFrame *);
 
 protected:
     virtual void Action(void);
