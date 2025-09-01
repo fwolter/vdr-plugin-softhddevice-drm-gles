@@ -1350,7 +1350,6 @@ void cVideoRender::CleanUp(void)
 	AVFrame *frame;
 	int i;
 
-	m_waitCleanMutex.Lock();
 	// first wait for m_pFilterThread to be closed
 	if (m_pFilterThread->Active()) {
 		LOGDEBUG("CleanUp: cancel filter thread");
@@ -1387,7 +1386,6 @@ void cVideoRender::CleanUp(void)
 	m_flushing = 0;
 	m_closing = 0;
 	m_deintDisabled = m_configDeintDisabled;
-	m_waitCleanMutex.Unlock();
 
 	LOGDEBUG("CleanUp: DRM cleaned (m_framesFilled %d m_numFramesToFilter %d)", atomic_read(&m_framesFilled), atomic_read(&m_numFramesToFilter));
 }
@@ -2443,11 +2441,10 @@ void cVideoRender::StartVideo(void)
 ///
 void cVideoRender::SetClosing(int black)
 {
-	LOGDEBUG("SetClosing: m_startCounter %d", m_startCounter);
+	LOGDEBUG("SetClosing: m_startCounter %d%s", m_startCounter, black ? " closing": " flushing");
 	if (!m_pDisplayThread->Active())
 		return;
 
-	m_waitCleanMutex.Lock();
 	if (m_pFilterThread->Active())
 		m_pFilterThread->Stop();
 	m_flushing = !black;
@@ -2456,12 +2453,10 @@ void cVideoRender::SetClosing(int black)
 	if (VideoIsPaused())
 		ResumeVideo();
 
-	LOGDEBUG("SetClosing: pthread_cond_wait");
-	if (m_waitCleanCondition.Wait(2000)) {
+	LOGDEBUG("SetClosing: wait for cleanup");
+	if (!m_waitCleanCondition.Wait(2000)) {
 		LOGERROR("%s: timeout while waiting for cleanup");
 	}
-	m_waitCleanMutex.Unlock();
-	LOGDEBUG("SetClosing: NACH pthread_cond_wait");
 
 	m_startCounter = 0;
 	m_framesDuped = 0;
