@@ -54,12 +54,9 @@ extern "C" {
 #include "drm_buf.h"
 #include "threads.h"
 #include "grab.h"
+#include "plane.h"
 
 #define RENDERBUFFERS		36		///< number of render video buffers
-
-#define VIDEO_PLANE			0
-#define OSD_PLANE			1
-#define MAX_PLANES			2
 
 // Hardware quirks, that are set depending on the hardware used
 #define QUIRK_NO_HW_DEINT				1 << 0	///< set, if no hw deinterlacer
@@ -100,28 +97,6 @@ typedef struct FrameData {
 	int flags;
 } FrameData;
 
-struct plane_properties {
-	uint64_t crtc_id;
-	uint64_t fb_id;
-	uint64_t crtc_x;
-	uint64_t crtc_y;
-	uint64_t crtc_w;
-	uint64_t crtc_h;
-	uint64_t src_x;
-	uint64_t src_y;
-	uint64_t src_w;
-	uint64_t src_h;
-	uint64_t zpos;
-};
-
-struct plane {
-	uint32_t plane_id;
-	uint64_t type;
-	drmModePlane *plane;
-	drmModeObjectProperties *props;
-	drmModePropertyRes **props_info;
-	struct plane_properties properties;
-};
 
 /**
  * @brief cVideoRender - Video render class
@@ -182,9 +157,9 @@ public:
 
 	// DRM -> new class?
 	int SetPlanePropertyRequest(drmModeAtomicReqPtr, uint32_t, const char *, uint64_t);
-	void SetPlaneZpos(drmModeAtomicReqPtr, struct plane *);
-	void SetPlane(drmModeAtomicReqPtr, struct plane *);
-	int CheckZpos(struct plane *, uint64_t);
+	void SetPlaneZpos(drmModeAtomicReqPtr, cDrmPlane *);
+	void SetPlane(drmModeAtomicReqPtr, cDrmPlane *);
+	int CheckZpos(cDrmPlane *);
 	int32_t find_crtc_for_connector(const drmModeRes *, const drmModeConnector *);
 	int init_gbm(int, int, uint32_t, uint64_t);
 	int DrmHandleEvent(void);
@@ -298,7 +273,8 @@ private:
 	uint32_t m_connectorId;					///< current connector ID
 	uint32_t m_crtcId;						///< current crtc ID
 	uint32_t m_crtcIndex;					///< current crtc index
-	struct plane *m_pPlanes[MAX_PLANES];	///< array of plane structs (OSD + VIDEO)
+	cDrmPlane m_videoPlane;					///< the video drm plane
+	cDrmPlane m_osdPlane;					///< the osd drm plane
 	struct lastFrame *m_pLastFrame;			///< pointer to last rendered frame struct (e.g. needed for later free)
 	int m_numBuffers;						///< numer of framebuffers currently set up
 	int m_enqueueBufferIdx;					///< index of the current (sw) framebuffer in the array

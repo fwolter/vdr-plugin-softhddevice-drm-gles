@@ -112,24 +112,23 @@ static int GetPropertyValue(int m_fdDrm, uint32_t objectID,
 
 int cVideoRender::SetPlanePropertyRequest(drmModeAtomicReqPtr ModeReq, uint32_t objectID, const char *propName, uint64_t value)
 {
-	struct plane *obj = NULL;
-
-	if (objectID == m_pPlanes[VIDEO_PLANE]->plane_id)
-		obj = m_pPlanes[VIDEO_PLANE];
-	else if (objectID == m_pPlanes[OSD_PLANE]->plane_id)
-		obj = m_pPlanes[OSD_PLANE];
+	cDrmPlane *obj = nullptr;
+	
+	if (objectID == m_videoPlane.GetId())
+		obj = &m_videoPlane;
+	else if (objectID == m_osdPlane.GetId())
+		obj = &m_osdPlane;
 
 	if (!obj) {
 		LOGERROR("SetPlanePropertyRequest: Unable to find plane with id %d", objectID);
 		return -EINVAL;
 	}
 
-	uint32_t i;
 	int id = -1;
 
-	for (i = 0; i < obj->props->count_props; i++) {
-		if (strcmp(obj->props_info[i]->name, propName) == 0) {
-			id = obj->props_info[i]->prop_id;
+	for (int i = 0; i < obj->GetCountProps(); i++) {
+		if (strcmp(obj->GetPropsInfoName(i), propName) == 0) {
+			id = obj->GetPropsInfoPropId(i);
 			break;
 		}
 	}
@@ -175,42 +174,26 @@ static int SetPropertyRequest(drmModeAtomicReqPtr ModeReq, int m_fdDrm,
 	return drmModeAtomicAddProperty(ModeReq, objectID, id, value);
 }
 
-void cVideoRender::SetPlaneZpos(drmModeAtomicReqPtr ModeReq, struct plane *plane)
+// move to cDrmPlane
+void cVideoRender::SetPlaneZpos(drmModeAtomicReqPtr ModeReq, cDrmPlane *plane)
 {
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "zpos", plane->properties.zpos);
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "zpos", plane->GetZpos());
 }
 
-void cVideoRender::SetPlane(drmModeAtomicReqPtr ModeReq, struct plane *plane)
+void cVideoRender::SetPlane(drmModeAtomicReqPtr ModeReq, cDrmPlane *plane)
 {
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "CRTC_ID", plane->properties.crtc_id);
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "FB_ID", plane->properties.fb_id);
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_ID", plane->GetCrtcId());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "FB_ID", plane->GetFbId());
 
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "CRTC_X", plane->properties.crtc_x);
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "CRTC_Y", plane->properties.crtc_y);
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "CRTC_W", plane->properties.crtc_w);
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "CRTC_H", plane->properties.crtc_h);
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_X", plane->GetCrtcX());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_Y", plane->GetCrtcY());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_W", plane->GetCrtcW());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_H", plane->GetCrtcH());
 
-
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "SRC_X", plane->properties.src_x);
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "SRC_Y", plane->properties.src_y);
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "SRC_W", plane->properties.src_w << 16);
-	SetPlanePropertyRequest(ModeReq, plane->plane_id, "SRC_H", plane->properties.src_h << 16);
-}
-
-static void DumpPlaneProperties(struct plane *plane)
-{
-	LOGINFO("DumpPlaneProperties (plane_id = %d):", plane->plane_id);
-	LOGINFO("  CRTC ID: %" PRIu64 "", plane->properties.crtc_id);
-	LOGINFO("  FB ID  : %" PRIu64 "", plane->properties.fb_id);
-	LOGINFO("  CRTC X : %" PRIu64 "", plane->properties.crtc_x);
-	LOGINFO("  CRTC Y : %" PRIu64 "", plane->properties.crtc_y);
-	LOGINFO("  CRTC W : %" PRIu64 "", plane->properties.crtc_w);
-	LOGINFO("  CRTC H : %" PRIu64 "", plane->properties.crtc_h);
-	LOGINFO("  SRC X  : %" PRIu64 "", plane->properties.src_x);
-	LOGINFO("  SRC Y  : %" PRIu64 "", plane->properties.src_y);
-	LOGINFO("  SRC W  : %" PRIu64 "", plane->properties.src_w);
-	LOGINFO("  SRC H  : %" PRIu64 "", plane->properties.src_h);
-	LOGINFO("  ZPOS   : %" PRIu64 "", plane->properties.zpos);
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_X", plane->GetSrcX());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_Y", plane->GetSrcY());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_W", plane->GetSrcW() << 16);
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_H", plane->GetSrcH() << 16);
 }
 
 static size_t ReadLineFromFile(char *buf, size_t size, const char * file)
@@ -319,7 +302,8 @@ static int TestCaps(int fd)
 	return 0;
 }
 
-int cVideoRender::CheckZpos(struct plane *plane, uint64_t zpos)
+// move to cDrmPlane
+int cVideoRender::CheckZpos(cDrmPlane *plane)
 {
 	drmModeAtomicReqPtr ModeReq;
 	const uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
@@ -327,7 +311,6 @@ int cVideoRender::CheckZpos(struct plane *plane, uint64_t zpos)
 	if (!(ModeReq = drmModeAtomicAlloc()))
 		LOGERROR("CheckZpos: cannot allocate atomic request (%d): %m", errno);
 
-	plane->properties.zpos = zpos;
 	SetPlaneZpos(ModeReq, plane);
 
 	if (drmModeAtomicCommit(m_fdDrm, ModeReq, flags, NULL) != 0) {
@@ -398,38 +381,6 @@ EGLConfig cVideoRender::GetEGLConfig(void)
 PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display = NULL;
 PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC get_platform_surface = NULL;
 #endif
-
-static void get_properties(int fd, int plane_id, struct plane *plane)
-{
-	uint32_t i;
-	plane->props = drmModeObjectGetProperties(fd, plane_id, DRM_MODE_OBJECT_PLANE);
-	if (!plane->props) {
-		LOGERROR("could not get %u properties: %s",
-			plane_id, strerror(errno));
-		return;
-	}
-	plane->props_info = (drmModePropertyRes **)calloc(plane->props->count_props, sizeof(*plane->props_info)); \
-	for (i = 0; i < plane->props->count_props; i++) {
-		plane->props_info[i] = drmModeGetProperty(fd, plane->props->props[i]);
-	}
-}
-
-static void free_properties(struct plane *plane)
-{
-	if (!plane->props)
-		return;
-
-	if (!plane->props_info)
-		return;
-
-	for (uint32_t i = 0; i < plane->props->count_props; i++) {
-		if (plane->props_info[i]) {
-			drmModeFreeProperty(plane->props_info[i]);
-		}
-	}
-	drmModeFreeObjectProperties(plane->props);
-	free(plane->props_info);
-}
 
 void cVideoRender::SetDisplayResolution(const char* resolution)
 {
@@ -749,24 +700,11 @@ find_mode:
 		return -1;
 	}
 
-	// allocate local plane structs
-	for (i = 0; i < MAX_PLANES; i++) {
-		m_pPlanes[i] = (struct plane *)calloc(1, sizeof(struct plane));
-	}
-
-	// test and list the local plane structs
-	struct plane best_primary_video_plane; // is the NV12 capable primary plane with the lowest plane_id
-	best_primary_video_plane.plane_id = 0;
-	best_primary_video_plane.properties.zpos = 0;
-	struct plane best_overlay_video_plane; // is the NV12 capable overlay plane with the lowest plane_id
-	best_overlay_video_plane.plane_id = 0;
-	best_overlay_video_plane.properties.zpos = 0;
-	struct plane best_primary_osd_plane;   // is the AR24 capable primary plane with the highest plane_id
-	best_primary_osd_plane.plane_id = 0;
-	best_primary_osd_plane.properties.zpos = 0;
-	struct plane best_overlay_osd_plane;   // is the AR24 capable overlay plane with the highest plane_id
-	best_overlay_osd_plane.plane_id = 0;
-	best_overlay_osd_plane.properties.zpos = 0;
+	// test and list the local planes
+	cDrmPlane best_primary_video_plane; // is the NV12 capable primary plane with the lowest plane_id
+	cDrmPlane best_overlay_video_plane; // is the NV12 capable overlay plane with the lowest plane_id
+	cDrmPlane best_primary_osd_plane;   // is the AR24 capable primary plane with the highest plane_id
+	cDrmPlane best_overlay_osd_plane;   // is the AR24 capable overlay plane with the highest plane_id
 
 	for (j = 0; j < plane_res->count_planes; j++) {
 		plane = drmModeGetPlane(m_fdDrm, plane_res->planes[j]);
@@ -807,16 +745,16 @@ find_mode:
 						case DRM_FORMAT_NV12:
 							snprintf(tmp, sizeof(tmp), " %4.4s", (char *)&plane->formats[k]);
 							strcat(pixelformats, tmp);
-							if (type == DRM_PLANE_TYPE_PRIMARY && !best_primary_video_plane.plane_id) {
-								best_primary_video_plane.plane_id = plane->plane_id;
-								best_primary_video_plane.type = type;
-								best_primary_video_plane.properties.zpos = zpos;
+							if (type == DRM_PLANE_TYPE_PRIMARY && !best_primary_video_plane.GetId()) {
+								best_primary_video_plane.SetId(plane->plane_id);
+								best_primary_video_plane.SetType(type);
+								best_primary_video_plane.SetZpos(zpos);
 								strcat(pixelformats, "!  ");
 							}
-							if (type == DRM_PLANE_TYPE_OVERLAY && !best_overlay_video_plane.plane_id) {
-								best_overlay_video_plane.plane_id = plane->plane_id;
-								best_overlay_video_plane.type = type;
-								best_overlay_video_plane.properties.zpos = zpos;
+							if (type == DRM_PLANE_TYPE_OVERLAY && !best_overlay_video_plane.GetId()) {
+								best_overlay_video_plane.SetId(plane->plane_id);
+								best_overlay_video_plane.SetType(type);
+								best_overlay_video_plane.SetZpos(zpos);
 								strcat(pixelformats, "!  ");
 							}
 							break;
@@ -824,15 +762,15 @@ find_mode:
 							snprintf(tmp, sizeof(tmp), " %4.4s", (char *)&plane->formats[k]);
 							strcat(pixelformats, tmp);
 							if (type == DRM_PLANE_TYPE_PRIMARY) {
-								best_primary_osd_plane.plane_id = plane->plane_id;
-								best_primary_osd_plane.type = type;
-								best_primary_osd_plane.properties.zpos = zpos;
+								best_primary_osd_plane.SetId(plane->plane_id);
+								best_primary_osd_plane.SetType(type);
+								best_primary_osd_plane.SetZpos(zpos);
 								strcat(pixelformats, "!  ");
 							}
 							if (type == DRM_PLANE_TYPE_OVERLAY) {
-								best_overlay_osd_plane.plane_id = plane->plane_id;
-								best_overlay_osd_plane.type = type;
-								best_overlay_osd_plane.properties.zpos = zpos;
+								best_overlay_osd_plane.SetId(plane->plane_id);
+								best_overlay_osd_plane.SetType(type);
+								best_overlay_osd_plane.SetZpos(zpos);
 								strcat(pixelformats, "!  ");
 							}
 							break;
@@ -847,38 +785,42 @@ find_mode:
 	}
 
 	// debug output
-	if (best_primary_video_plane.plane_id) {
+	if (best_primary_video_plane.GetId()) {
 		LOGDEBUG2(L_DRM, "FindDevice: best_primary_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
-			best_primary_video_plane.plane_id, best_primary_video_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_video_plane.properties.zpos);
+			best_primary_video_plane.GetId(), best_primary_video_plane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_video_plane.GetZpos());
 	}
-	if (best_overlay_video_plane.plane_id) {
+	if (best_overlay_video_plane.GetId()) {
 		LOGDEBUG2(L_DRM, "FindDevice: best_overlay_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
-			best_overlay_video_plane.plane_id, best_overlay_video_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_video_plane.properties.zpos);
+			best_overlay_video_plane.GetId(), best_overlay_video_plane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_video_plane.GetZpos());
 	}
-	if (best_primary_osd_plane.plane_id) {
+	if (best_primary_osd_plane.GetId()) {
 		LOGDEBUG2(L_DRM, "FindDevice: best_primary_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
-			best_primary_osd_plane.plane_id, best_primary_osd_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_osd_plane.properties.zpos);
+			best_primary_osd_plane.GetId(), best_primary_osd_plane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_osd_plane.GetZpos());
 	}
-	if (best_overlay_osd_plane.plane_id) {
+	if (best_overlay_osd_plane.GetId()) {
 		LOGDEBUG2(L_DRM, "FindDevice: best_overlay_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
-			best_overlay_osd_plane.plane_id, best_overlay_osd_plane.type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_osd_plane.properties.zpos);
+			best_overlay_osd_plane.GetId(), best_overlay_osd_plane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_osd_plane.GetZpos());
 	}
 
 	// See which planes we should use
-	if (best_primary_video_plane.plane_id && best_overlay_osd_plane.plane_id) {
-		m_pPlanes[VIDEO_PLANE]->plane_id = best_primary_video_plane.plane_id;
-		m_pPlanes[VIDEO_PLANE]->type = best_primary_video_plane.type;
-		m_pPlanes[VIDEO_PLANE]->properties.zpos = m_zposPrimary = best_primary_video_plane.properties.zpos;
-		m_pPlanes[OSD_PLANE]->plane_id = best_overlay_osd_plane.plane_id;
-		m_pPlanes[OSD_PLANE]->type = best_overlay_osd_plane.type;
-		m_pPlanes[OSD_PLANE]->properties.zpos = m_zposOverlay = best_overlay_osd_plane.properties.zpos;
-	} else if (best_overlay_video_plane.plane_id && best_primary_osd_plane.plane_id) {
-		m_pPlanes[VIDEO_PLANE]->plane_id = best_overlay_video_plane.plane_id;
-		m_pPlanes[VIDEO_PLANE]->type = best_overlay_video_plane.type;
-		m_pPlanes[VIDEO_PLANE]->properties.zpos = m_zposOverlay = best_overlay_video_plane.properties.zpos;
-		m_pPlanes[OSD_PLANE]->plane_id = best_primary_osd_plane.plane_id;
-		m_pPlanes[OSD_PLANE]->type = best_primary_osd_plane.type;
-		m_pPlanes[OSD_PLANE]->properties.zpos = m_zposPrimary = best_primary_osd_plane.properties.zpos;
+	if (best_primary_video_plane.GetId() && best_overlay_osd_plane.GetId()) {
+		m_videoPlane.SetId(best_primary_video_plane.GetId());
+		m_videoPlane.SetType(best_primary_video_plane.GetType());
+		m_zposPrimary = best_primary_video_plane.GetZpos();
+		m_videoPlane.SetZpos(m_zposPrimary);
+		m_osdPlane.SetId(best_overlay_osd_plane.GetId());
+		m_osdPlane.SetType(best_overlay_osd_plane.GetType());
+		m_zposOverlay = best_overlay_osd_plane.GetZpos();
+		m_osdPlane.SetZpos(m_zposOverlay);
+	} else if (best_overlay_video_plane.GetId() && best_primary_osd_plane.GetId()) {
+		m_videoPlane.SetId(best_overlay_video_plane.GetId());
+		m_videoPlane.SetType(best_overlay_video_plane.GetType());
+		m_zposOverlay = best_overlay_video_plane.GetZpos();
+		m_videoPlane.SetZpos(m_zposOverlay);
+		m_osdPlane.SetId(best_primary_osd_plane.GetId());
+		m_osdPlane.SetType(best_primary_osd_plane.GetType());
+		m_zposPrimary = best_primary_osd_plane.GetZpos();
+		m_osdPlane.SetZpos(m_zposPrimary);
 		m_useZpos = 1;
 	} else {
 		LOGERROR("FindDevice: No suitable planes found!");
@@ -886,14 +828,14 @@ find_mode:
 	}
 
 	// fill the plane's properties to speed up SetPropertyRequest later
-	get_properties(m_fdDrm, m_pPlanes[VIDEO_PLANE]->plane_id, m_pPlanes[VIDEO_PLANE]);
-	get_properties(m_fdDrm, m_pPlanes[OSD_PLANE]->plane_id, m_pPlanes[OSD_PLANE]);
+	m_videoPlane.FillProperties(m_fdDrm);
+	m_osdPlane.FillProperties(m_fdDrm);
 
 	// Check, if we can set z-order (meson and rpi have fixed z-order, which cannot be changed)
-	if (m_useZpos && CheckZpos(m_pPlanes[VIDEO_PLANE], m_pPlanes[VIDEO_PLANE]->properties.zpos)) {
+	if (m_useZpos && CheckZpos(&m_videoPlane)) {
 		m_useZpos = 0;
 	}
-	if (m_useZpos && CheckZpos(m_pPlanes[OSD_PLANE], m_pPlanes[OSD_PLANE]->properties.zpos)) {
+	if (m_useZpos && CheckZpos(&m_osdPlane)) {
 		m_useZpos = 0;
 	}
 
@@ -923,12 +865,13 @@ find_mode:
 	drmModeFreeResources(resources);
 
 	LOGINFO("FindDevice: DRM setup - CRTC: %i video_plane: %i (%s %" PRIu64 ") osd_plane: %i (%s %" PRIu64 ") m_useZpos: %d",
-		m_crtcId, m_pPlanes[VIDEO_PLANE]->plane_id,
-		m_pPlanes[VIDEO_PLANE]->type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY",
-		m_pPlanes[VIDEO_PLANE]->properties.zpos,
-		m_pPlanes[OSD_PLANE]->plane_id,
-		m_pPlanes[OSD_PLANE]->type == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY",
-		m_pPlanes[OSD_PLANE]->properties.zpos,
+		m_crtcId,
+		m_videoPlane.GetId(),
+		m_videoPlane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY",
+		m_videoPlane.GetZpos(),
+		m_osdPlane.GetId(),
+		m_osdPlane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY",
+		m_osdPlane.GetZpos(),
 		m_useZpos);
 
 #ifdef USE_GLES
@@ -1457,16 +1400,9 @@ int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
 		}
 	}
 
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_id = m_crtcId;
-	m_pPlanes[VIDEO_PLANE]->properties.fb_id = buf->fb_id;
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_x = DispX + (DispWidth - PicWidth) / 2;
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_y = DispY + (DispHeight - PicHeight) / 2;
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_w = PicWidth;
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_h = PicHeight;
-	m_pPlanes[VIDEO_PLANE]->properties.src_x = 0;
-	m_pPlanes[VIDEO_PLANE]->properties.src_y = 0;
-	m_pPlanes[VIDEO_PLANE]->properties.src_w = buf->width;
-	m_pPlanes[VIDEO_PLANE]->properties.src_h = buf->height;
+	m_videoPlane.SetParams(m_crtcId, buf->fb_id,
+		DispX + (DispWidth - PicWidth) / 2, DispY + (DispHeight - PicHeight) / 2, PicWidth, PicHeight,
+		0, 0, buf->width, buf->height);
 
 	// set dimensions for grab early, because we might skip this at the next frame
 	m_grabVideo.SetX(DispX + (DispWidth - PicWidth) / 2);
@@ -1474,7 +1410,7 @@ int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
 	m_grabVideo.SetWidth(PicWidth);
 	m_grabVideo.SetHeight(PicHeight);
 
-	SetPlane(ModeReq, m_pPlanes[VIDEO_PLANE]);
+	SetPlane(ModeReq, &m_videoPlane);
 	dirty += 2;
 
 
@@ -1483,30 +1419,23 @@ skip_video:
 	// We had draw activity on the osd buffer
 	if (m_pBufOsd && m_pBufOsd->dirty) {
 		if (m_useZpos) {
-			m_pPlanes[VIDEO_PLANE]->properties.zpos = m_osdShown ? m_zposPrimary : m_zposOverlay;
-			m_pPlanes[OSD_PLANE]->properties.zpos = m_osdShown ? m_zposOverlay : m_zposPrimary;
-			SetPlaneZpos(ModeReq, m_pPlanes[VIDEO_PLANE]);
-			SetPlaneZpos(ModeReq, m_pPlanes[OSD_PLANE]);
+			m_videoPlane.SetZpos(m_osdShown ? m_zposPrimary : m_zposOverlay);
+			m_osdPlane.SetZpos(m_osdShown ? m_zposOverlay : m_zposPrimary);
+			SetPlaneZpos(ModeReq, &m_videoPlane);
+			SetPlaneZpos(ModeReq, &m_osdPlane);
 
 			LOGDEBUG2(L_DRM, "DisplayFrame: SetPlaneZpos: video->plane_id %d -> zpos %" PRIu64 ", osd->plane_id %d -> zpos %" PRIu64 "",
-				m_pPlanes[VIDEO_PLANE]->plane_id, m_pPlanes[VIDEO_PLANE]->properties.zpos,
-				m_pPlanes[OSD_PLANE]->plane_id, m_pPlanes[OSD_PLANE]->properties.zpos);
+				m_videoPlane.GetId(), m_videoPlane.GetZpos(),
+				m_osdPlane.GetId(), m_osdPlane.GetZpos());
 		}
 
-		m_pPlanes[OSD_PLANE]->properties.crtc_id = m_crtcId;
-		m_pPlanes[OSD_PLANE]->properties.fb_id = m_pBufOsd->fb_id;
-		m_pPlanes[OSD_PLANE]->properties.crtc_x = 0;
-		m_pPlanes[OSD_PLANE]->properties.crtc_y = 0;
-		m_pPlanes[OSD_PLANE]->properties.crtc_w = m_osdShown ? m_pBufOsd->width : 0;
-		m_pPlanes[OSD_PLANE]->properties.crtc_h = m_osdShown ? m_pBufOsd->height : 0;
-		m_pPlanes[OSD_PLANE]->properties.src_x = 0;
-		m_pPlanes[OSD_PLANE]->properties.src_y = 0;
-		m_pPlanes[OSD_PLANE]->properties.src_w = m_osdShown ? m_pBufOsd->width : 0;
-		m_pPlanes[OSD_PLANE]->properties.src_h = m_osdShown ? m_pBufOsd->height : 0;
+		m_osdPlane.SetParams(m_crtcId, m_pBufOsd->fb_id,
+			0, 0, m_osdShown ? m_pBufOsd->width : 0, m_osdShown ? m_pBufOsd->height : 0,
+			0, 0, m_osdShown ? m_pBufOsd->width : 0, m_osdShown ? m_pBufOsd->height : 0);
 
-		SetPlane(ModeReq, m_pPlanes[OSD_PLANE]);
+		SetPlane(ModeReq, &m_osdPlane);
 		dirty += 1;
-		LOGDEBUG2(L_DRM, "DisplayFrame: SetPlane OSD %d (fb = %" PRIu64 ")", m_osdShown, m_pPlanes[OSD_PLANE]->properties.fb_id);
+		LOGDEBUG2(L_DRM, "DisplayFrame: SetPlane OSD %d (fb = %" PRIu64 ")", m_osdShown, m_osdPlane.GetFbId());
 		m_pBufOsd->dirty = 0;
 	}
 
@@ -1543,9 +1472,9 @@ skip_video:
 
 	// do the atomic commit
 	if (drmModeAtomicCommit(m_fdDrm, ModeReq, flags, NULL) != 0) {
-		DumpPlaneProperties(m_pPlanes[OSD_PLANE]);
+		m_osdPlane.DumpParameters();
 		if (dirty > 1)
-			DumpPlaneProperties(m_pPlanes[VIDEO_PLANE]);
+			m_videoPlane.DumpParameters();
 
 		drmModeAtomicFree(ModeReq);
 		LOGERROR("DisplayFrame: page flip failed (%d): %m", errno);
@@ -2806,62 +2735,41 @@ void cVideoRender::Init(void)
 	// We don't have the m_pBufOsd for OpenGL yet, so we can't set anything. Set src and FbId later when osd was drawn,
 	// but initially move the OSD behind the VIDEO
 #ifndef USE_GLES
-	m_pPlanes[OSD_PLANE]->properties.crtc_id = m_crtcId;
-	m_pPlanes[OSD_PLANE]->properties.fb_id = m_pBufOsd->fb_id;
-	m_pPlanes[OSD_PLANE]->properties.crtc_x = 0;
-	m_pPlanes[OSD_PLANE]->properties.crtc_y = 0;
-	m_pPlanes[OSD_PLANE]->properties.crtc_w = m_drmModeInfo.hdisplay;
-	m_pPlanes[OSD_PLANE]->properties.crtc_h = m_drmModeInfo.vdisplay;
-	m_pPlanes[OSD_PLANE]->properties.src_x = 0;
-	m_pPlanes[OSD_PLANE]->properties.src_y = 0;
-	m_pPlanes[OSD_PLANE]->properties.src_w = m_pBufOsd->width;
-	m_pPlanes[OSD_PLANE]->properties.src_h = m_pBufOsd->height;
+	m_osdPlane.SetParams(m_crtcId, m_pBufOsd->fb_id,
+		0, 0, m_drmModeInfo.hdisplay, m_drmModeInfo.vdisplay,
+		0, 0, m_pBufOsd->width, m_pBufOsd->height);
 
-	SetPlane(ModeReq, m_pPlanes[OSD_PLANE]);
+	SetPlane(ModeReq, &m_osdPlane);
 #else
 	if (m_disableOglOsd) {
-		m_pPlanes[OSD_PLANE]->properties.crtc_id = m_crtcId;
-		m_pPlanes[OSD_PLANE]->properties.fb_id = m_pBufOsd->fb_id;
-		m_pPlanes[OSD_PLANE]->properties.crtc_x = 0;
-		m_pPlanes[OSD_PLANE]->properties.crtc_y = 0;
-		m_pPlanes[OSD_PLANE]->properties.crtc_w = m_drmModeInfo.hdisplay;
-		m_pPlanes[OSD_PLANE]->properties.crtc_h = m_drmModeInfo.vdisplay;
-		m_pPlanes[OSD_PLANE]->properties.src_x = 0;
-		m_pPlanes[OSD_PLANE]->properties.src_y = 0;
-		m_pPlanes[OSD_PLANE]->properties.src_w = m_pBufOsd->width;
-		m_pPlanes[OSD_PLANE]->properties.src_h = m_pBufOsd->height;
+		m_osdPlane.SetParams(m_crtcId, m_pBufOsd->fb_id,
+			0, 0, m_drmModeInfo.hdisplay, m_drmModeInfo.vdisplay,
+			0, 0, m_pBufOsd->width, m_pBufOsd->height);
 
-		SetPlane(ModeReq, m_pPlanes[OSD_PLANE]);
+		SetPlane(ModeReq, &m_osdPlane);
 	}
 #endif
 	if (m_useZpos) {
-		m_pPlanes[VIDEO_PLANE]->properties.zpos = m_zposOverlay;
-		SetPlaneZpos(ModeReq, m_pPlanes[VIDEO_PLANE]);
+		m_videoPlane.SetZpos(m_zposOverlay);
+		SetPlaneZpos(ModeReq, &m_videoPlane);
 #ifdef USE_GLES
-		m_pPlanes[OSD_PLANE]->properties.zpos = m_zposPrimary;
-		SetPlaneZpos(ModeReq, m_pPlanes[OSD_PLANE]);
+		m_osdPlane.SetZpos(m_zposPrimary);
+		SetPlaneZpos(ModeReq, &m_osdPlane);
 #endif
 	}
 
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_id = m_crtcId;
-	m_pPlanes[VIDEO_PLANE]->properties.fb_id = m_bufBlack.fb_id;
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_x = 0;
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_y = 0;
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_w = m_drmModeInfo.hdisplay;
-	m_pPlanes[VIDEO_PLANE]->properties.crtc_h = m_drmModeInfo.vdisplay;
-	m_pPlanes[VIDEO_PLANE]->properties.src_x = 0;
-	m_pPlanes[VIDEO_PLANE]->properties.src_y = 0;
-	m_pPlanes[VIDEO_PLANE]->properties.src_w = m_bufBlack.width;
-	m_pPlanes[VIDEO_PLANE]->properties.src_h = m_bufBlack.height;
-
 	// Black Buffer for video plane
-	SetPlane(ModeReq, m_pPlanes[VIDEO_PLANE]);
+	m_videoPlane.SetParams(m_crtcId, m_bufBlack.fb_id,
+		0, 0, m_drmModeInfo.hdisplay, m_drmModeInfo.vdisplay,
+		0, 0, m_bufBlack.width, m_bufBlack.height);
+
+	SetPlane(ModeReq, &m_videoPlane);
 
 	if (drmModeAtomicCommit(m_fdDrm, ModeReq, flags, NULL) != 0) {
 #ifndef USE_GLES
-		DumpPlaneProperties(m_pPlanes[OSD_PLANE]);
+		m_osdPlane.DumpParameters();
 #endif
-		DumpPlaneProperties(m_pPlanes[VIDEO_PLANE]);
+		m_videoPlane.DumpParameters();
 
 		drmModeAtomicFree(ModeReq);
 		LOGFATAL("VideoInit: cannot set atomic mode (%d): %m", errno);
@@ -2894,12 +2802,8 @@ void cVideoRender::Exit(void)
 		drmModeFreeCrtc(m_drmModeCrtcSaved);
 	}
 
-	for (int i = 0; i < MAX_PLANES; i++) {
-		if (m_pPlanes[i]) {
-			free_properties(m_pPlanes[i]);
-			free(m_pPlanes[i]);
-		}
-	}
+	m_videoPlane.FreeProperties();
+	m_osdPlane.FreeProperties();
 
 	DestroyFB(&m_bufBlack);
 #ifdef USE_GLES
