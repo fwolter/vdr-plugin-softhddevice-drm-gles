@@ -160,7 +160,7 @@ void cVideoStream::Exit(void)
  */
 void cVideoStream::ClearVideo(void)
 {
-	// TODO: make this better!
+	// TODO: VERY TODO: make this better - this is very ugly!!!
 	// ClearVideo does not come from Play() or SetPlayMode() (closing_stream_requested)
 	// but from Clear() (or StillPicture) which is directly from VDR
 	// Wait for the clear, until the decode thread finished a decoding process
@@ -367,10 +367,24 @@ receive_trickspeed:
 AVPacket *cVideoStream::GetPacketToWrite(void)
 {
 	AVPacket *avpkt = &m_packetRb[m_packetWrite];
-	m_packetWrite = (m_packetWrite + 1) % VIDEO_PACKET_MAX;
-	atomic_inc(&m_packetsFilled);
 
 	return avpkt;
+}
+
+/**
+ * @brief Advance the write pointer to avpkt in ringbuffer
+ */
+void cVideoStream::AdvancePacketToWrite(void)
+{
+	m_packetWrite = (m_packetWrite + 1) % VIDEO_PACKET_MAX;
+}
+
+/**
+ * @brief Increase filled packets counter
+ */
+void cVideoStream::IncreasePacketsFilled(void)
+{
+	atomic_inc(&m_packetsFilled);
 }
 
 /**

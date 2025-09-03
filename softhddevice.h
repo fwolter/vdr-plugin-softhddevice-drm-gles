@@ -176,6 +176,9 @@ public:
     void SetVideoCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
     int PlayAudioPkts(AVPacket *);
     int PlayVideoPkts(AVPacket *);
+
+// Grabbing
+    int m_grabActive;
 };
 
 #endif

@@ -1309,6 +1309,7 @@ void cVideoRender::CleanUp(void)
 	if (m_closing && m_pLastFrame->frame) {
 		av_frame_free(&m_pLastFrame->frame);
 		m_pLastFrame->trickspeed = 0;
+		m_pLastFrame->buf = nullptr;
 	}
 
 	// Destroy FBs
@@ -1316,8 +1317,10 @@ void cVideoRender::CleanUp(void)
 		if (m_buffer[i].dirty == 0)
 			continue;
 
-		if (m_closing || (m_buffer[i].fb_id != m_pLastFrame->buf->fb_id))
+		// TODO: can m_pLastFrame->buf ever be the black buffer??
+		if (m_closing || (m_buffer[i].fb_id != m_pLastFrame->buf->fb_id)) {
 			DestroyFB(&m_buffer[i]);
+		}
 	}
 
 	m_numBuffers = 0;
@@ -1405,14 +1408,14 @@ int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
 		0, 0, buf->width, buf->height);
 
 	// set dimensions for grab early, because we might skip this at the next frame
-	m_grabVideo.SetX(DispX + (DispWidth - PicWidth) / 2);
-	m_grabVideo.SetY(DispY + (DispHeight - PicHeight) / 2);
-	m_grabVideo.SetWidth(PicWidth);
-	m_grabVideo.SetHeight(PicHeight);
+	m_lastVideoGrabX = DispX + (DispWidth - PicWidth) / 2;
+	m_lastVideoGrabY = DispY + (DispHeight - PicHeight) / 2;
+	m_lastVideoGrabW = PicWidth;
+	m_lastVideoGrabH = PicHeight;
 
 	SetPlane(ModeReq, &m_videoPlane);
 	dirty += 2;
-
+//	LOGDEBUG2(L_DRM, "DisplayFrame: SetPlane Video (fb = %" PRIu64 ")", m_videoPlane.GetFbId());
 
 skip_video:
 	// handle the osd plane
@@ -1454,15 +1457,19 @@ skip_video:
 
 		struct drm_buf *pbuf = buf ? buf : (m_pLastFrame->buf ? m_pLastFrame->buf : NULL);
 		if (pbuf) {
+			m_grabVideo.SetX(m_lastVideoGrabX);
+			m_grabVideo.SetY(m_lastVideoGrabY);
+			m_grabVideo.SetWidth(m_lastVideoGrabW);
+			m_grabVideo.SetHeight(m_lastVideoGrabH);
+
 			LOGDEBUG2(L_GRAB, "DisplayFrame: Trigger video grab arrived");
 			struct drm_buf *videoBuf = NULL;
 			VideoCloneBuf(&videoBuf, pbuf);
 			m_grabVideo.SetBuf(videoBuf);
 			// dimensions have already been set earlier
 		}
-		m_grabCond.Signal();
+		m_grabCond.Broadcast();
 	}
-
 
 	// return without an atomic commit (no video frame and osd activity)
 	if (!dirty) {
@@ -1744,13 +1751,19 @@ dequeue:
 			usleep(10000);
 			// LOGDEBUG2(L_DRM, "DisplayFrame: paused, skip video");
 			skip_video = 1;
-			goto page_flip;			
+			goto page_flip;
 		}
 
 		// wait max. 15ms in case we have an osd
 		if (m_pBufOsd && m_pBufOsd->dirty && !timeout--) {
 			skip_video = 1;
 			LOGDEBUG2(L_DRM, "DisplayFrame: no video but osd, skip video");
+			goto page_flip;
+		}
+
+		if (m_startgrab) {
+			skip_video = 1;
+			LOGDEBUG2(L_DRM, "DisplayFrame: grab requested, skip video");
 			goto page_flip;
 		}
 
@@ -1839,16 +1852,23 @@ page_flip:
 		// if the m_pLastFrame was a trickframe or a flush is forced, destroy the FB
 		if (m_flushLastFrame || m_pLastFrame->trickspeed) {
 			DestroyFB(m_pLastFrame->buf);
+			m_pLastFrame->buf = nullptr;
 			m_pLastFrame->trickspeed = 0;
 			m_flushLastFrame = 0;
 		}
 		av_frame_free(&m_pLastFrame->frame);
 	}
 
+	// TODO: the whole m_pLastFrame handling has to be done better!
 	if (buf && buf->fb_id != m_bufBlack.fb_id) {
 		m_pLastFrame->frame = buf->frame;
 		m_pLastFrame->buf = buf;
 		m_pLastFrame->trickspeed = buf->trickspeed;
+	}
+
+	if (buf && buf->fb_id == m_bufBlack.fb_id) {
+		m_pLastFrame->buf = nullptr;
+		m_pLastFrame->trickspeed = 0;
 	}
 
 	return 0;
@@ -2508,12 +2528,21 @@ int cVideoRender::DecTrickCounter(void)
 ///	Trigger grabbing in render thread
 ///
 ///
-void cVideoRender::TriggerGrab(cCondWait *wait)
+int cVideoRender::TriggerGrab(void)
 {
+	int timeout = 50;
+	cMutex mutex;
+	mutex.Lock();
 	m_startgrab = 1;
-	m_grabCond.Wait(2000);
+	int err = 0;
+
+	if (!m_grabCond.TimedWait(mutex, timeout)) {
+		LOGWARNING("%s: timed out after %dms", __FUNCTION__, timeout);
+		err = 1;
+	}
+
 	m_startgrab = 0;
-	wait->Signal();
+	return err;
 }
 
 ///

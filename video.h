@@ -141,7 +141,7 @@ public:
 	int DecTrickCounter(void);
 
 	// Grab
-	void TriggerGrab(cCondWait *wait);
+	int TriggerGrab(void);
 	void ConvertVideoBufToRgb(void);
 	void ConvertOsdBufToRgb(void);
 	void ClearGrab(void);
@@ -241,7 +241,7 @@ private:
 	int m_disableOglOsd;					///< set, if ogl osd is disabled
 
 	int m_startgrab;						///< internal flag to trigger grabbing
-	cCondWait m_grabCond;					///< condition gets signalled, if renederer finished to clone the grabbed buffers
+	cCondVar m_grabCond;					///< condition gets signalled, if renederer finished to clone the grabbed buffers
 	cSoftHdGrab m_grabOsd;					///< keeps the current grabbed osd
 	cSoftHdGrab m_grabVideo;				///< keeps the current grabbde video
 
@@ -255,6 +255,12 @@ private:
 	drmModeModeInfo m_drmModeInfo;
 	drmModeCrtc *m_drmModeCrtcSaved;
 	drmEventContext m_drmEventCtx;
+
+	// TODO: use cRect
+	int m_lastVideoGrabX;
+	int m_lastVideoGrabY;
+	int m_lastVideoGrabW;
+	int m_lastVideoGrabH;
 
 	struct {
 	int x;

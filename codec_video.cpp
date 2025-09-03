@@ -515,7 +515,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 	if (ret) {
 		if (ret == AVERROR_EOF)
 			LOGDEBUG2(L_CODEC, "%s: receive_frame ret: AVERROR_EOF", __FUNCTION__);
-		if (ret != AVERROR(EAGAIN))
+		else if (ret != AVERROR(EAGAIN))
 			LOGDEBUG2(L_CODEC, "%s: receive_frame ret: %s", __FUNCTION__, av_err2str(ret));
 		av_frame_free(&pFrame);
 		return ret;

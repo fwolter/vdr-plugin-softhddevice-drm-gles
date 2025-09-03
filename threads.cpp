@@ -116,6 +116,14 @@ void cAudioHandlerThread::Action(void)
 
 	LOGDEBUG("audio: audio handler thread started");
 	while(Running()) {
+	    if (!Audio->AlsaPlayerRunning())
+		break;
+
+	    if (Audio->IsPaused()) {
+		usleep(10000);
+		continue;
+	    }
+
 	    if (Audio->GetUsedBytes()) {
 		// try to play some samples
 		Audio->PlayWithAlsa();
@@ -123,12 +131,6 @@ void cAudioHandlerThread::Action(void)
 //		LOGDEBUG2(L_SOUND, "AudioPlayHandlerThread: ring buffer is empty");
 		usleep(5000);
 	    }
-
-	    if (Audio->IsPaused())
-		usleep(10000);
-
-	    if (!Audio->AlsaPlayerRunning())
-		break;
 	}
     }
     LOGDEBUG("audio: audio handler thread stopped");

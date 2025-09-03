@@ -67,7 +67,9 @@ public:
 	void SetInterlaced(int);
 	int GetTrickSpeed(void) { return m_trickSpeed; };
 	int GetPacketsFilled(void);
+	void IncreasePacketsFilled(void);
 	AVPacket *GetPacketToWrite(void);
+	void AdvancePacketToWrite(void);
 	enum AVCodecID GetCodecId(void) { return m_codecId; };
 
 private:

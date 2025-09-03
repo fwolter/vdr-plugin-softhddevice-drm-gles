@@ -849,7 +849,7 @@ void cSoftHdDevice::StillPicture(const uchar * data, int size)
     int head_length;
     int context = 0;
 
-    avpkt = VideoStream->GetPacketToWrite(); // TODO: Maybe we may not increase PacketWrite here??
+    avpkt = VideoStream->GetPacketToWrite();
     avpkt->size = 0;
     avpkt->pts = AV_NOPTS_VALUE;
     pos = data;
@@ -905,7 +905,7 @@ void cSoftHdDevice::StillPicture(const uchar * data, int size)
 	pos += pes_length;
 	i = 0;
     }
-    // atomic_inc(&VideoStream->PacketsFilled); // TODO: see comment above
+    VideoStream->IncreasePacketsFilled();
 
     VideoStream->Freeze();
     if (VideoStream->Decoder()->GetContext()) {
@@ -962,7 +962,7 @@ receive:
     ClearAudio();
     VideoStream->ClearVideo();
     VideoStream->WakeUp();
-//    Audio->Resume();
+    Audio->Resume();
 }
 
 /**
@@ -1442,8 +1442,10 @@ newstream:
 uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     int height)
 {
-    LOGDEBUG2(L_GRAB, "%s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg,
-	quality, width, height);
+    if (m_grabActive) {
+	LOGWARNING("%s: wait for the last grab to be finished - skip!", __FUNCTION__);
+	return NULL;
+    }
 
     if (!width || !height) {
 	LOGERROR("%s: Width or height must be not 0!", __FUNCTION__);
@@ -1454,13 +1456,16 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
 	quality = 95;
     }
 
+    LOGDEBUG2(L_GRAB, "%s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg,
+	quality, width, height);
+
     // 1. Trigger grab in video thread and wait for the buffers to be cloned
-    LOGDEBUG2(L_GRAB, "GrabImage: Start grabbing");
-    cCondWait waitGrab;
-    Render->TriggerGrab(&waitGrab);
-    if (!waitGrab.Wait(2000)) {
-	// timeout (2000ms more in TriggerGrab)
+    m_grabActive = 1;
+    // TriggerGrab does wait and return 0, if buffers are available,
+    // otherwise it returns != 0, if we ran into a timeout
+    if (Render->TriggerGrab()) {
 	Render->ClearGrab();
+	m_grabActive = 0;
 	return NULL;
     }
 
@@ -1549,6 +1554,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
     free(scaledresult);
     LOGDEBUG2(L_GRAB, "GrabImage: finished %s image (%dx%d, quality %d) at %p (size %d)", jpeg ? "jpg" : "pnm", grabwidth, grabheight, jpeg ? quality : 0, grabbedimage, size);
 
+    m_grabActive = 0;
     return grabbedimage;
 }
 
@@ -1823,6 +1829,8 @@ int cSoftHdDevice::PlayVideoPkts(AVPacket * pkt)
 	}
 
 	avpkt = VideoStream->GetPacketToWrite();
+	VideoStream->AdvancePacketToWrite();
+	VideoStream->IncreasePacketsFilled();
 
 	if ((size_t)pkt->size > avpkt->buf->size) {
 		LOGINFO("PlayVideoPkts: grow packet buffer size by %d",
