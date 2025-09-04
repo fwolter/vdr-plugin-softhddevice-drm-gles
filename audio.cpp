@@ -665,6 +665,7 @@ void cSoftHdAudio::StartAudioThread(AVFrame *frame)
 			n * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
 			m_videoIsReady);
 		m_running = 1;
+		LOGDEBUG2(L_SOUND, "%s: start thread", __FUNCTION__);
 		m_pAudioThread->SendStartSignal();
 	}
 }
@@ -838,6 +839,7 @@ int cSoftHdAudio::VideoReady(int64_t videoPts)
 	// enough audio buffered
 	if (m_startThreshold < used) {
 		m_running = 1;
+		LOGDEBUG2(L_SOUND, "%s: start thread", __FUNCTION__);
 		m_pAudioThread->SendStartSignal();
 	}
 	m_videoIsReady = 1;
@@ -905,7 +907,7 @@ int cSoftHdAudio::Skip(int64_t videoPts, int full)
 
 /**
  * @brief Flush audio buffers
- * 
+ *
  * Stop alsa player if running,
  * otherwise flush the alsa buffers and force a filter init
  */
@@ -1037,6 +1039,7 @@ void cSoftHdAudio::Resume(void)
 	} else {
 		m_paused = 0;
 		if (m_startThreshold < m_pRingbuffer->UsedBytes()) {
+			LOGDEBUG2(L_SOUND, "%s: start thread", __FUNCTION__);
 			m_pAudioThread->SendStartSignal();
 		}
 	}

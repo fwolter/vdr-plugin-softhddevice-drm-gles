@@ -98,6 +98,7 @@ cAudioHandlerThread::~cAudioHandlerThread(void)
 
 void cAudioHandlerThread::Action(void)
 {
+    Mutex.Lock();
     while (Running()) {
 	if (!Audio->IsPaused()) {
 //	    LOGDEBUG2(L_SOUND, "audio: AudioPlayHandlerThread: => FlushAlsaBuffers");
@@ -111,7 +112,7 @@ void cAudioHandlerThread::Action(void)
 	// wait for sync start, if audio isn't running
 	if (!Audio->IsRunning()) {
 	    LOGDEBUG2(L_SOUND, "audio: wait on start condition");
-	    StartWait.Wait();
+	    StartWait.Wait(Mutex);
 	}
 
 	LOGDEBUG("audio: audio handler thread started");
@@ -138,16 +139,16 @@ void cAudioHandlerThread::Action(void)
 
 void cAudioHandlerThread::Stop(void)
 {
+    LOGDEBUG("audio: Stopping audio handler thread");
     Audio->SetRunning(1);
     Audio->StopAlsaPlayer();
-    StartWait.Signal();
-    LOGDEBUG("audio: Stopping audio handler thread");
+    StartWait.Broadcast();
     Cancel(2);
 }
 
 void cAudioHandlerThread::SendStartSignal(void)
 {
-    StartWait.Signal();
+    StartWait.Broadcast();
 }
 
 ///

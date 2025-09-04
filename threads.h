@@ -53,7 +53,8 @@ class cAudioHandlerThread : public cThread
 {
 private:
     cSoftHdAudio *Audio;
-    cCondWait StartWait;
+    cMutex Mutex;
+    cCondVar StartWait;
 public:
     cAudioHandlerThread(cSoftHdAudio *);
     virtual ~cAudioHandlerThread(void);
