@@ -1253,9 +1253,9 @@ static void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 		for (int object = 0; object < buf->nb_objects; object++) {
 			// memcpy mmapped data
 			dst_buffer = malloc(src->size[object]);
-			src_buffer = mmap(NULL, src->size[object], PROT_READ, MAP_PRIVATE, src->fd_prime[object], 0);
+			src_buffer = mmap(NULL, src->size[object], PROT_READ, MAP_SHARED, src->fd_prime[object], 0);
 			if (src_buffer == MAP_FAILED) {
-				LOGERROR("VideoCloneBufB: cannot map buffer (%d): %m", errno);
+				LOGERROR("VideoCloneBufB: cannot map buffer size %d prime_fd %d (%d): %m", src->size[object], src->fd_prime[object], errno);
 				return;
 			}
 
@@ -1654,7 +1654,7 @@ int cVideoRender::GetBuffer(AVFrame *frame, struct drm_buf **buf)
 			return 1;
 		}
 
-		pbuf = &m_buffer[i];;
+		pbuf = &m_buffer[i];
 
 		pbuf->width = (uint32_t)frame->width;
 		pbuf->height = (uint32_t)frame->height;
@@ -2584,9 +2584,14 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
 	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_RGB24);
-	grab->SetData(result);
-	grab->SetSize(size);
-	grab->FreeBuf();
+	if (result) {
+		grab->SetData(result);
+		grab->SetSize(size);
+		grab->FreeBuf();
+	} else {
+		grab->SetData(NULL);
+		grab->SetSize(0);
+	}
 
 	return;
 }

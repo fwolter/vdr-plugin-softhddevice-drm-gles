@@ -29,6 +29,9 @@ enum AVPixelFormat drmFormatToAVFormat(struct drm_buf *buf)
     if (buf->pix_fmt == DRM_FORMAT_ARGB8888)
 	return AV_PIX_FMT_RGBA;
 
+    if (buf->pix_fmt == DRM_FORMAT_P030)
+	return AV_PIX_FMT_NONE;
+
     return AV_PIX_FMT_NONE;
 }
 
@@ -41,6 +44,11 @@ uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPi
     int src_h = buf->height;
 
     enum AVPixelFormat src_pix_fmt = drmFormatToAVFormat(buf);
+    if (src_pix_fmt == AV_PIX_FMT_NONE) {
+        LOGERROR("buf2rgb: pixel format is not supported!");
+        return NULL;
+    }
+
     int dst_bufsize = 0;
     struct SwsContext *sws_ctx;
     int ret;
