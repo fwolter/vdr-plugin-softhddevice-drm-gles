@@ -249,13 +249,18 @@ int cFilterThread::Init(const AVCodecContext *VideoCtx, AVFrame *Frame, int disa
     avfilter_register_all();
 #endif
 
+    // if we have a 576i stream without a valid sample_aspect_ratio (0/1) force it to be 64/45
+    // wich "streches" a 576i stream to 1920/1080 size
+    int sarNum = VideoCtx->sample_aspect_ratio.num != 0 ? VideoCtx->sample_aspect_ratio.num : (VideoCtx->height == 576 ? 64 : 1);
+    int sarDen = VideoCtx->sample_aspect_ratio.num != 0 ? VideoCtx->sample_aspect_ratio.den : (VideoCtx->height == 576 ? 45 : 1);
+
     snprintf(args, sizeof(args),
 	"video_size=%dx%d:pix_fmt=%d:time_base=%d/%d:pixel_aspect=%d/%d",
 	VideoCtx->width, VideoCtx->height, Frame->format,
 	VideoCtx->pkt_timebase.num ? VideoCtx->pkt_timebase.num : 1,
 	VideoCtx->pkt_timebase.num ? VideoCtx->pkt_timebase.den : 1,
-	VideoCtx->sample_aspect_ratio.num != 0 ? VideoCtx->sample_aspect_ratio.num : 1,
-	VideoCtx->sample_aspect_ratio.num != 0 ? VideoCtx->sample_aspect_ratio.den : 1);
+	sarNum,
+	sarDen);
 
     LOGDEBUG2(L_CODEC, "VideoFilterInit: filter=\"%s\" args=\"%s\"", filter_descr, args);
 
