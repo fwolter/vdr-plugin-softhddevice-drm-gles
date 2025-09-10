@@ -22,6 +22,8 @@
 
 #include "drm_buf.h"
 
+#include <vdr/osd.h>
+
 /**
  * @brief cSoftHdGrab - Grabber class
  *
@@ -35,18 +37,15 @@ public:
 	cSoftHdGrab(void);
 	virtual ~cSoftHdGrab(void);
 
-	void SetX(int x) { m_x = x; };
-	void SetY(int y) { m_y = y; };
-	void SetWidth(int width) { m_width = width; };
-	void SetHeight(int height) { m_height = height; };
+	void SetRect(int x, int y, int width, int height) { m_rect.Set(x, y, width, height); };
 	void SetData(uint8_t *result) { m_pResult = result; };
 	void SetSize(int size) { m_size = size; };
 	void SetBuf(struct drm_buf *buf) { m_pBuf = buf; };
 
-	int GetX(void) { return m_x; };
-	int GetY(void) { return m_y; };
-	int GetWidth(void) { return m_width; };
-	int GetHeight(void) { return m_height; };
+	int GetX(void) { return m_rect.X(); };
+	int GetY(void) { return m_rect.Y(); };
+	int GetWidth(void) { return m_rect.Width(); };
+	int GetHeight(void) { return m_rect.Height(); };
 	uint8_t *GetData(void) { return m_pResult; };
 	int GetSize(void) { return m_size; };
 	struct drm_buf *GetBuf(void) { return m_pBuf; };
@@ -57,10 +56,7 @@ private:
 	uint8_t *m_pResult;		    ///< pointer to grabbed image
 	struct drm_buf *m_pBuf;	    ///< pointer to original buffer
 	int m_size;			        ///< size of grabbed data
-	int m_width;			    ///< width of grabbed data
-	int m_height;			    ///< height of grabbed data
-	int m_x;				    ///< x coord of grabbed data
-	int m_y;				    ///< y coord of grabbed data
+	cRect m_rect;				///< rect of the grabbed data
 };
 
 #endif

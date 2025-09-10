@@ -32,10 +32,7 @@
 	m_pBuf = NULL;
 	m_pResult = NULL;
 
-	m_x = 0;
-	m_y = 0;
-	m_width = 0;
-	m_height = 0;
+	cRect m_rect;
 	m_size = 0;
 }
 

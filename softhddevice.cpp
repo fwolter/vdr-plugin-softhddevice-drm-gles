@@ -1584,7 +1584,7 @@ void cSoftHdDevice::ScaleVideo(const cRect & rect)
         __FUNCTION__, rect.Width(), rect.Height(), rect.X(), rect.Y());
 
     if (Render) {
-	Render->SetVideoOutputPosition(rect.X(), rect.Y(), rect.Width(), rect.Height());
+		Render->SetVideoOutputPosition(rect);
     }
 }
 

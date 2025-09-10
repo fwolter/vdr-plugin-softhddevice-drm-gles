@@ -117,7 +117,7 @@ public:
 	void DisableOglOsd(void);
 
 	void SetDisplayResolution(const char *);
-	void SetVideoOutputPosition(int, int, int, int);
+	void SetVideoOutputPosition(const cRect &);
 	void GetScreenSize(int *, int *, double *);
 	int64_t GetVideoClock(void);
 	void GetStats(int *, int *, int *);
@@ -245,6 +245,7 @@ private:
 	cCondVar m_grabCond;					///< condition gets signalled, if renederer finished to clone the grabbed buffers
 	cSoftHdGrab m_grabOsd;					///< keeps the current grabbed osd
 	cSoftHdGrab m_grabVideo;				///< keeps the current grabbde video
+	cRect m_lastVideoGrab;					///< crtc rect of the last shown video frame
 
 	int m_startCounter;						///< counter for displayed frames, indicates a video start
 	int m_framesDuped;						///< number of frames duplicated
@@ -257,19 +258,8 @@ private:
 	drmModeCrtc *m_drmModeCrtcSaved;
 	drmEventContext m_drmEventCtx;
 
-	// TODO: use cRect
-	int m_lastVideoGrabX;
-	int m_lastVideoGrabY;
-	int m_lastVideoGrabW;
-	int m_lastVideoGrabH;
-
-	struct {
-	int x;
-	int y;
-	int width;
-	int height;
-	int is_scaled;
-	} m_videoParam;							///< parameters of the current video
+	cRect m_videoRect;						///< rect of the currently displayed video
+	int m_videoIsScaled;					///< true, if the currently displayed video is scaled
 
 	struct drm_buf m_buffer[RENDERBUFFERS];	///< array of drm buffer structs
 	struct drm_buf *m_pBufOsd;				///< pointer to osd drm buffer struct

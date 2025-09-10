@@ -1373,11 +1373,11 @@ int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
 
 	// handle the video plane
 	// Get video size and position and set crtc rect
-	if (m_videoParam.is_scaled) {
-		DispWidth = (uint64_t)m_videoParam.width;
-		DispHeight = (uint64_t)m_videoParam.height;
-		DispX = (uint64_t)m_videoParam.x;
-		DispY = (uint64_t)m_videoParam.y;
+	if (m_videoIsScaled) {
+		DispWidth = (uint64_t)m_videoRect.Width();
+		DispHeight = (uint64_t)m_videoRect.Height();
+		DispX = (uint64_t)m_videoRect.X();
+		DispY = (uint64_t)m_videoRect.Y();
 	}
 
 	PicWidth = DispWidth;
@@ -1408,10 +1408,9 @@ int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
 		0, 0, buf->width, buf->height);
 
 	// set dimensions for grab early, because we might skip this at the next frame
-	m_lastVideoGrabX = DispX + (DispWidth - PicWidth) / 2;
-	m_lastVideoGrabY = DispY + (DispHeight - PicHeight) / 2;
-	m_lastVideoGrabW = PicWidth;
-	m_lastVideoGrabH = PicHeight;
+	m_lastVideoGrab.Set(DispX + (DispWidth - PicWidth) / 2,
+		DispY + (DispHeight - PicHeight) / 2,
+		PicWidth, PicHeight);
 
 	SetPlane(ModeReq, &m_videoPlane);
 	dirty += 2;
@@ -1447,26 +1446,19 @@ skip_video:
 			LOGDEBUG2(L_GRAB, "DisplayFrame: Trigger osd grab arrived");
 			struct drm_buf *osdBuf = NULL;
 			VideoCloneBuf(&osdBuf, m_pBufOsd);
+			// dimensions should be the size on screen
+			m_grabOsd.SetRect(0, 0, m_pBufOsd->width, m_pBufOsd->height);
 			m_grabOsd.SetBuf(osdBuf);
-			// should be the size on screen
-			m_grabOsd.SetX(0);
-			m_grabOsd.SetY(0);
-			m_grabOsd.SetWidth(m_pBufOsd->width);
-			m_grabOsd.SetHeight(m_pBufOsd->height);
 		}
 
 		struct drm_buf *pbuf = buf ? buf : (m_pLastFrame->buf ? m_pLastFrame->buf : NULL);
 		if (pbuf) {
-			m_grabVideo.SetX(m_lastVideoGrabX);
-			m_grabVideo.SetY(m_lastVideoGrabY);
-			m_grabVideo.SetWidth(m_lastVideoGrabW);
-			m_grabVideo.SetHeight(m_lastVideoGrabH);
-
 			LOGDEBUG2(L_GRAB, "DisplayFrame: Trigger video grab arrived");
 			struct drm_buf *videoBuf = NULL;
 			VideoCloneBuf(&videoBuf, pbuf);
+			// use dimensions which have been set earlier
+			m_grabVideo.SetRect(m_lastVideoGrab.X(), m_lastVideoGrab.Y(), m_lastVideoGrab.Width(), m_lastVideoGrab.Height());
 			m_grabVideo.SetBuf(videoBuf);
-			// dimensions have already been set earlier
 		}
 		m_grabCond.Broadcast();
 	}
@@ -2877,22 +2869,16 @@ void cVideoRender::Exit(void)
 ///
 ///	Set size and position of the video.
 ///
-void cVideoRender::SetVideoOutputPosition(int x, int y, int width, int height)
+void cVideoRender::SetVideoOutputPosition(const cRect &rect)
 {
-	m_videoParam.x = x;
-	m_videoParam.y = y;
-	m_videoParam.width = width;
-	m_videoParam.height = height;
+	m_videoRect.Set(rect.Point(), rect.Size());
 
-	if (m_videoParam.x == 0 &&
-	    m_videoParam.y == 0 &&
-	    m_videoParam.width == 0 &&
-	    m_videoParam.height == 0)
-		m_videoParam.is_scaled = 0;
+	if (m_videoRect.IsEmpty())
+		m_videoIsScaled = 0;
 	else
-		m_videoParam.is_scaled = 1;
+		m_videoIsScaled = 1;
 
-	LOGDEBUG("SetVideoOutputPosition %d %d %d %d%s", x, y, width, height, m_videoParam.is_scaled ? ", video is scaled" : "");
+	LOGDEBUG("SetVideoOutputPosition %d %d %d %d%s", rect.X(), rect.Y(), rect.Width(), rect.Height(), m_videoIsScaled ? ", video is scaled" : "");
 }
 
 void cVideoRender::DisableDeint(int disable)
