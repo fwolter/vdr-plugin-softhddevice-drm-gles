@@ -2247,18 +2247,29 @@ int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame, int f
 	interlaced = !!(frame->flags & AV_FRAME_FLAG_INTERLACED);
 #endif
 	// we can't trust frame->interlaced_frame ...
-	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE) && video_ctx->framerate.num > 0) {
-		if (video_ctx->framerate.num / video_ctx->framerate.den > 30)
-			interlaced = 0;
-		else
-			interlaced = 1;
-	}
-	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE) && (video_ctx->codec_id == AV_CODEC_ID_HEVC))
-		interlaced = 0;
+	// do some tricks in normal playback
+	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE)) {
 
-// TODO render
-	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE))
+		// set the interlaced switch depending on the framerate
+		if ((video_ctx->framerate.num > 0) &&
+		    (video_ctx->framerate.num / video_ctx->framerate.den > 30))
+			interlaced = 0;
+		else if (video_ctx->framerate.num > 0)
+			interlaced = 1;
+
+		// set the interlaced switch depending on an active deinterlace filter, if framerate is not available
+		if ((video_ctx->framerate.num == 0) &&
+		     !interlaced && m_pFilterThread->Active() && m_pFilterThread->IsInterlaceFilter()) {
+			LOGWARNING("RenderFrame: WARNING!!! frame without interlaced flag arrived while deinterlace filter is active (P %d)!", ++m_numWrongProgressive);
+			interlaced = 1;
+		}
+
+		// hevc is always progressive
+		if (video_ctx->codec_id == AV_CODEC_ID_HEVC)
+			interlaced = 0;
+
 		m_pDevice->VideoStream->SetInterlaced(interlaced);
+	}
 
 	if (frame->format == AV_PIX_FMT_YUV420P ||
 	   (frame->format == AV_PIX_FMT_DRM_PRIME && interlaced && !((m_hardwareQuirks & QUIRK_NO_HW_DEINT) || m_deintDisabled))) {
@@ -2410,6 +2421,7 @@ void cVideoRender::SetClosing(int black)
 	m_startCounter = 0;
 	m_framesDuped = 0;
 	m_framesDropped = 0;
+	m_numWrongProgressive = 0;
 	if (black)
 		SetTrickSpeed(0, 1);
 }

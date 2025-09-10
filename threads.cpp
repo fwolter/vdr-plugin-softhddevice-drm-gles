@@ -155,7 +155,7 @@ void cAudioHandlerThread::SendStartSignal(void)
 ///	Filter thread
 ///
 
-cFilterThread::cFilterThread(cVideoRender *render)
+cFilterThread::cFilterThread(cVideoRender *render) : cThread("filter thread")
 {
     Render = render;
 }
@@ -189,6 +189,7 @@ int cFilterThread::Init(const AVCodecContext *VideoCtx, AVFrame *Frame, int disa
     FilterBug = 0;
     FilterTrick = 0;
     FilterStill = 0;
+    m_isInterlaceFilter = 0;
 
     const AVFilter *buffersrc  = avfilter_get_by_name("buffer");
     const AVFilter *buffersink = avfilter_get_by_name("buffersink");
@@ -231,9 +232,11 @@ int cFilterThread::Init(const AVCodecContext *VideoCtx, AVFrame *Frame, int disa
     if (interlaced && !(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE)) {
 	if (Frame->format == AV_PIX_FMT_DRM_PRIME) {
 	    filter_descr = "deinterlace_v4l2m2m";
+	    m_isInterlaceFilter = 1;
 	} else if (Frame->format == AV_PIX_FMT_YUV420P) {
 	    filter_descr = "bwdif=1:-1:0";
 	    FilterBug = 1;
+	    m_isInterlaceFilter = 1;
 	}
     } else if (Frame->format == AV_PIX_FMT_YUV420P) {
 	filter_descr = "scale";

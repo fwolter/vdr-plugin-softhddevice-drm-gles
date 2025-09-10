@@ -237,6 +237,7 @@ private:
 	int m_numFramesToFilter;				///< number of frames to be filtered
 	int m_deintDisabled;					///< set, if deinterlacer is disabled
 	int m_configDeintDisabled;				///< set, if a deinterlacer on/off should be triggered
+	int m_numWrongProgressive;
 
 	int m_disableOglOsd;					///< set, if ogl osd is disabled
 

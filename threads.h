@@ -87,6 +87,7 @@ private:
     int FramesDeintRead;
 
     AVFrame *RbGetFrame(void);
+    int m_isInterlaceFilter;
 
 public:
     cFilterThread(cVideoRender *);
@@ -96,6 +97,7 @@ public:
     void Stop(void);
     int GetFramesDeintFilled(void);
     void RbPushFrame(AVFrame *);
+    int IsInterlaceFilter(void) { return m_isInterlaceFilter; };
 
 protected:
     virtual void Action(void);
