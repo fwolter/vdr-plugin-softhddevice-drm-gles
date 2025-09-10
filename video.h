@@ -244,7 +244,7 @@ private:
 	int m_startgrab;						///< internal flag to trigger grabbing
 	cCondVar m_grabCond;					///< condition gets signalled, if renederer finished to clone the grabbed buffers
 	cSoftHdGrab m_grabOsd;					///< keeps the current grabbed osd
-	cSoftHdGrab m_grabVideo;				///< keeps the current grabbde video
+	cSoftHdGrab m_grabVideo;				///< keeps the current grabbed video
 	cRect m_lastVideoGrab;					///< crtc rect of the last shown video frame
 
 	int m_startCounter;						///< counter for displayed frames, indicates a video start
