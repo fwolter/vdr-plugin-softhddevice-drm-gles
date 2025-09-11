@@ -297,7 +297,7 @@ int cVideoStream::DecodeInput(void)
 		if (!m_pRender->GetTrickSpeed()) {
 			if (!m_newStream) { // this is for mediaplayer ?
 				if (!m_pDecoder->ReceiveFrame(0, &frame)) {
-					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), frame, 0)) {
+					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), frame)) {
 						if (CloseRequested()) {
 							Close();
 							av_frame_free(&frame);
@@ -319,7 +319,8 @@ receive_trickspeed:
 						break;
 					}
 					LOGDEBUG2(L_TRICK, "%s: Trickspeed, send another cloned trick frame %d %p", __FUNCTION__, m_pRender->GetTrickCounter(), trickframe);
-					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), trickframe, FRAME_FLAG_TRICKSPEED)) {
+					m_pRender->MarkAsTrickspeedFrame(trickframe);
+					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), trickframe)) {
 						if (CloseRequested()) {
 							Close();
 							av_frame_free(&trickframe);

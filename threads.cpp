@@ -217,19 +217,11 @@ int cFilterThread::Init(const AVCodecContext *VideoCtx, AVFrame *Frame, int disa
 	interlaced = 0;
     }
 
-    FrameData *fd;
-    if (!Frame->opaque_ref) {
-	Frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
-	if (!Frame->opaque_ref)
-	    LOGFATAL("FilterHandlreThread: cannot allocate private frame data");
-    }
-    fd = (FrameData *)Frame->opaque_ref->data;
-
     // interlaced and non-trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) -> hardware deinterlacer
     // interlaced and non-trickspeed AV_PIX_FMT_YUV420P (software decoded) -> software deinterlacer
     // progressive and trickspeed AV_PIX_FMT_YUV420P (software decoded) -> scale filter (for NV12 output)
     // progressive and trickspeed AV_PIX_FMT_DRM_PRIME (hardware decoded) doesn't get to the FilterHandlerThread
-    if (interlaced && !(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE)) {
+    if (interlaced && !(Render->IsTrickspeedFrame(Frame) || Render->IsStillpictureFrame(Frame))) {
 	if (Frame->format == AV_PIX_FMT_DRM_PRIME) {
 	    filter_descr = "deinterlace_v4l2m2m";
 	    m_isInterlaceFilter = 1;
@@ -240,9 +232,9 @@ int cFilterThread::Init(const AVCodecContext *VideoCtx, AVFrame *Frame, int disa
 	}
     } else if (Frame->format == AV_PIX_FMT_YUV420P) {
 	filter_descr = "scale";
-	if (fd->flags & FRAME_FLAG_TRICKSPEED)
+	if (Render->IsTrickspeedFrame(Frame))
 	    FilterTrick = 1;
-	if (fd->flags & FRAME_FLAG_STILLPICTURE)
+	if (Render->IsStillpictureFrame(Frame))
 	    FilterStill = 1;
     }
 #if LIBAVFILTER_VERSION_INT < AV_VERSION_INT(7,16,100)
@@ -388,17 +380,10 @@ void cFilterThread::Action(void)
 		}
 
 // set flag of the filtered frame (scale filter and AV_PIX_FMT_YUV420P)
-		FrameData *fd;
-		if (!filt_frame->opaque_ref) {
-		    filt_frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
-		    if (!filt_frame->opaque_ref)
-			LOGFATAL("FilterHandlerThread: cannot allocate private frame data");
-		}
-		fd = (FrameData *)filt_frame->opaque_ref->data;
 		if (FilterTrick)
-		    fd->flags |= FRAME_FLAG_TRICKSPEED;
+		    Render->MarkAsTrickspeedFrame(filt_frame);
 		if (FilterStill) {
-		    fd->flags |= FRAME_FLAG_STILLPICTURE;
+		    Render->MarkAsStillpictureFrame(filt_frame);
 		    filt_frame->pts = AV_NOPTS_VALUE;
 		}
 

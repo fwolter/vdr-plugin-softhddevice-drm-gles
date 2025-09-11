@@ -1603,6 +1603,86 @@ int cVideoRender::GetFrame(AVFrame **frame)
 	return 0;
 }
 
+/**
+ * @brief Get frame flags
+ *
+ * @param frame		AVFrame
+ *
+ * @returns		FRAME_FLAG_TRICKSPEED or FRAME_FLAG_STILLPICTURE
+ */
+int cVideoRender::GetFrameFlags(AVFrame *frame)
+{
+	if (!frame || !frame->opaque_ref)
+		return 0;
+
+	FrameData *fd = (FrameData *)frame->opaque_ref->data;
+	return fd->flags;
+}
+
+/**
+ * @brief Set frame flags
+ *
+ * @param frame		AVFrame
+ * @param flags		FRAME_FLAG_TRICKSPEED and/or FRAME_FLAG_STILLPICTURE
+ */
+void cVideoRender::SetFrameFlags(AVFrame *frame, int flags)
+{
+	FrameData *fd;
+	if (!frame->opaque_ref) {
+		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
+		if (!frame->opaque_ref) {
+			LOGFATAL("%s: cannot allocate private frame data", __FUNCTION__);
+		}
+	}
+
+	fd = (FrameData *)frame->opaque_ref->data;
+	fd->flags = flags;
+}
+
+/**
+ * @brief Check, if this is a trickspeed frame
+ *
+ * @param frame		AVFrame
+ *
+ * @return		true, if this frame is marked as a trickspeed frame
+ */
+int cVideoRender::IsTrickspeedFrame(AVFrame *frame)
+{
+	return GetFrameFlags(frame) & FRAME_FLAG_TRICKSPEED;
+}
+
+/**
+ * @brief Check, if this is a stillpicture frame
+ *
+ * @param frame		AVFrame
+ *
+ * @return		true, if this frame is marked as a sillpicture frame
+ */
+int cVideoRender::IsStillpictureFrame(AVFrame *frame)
+{
+	return GetFrameFlags(frame) & FRAME_FLAG_STILLPICTURE;
+}
+
+/**
+ * @brief Mark this frame as a trickspeed frame
+ *
+ * @param frame		AVFrame
+ */
+void cVideoRender::MarkAsTrickspeedFrame(AVFrame *frame)
+{
+	SetFrameFlags(frame, FRAME_FLAG_TRICKSPEED);
+}
+
+/**
+ * @brief Mark this frame as a stillpicture frame
+ *
+ * @param frame		AVFrame
+ */
+void cVideoRender::MarkAsStillpictureFrame(AVFrame *frame)
+{
+	SetFrameFlags(frame, FRAME_FLAG_STILLPICTURE);
+}
+
 ///
 ///	Get suitable framebuffer for frame
 ///
@@ -1616,7 +1696,6 @@ int cVideoRender::GetBuffer(AVFrame *frame, struct drm_buf **buf)
 	int i;
 
 	AVDRMFrameDescriptor *primedata = (AVDRMFrameDescriptor *)frame->data[0];
-	FrameData *fd = (FrameData *)frame->opaque_ref->data;
 
 	// search for a made fd / FB combination
 	for (i = 0; i < RENDERBUFFERS; i++) {
@@ -1662,7 +1741,7 @@ int cVideoRender::GetBuffer(AVFrame *frame, struct drm_buf **buf)
 		return 1;
 	}
 
-	pbuf->trickspeed = fd->flags & FRAME_FLAG_TRICKSPEED;
+	pbuf->trickspeed = IsTrickspeedFrame(frame);
 
 	*buf = pbuf;
 	return 0;
@@ -1704,7 +1783,6 @@ int cVideoRender::DisplayFrame(void)
 	int skip_video = 0;
 	int timeout; // ms
 	int ret;
-	FrameData *fd;
 
 	if (ShouldClose()) {
 		LOGDEBUG2(L_DRM, "DisplayFrame: closing, set a black FB");
@@ -1772,8 +1850,7 @@ dequeue:
 
 	// advance frame
 	if (GetFrame(&frame)) {
-		FrameData *fd = (FrameData *)frame->opaque_ref->data;
-		if (fd->flags & FRAME_FLAG_STILLPICTURE) {
+		if (IsStillpictureFrame(frame)) {
 			LOGDEBUG2(L_STILL, "DisplayFrame: Stillpicture has AV_NOPTS_VALUE, skip sync ...");
 			goto skip_sync;
 		} else {
@@ -1784,10 +1861,8 @@ dequeue:
 		}
 	}
 
-	fd = (FrameData *)frame->opaque_ref->data;
-
 	// skip old audio in trickspeed
-	if (fd->flags & FRAME_FLAG_TRICKSPEED) {
+	if (IsTrickspeedFrame(frame)) {
 		m_pAudio->Skip(frame->pts, 0);
 		goto skip_sync;
 	}
@@ -2094,9 +2169,8 @@ void cVideoRender::EnqueueFB(AVFrame *inframe)
 	AVDRMFrameDescriptor * primedata;
 	AVFrame *frame;
 	int i;
-	FrameData *ifd = (FrameData *)inframe->opaque_ref->data;
 
-	if (ifd->flags & FRAME_FLAG_TRICKSPEED) {	// if we have trickspeed, always use a free buffer, because its destroyed in DisplayFrame after rendering
+	if (IsTrickspeedFrame(inframe)) {	// if we have trickspeed, always use a free buffer, because its destroyed in DisplayFrame after rendering
 		for (i = 0; i < RENDERBUFFERS; i++) {
 			if (m_buffer[i].dirty == 0)
 				break;
@@ -2166,15 +2240,10 @@ get_buffer:
 	frame->sample_aspect_ratio.num = inframe->sample_aspect_ratio.num;
 	frame->sample_aspect_ratio.den = inframe->sample_aspect_ratio.den;
 
-	FrameData *fd;
-	if (!frame->opaque_ref) {
-		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
-		if (!frame->opaque_ref) {
-			LOGFATAL("EnqueueFB: cannot allocate private frame data");
-		}
-	}
-	fd = (FrameData *)frame->opaque_ref->data;
-	fd->flags = ifd->flags;
+	if (IsTrickspeedFrame(inframe))
+		MarkAsTrickspeedFrame(frame);
+	if (IsStillpictureFrame(inframe))
+		MarkAsStillpictureFrame(frame);
 
 	primedata = (AVDRMFrameDescriptor *)av_mallocz(sizeof(AVDRMFrameDescriptor));
 	primedata->objects[0].fd = buf->fd_prime[0];
@@ -2192,7 +2261,7 @@ get_buffer:
 	RbPushFrame(frame);
 	FramesRbUnlock();
 
-	if (!(ifd->flags & FRAME_FLAG_TRICKSPEED))
+	if (!(IsTrickspeedFrame(inframe)))
 		m_enqueueBufferIdx = (m_enqueueBufferIdx + 1) % (VIDEO_SURFACES_MAX + 2);
 
 	av_frame_free(&inframe);
@@ -2207,7 +2276,7 @@ get_buffer:
 ///	@retval 0	success or error, return (frame is freed or moved to the render ringbuffer)
 ///	@retval	-1	ringbuffer full, try again
 ///
-int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame, int flags)
+int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame)
 {
 	int interlaced;
 
@@ -2218,15 +2287,6 @@ int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame, int f
 	if (frame->decode_error_flags || frame->flags & AV_FRAME_FLAG_CORRUPT) {
 		LOGWARNING("RenderFrame: error_flag or FRAME_FLAG_CORRUPT");
 	}
-
-	FrameData *fd;
-	if (!frame->opaque_ref) {
-		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
-		if (!frame->opaque_ref)
-			LOGFATAL("RenderFrame: cannot allocate private frame data");
-	}
-	fd = (FrameData *)frame->opaque_ref->data;
-	fd->flags = flags;
 
 	if (m_closing || m_flushing) {
 		av_frame_free(&frame);
@@ -2240,7 +2300,7 @@ int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame, int f
 #endif
 	// we can't trust frame->interlaced_frame ...
 	// do some tricks in normal playback
-	if (!(fd->flags & FRAME_FLAG_TRICKSPEED || fd->flags & FRAME_FLAG_STILLPICTURE)) {
+	if (!(IsTrickspeedFrame(frame) || IsStillpictureFrame(frame))) {
 
 		// set the interlaced switch depending on the framerate
 		if ((video_ctx->framerate.num > 0) &&

@@ -165,7 +165,7 @@ public:
 	int DrmHandleEvent(void);
 
 	// Frame and buffer
-	int RenderFrame(AVCodecContext *, AVFrame *, int flags);
+	int RenderFrame(AVCodecContext *, AVFrame *);
 	int DisplayFrame(void);
 	int Sync(AVFrame *, int *, struct drm_buf **);
 	void EnqueueFB(AVFrame *);
@@ -179,6 +179,10 @@ public:
 	AVFrame *RbGetFrame(void);
 	void FramesRbLock(void);
 	void FramesRbUnlock(void);
+	int IsTrickspeedFrame(AVFrame *);
+	int IsStillpictureFrame(AVFrame *);
+	void MarkAsTrickspeedFrame(AVFrame *);
+	void MarkAsStillpictureFrame(AVFrame *);
 
 	// Filter
 	void ClearFramesToFilter(void) { m_numFramesToFilter = 0; };
@@ -293,6 +297,8 @@ private:
 	EGLConfig GetEGLConfig(void);
 	struct drm_buf *drm_get_buf_from_bo(struct gbm_bo *);
 #endif
+	int GetFrameFlags(AVFrame *);
+	void SetFrameFlags(AVFrame *, int);
 
 	void SetVideoClock(int64_t);
 	int ShouldWaitForAudio(void);

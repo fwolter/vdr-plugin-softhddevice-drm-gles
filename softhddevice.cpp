@@ -935,7 +935,8 @@ receive:
     if (!ret) {
 	// frame received, render it and try another one (should end up with AVERROR_EOF)
 	LOGDEBUG2(L_STILL, "StillPicture: frame received");
-	while (Render->RenderFrame(VideoStream->Decoder()->GetContext(), frame, FRAME_FLAG_STILLPICTURE)) {
+	Render->MarkAsStillpictureFrame(frame);
+	while (Render->RenderFrame(VideoStream->Decoder()->GetContext(), frame)) {
 	    if (VideoStream->IsClosing()) {
 		av_frame_free(&frame);
 		break;
