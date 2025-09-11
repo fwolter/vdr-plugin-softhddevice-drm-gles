@@ -60,14 +60,9 @@ extern "C" {
 #include "threads.h"
 #include "grab.h"
 
-//----------------------------------------------------------------------------
-//	Helper functions
-//----------------------------------------------------------------------------
-
 /*****************************************************************************
- * cVideoRender class
+ * static functions
  ****************************************************************************/
-
 static void ReleaseFrame( __attribute__ ((unused)) void *opaque, uint8_t *data)
 {
 	AVDRMFrameDescriptor *primedata = (AVDRMFrameDescriptor *)data;
@@ -110,38 +105,6 @@ static int GetPropertyValue(int m_fdDrm, uint32_t objectID,
 	return 0;
 }
 
-int cVideoRender::SetPlanePropertyRequest(drmModeAtomicReqPtr ModeReq, uint32_t objectID, const char *propName, uint64_t value)
-{
-	cDrmPlane *obj = nullptr;
-	
-	if (objectID == m_videoPlane.GetId())
-		obj = &m_videoPlane;
-	else if (objectID == m_osdPlane.GetId())
-		obj = &m_osdPlane;
-
-	if (!obj) {
-		LOGERROR("SetPlanePropertyRequest: Unable to find plane with id %d", objectID);
-		return -EINVAL;
-	}
-
-	int id = -1;
-
-	for (int i = 0; i < obj->GetCountProps(); i++) {
-		if (strcmp(obj->GetPropsInfoName(i), propName) == 0) {
-			id = obj->GetPropsInfoPropId(i);
-			break;
-		}
-	}
-
-	if (id < 0) {
-		LOGERROR("SetPlanePropertyRequest: Unable to find value for property \'%s\'.",
-			propName);
-		return -EINVAL;
-	}
-
-	return drmModeAtomicAddProperty(ModeReq, objectID, id, value);
-}
-
 static int SetPropertyRequest(drmModeAtomicReqPtr ModeReq, int m_fdDrm,
 					uint32_t objectID, uint32_t objectType,
 					const char *propName, uint64_t value)
@@ -174,28 +137,6 @@ static int SetPropertyRequest(drmModeAtomicReqPtr ModeReq, int m_fdDrm,
 	return drmModeAtomicAddProperty(ModeReq, objectID, id, value);
 }
 
-// move to cDrmPlane
-void cVideoRender::SetPlaneZpos(drmModeAtomicReqPtr ModeReq, cDrmPlane *plane)
-{
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "zpos", plane->GetZpos());
-}
-
-void cVideoRender::SetPlane(drmModeAtomicReqPtr ModeReq, cDrmPlane *plane)
-{
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_ID", plane->GetCrtcId());
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "FB_ID", plane->GetFbId());
-
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_X", plane->GetCrtcX());
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_Y", plane->GetCrtcY());
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_W", plane->GetCrtcW());
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_H", plane->GetCrtcH());
-
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_X", plane->GetSrcX());
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_Y", plane->GetSrcY());
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_W", plane->GetSrcW() << 16);
-	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_H", plane->GetSrcH() << 16);
-}
-
 static size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 {
 	FILE *fd = NULL;
@@ -212,69 +153,6 @@ static size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 	fclose(fd);
 
 	return character;
-}
-
-void cVideoRender::ReadHWPlatform(void)
-{
-	char *txt_buf;
-	char *read_ptr;
-	size_t bufsize = 128;
-	size_t read_size;
-
-	txt_buf = (char *) calloc(bufsize, sizeof(char));
-	m_hardwareQuirks = 0;
-
-	read_size = ReadLineFromFile(txt_buf, bufsize, "/sys/firmware/devicetree/base/compatible");
-	if (!read_size) {
-		free((void *)txt_buf);
-		return;
-	}
-
-	read_ptr = txt_buf;
-	// be aware: device tree string can contain \x0 bytes, so every C-string function
-	// thinks, we already reached the string's terminating null bytes
-	// so copy the string into a temporary string without the "\0"
-	char *_txt_buf = (char *) calloc(bufsize, sizeof(char));
-	char *_read_ptr = _txt_buf;
-	for (size_t i = 0; i < bufsize; i++) {
-		if (memcmp(read_ptr, "\0", sizeof(char))) {
-			memcpy(_read_ptr, read_ptr, sizeof(char));
-			_read_ptr++;
-		}
-		read_ptr++;
-	}
-
-	read_ptr = txt_buf;
-	LOGDEBUG2(L_DRM, "ReadHWPlatform: found \"%s\", set hardware quirks", _txt_buf);
-
-	while(read_size) {
-		if (strstr(read_ptr, "bcm2837")) {
-			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2837 (Raspberry Pi 2/3) found");
-			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
-			break;
-		}
-		if (strstr(read_ptr, "bcm2711")) {
-			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2711 (Raspberry Pi 4 Model B, Compute Module 4, Pi 400) found");
-			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
-			break;
-		}
-		if (strstr(read_ptr, "bcm2712")) {
-			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2712 (Raspberry Pi 5, Compute Module 5, Pi 500) found");
-			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
-			break;
-		}
-		if (strstr(read_ptr, "amlogic")) {
-			LOGDEBUG2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
-			m_hardwareQuirks |= QUIRK_CODEC_NEEDS_EXT_INIT
-				       |  QUIRK_CODEC_SKIP_FIRST_FRAMES
-				       |  QUIRK_NO_HW_DEINT;
-			break;
-		}
-
-		read_size -= (strlen(read_ptr) + 1);
-		read_ptr = (char *)&read_ptr[(strlen(read_ptr) + 1)];
-	}
-	free((void *)txt_buf);
 }
 
 static int TestCaps(int fd)
@@ -302,29 +180,6 @@ static int TestCaps(int fd)
 	return 0;
 }
 
-// move to cDrmPlane
-int cVideoRender::CheckZpos(cDrmPlane *plane)
-{
-	drmModeAtomicReqPtr ModeReq;
-	const uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
-
-	if (!(ModeReq = drmModeAtomicAlloc()))
-		LOGERROR("CheckZpos: cannot allocate atomic request (%d): %m", errno);
-
-	SetPlaneZpos(ModeReq, plane);
-
-	if (drmModeAtomicCommit(m_fdDrm, ModeReq, flags, NULL) != 0) {
-		LOGDEBUG2(L_DRM, "CheckZpos: cannot set atomic mode (%d), don't use zpos change: %m", errno);
-		m_useZpos = 0;
-		drmModeAtomicFree(ModeReq);
-		return 1;
-	}
-
-	drmModeAtomicFree(ModeReq);
-
-	return 0;
-}
-
 #ifdef USE_GLES
 static const EGLint context_attribute_list[] =
 {
@@ -332,60 +187,35 @@ static const EGLint context_attribute_list[] =
     EGL_NONE
 };
 
-EGLConfig cVideoRender::GetEGLConfig(void)
+static void drm_fb_destroy_callback(struct gbm_bo *bo, void *data)
 {
-    EGLint config_attribute_list[] = {
-        EGL_BUFFER_SIZE, 32,
-        EGL_STENCIL_SIZE, EGL_DONT_CARE,
-        EGL_DEPTH_SIZE, EGL_DONT_CARE,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_NONE
-    };
-    EGLConfig *configs;
-    EGLint matched;
-    EGLint count;
-    eglGetConfigs(m_eglDisplay, NULL, 0, &count);
-//    EGL_CHECK(eglGetConfigs(m_eglDisplay, NULL, 0, &count));
-    if (count < 1) {
-        LOGFATAL("no EGL configs to choose from");
-    }
+	int drm_fd = gbm_device_get_fd(gbm_bo_get_device(bo));
+	struct drm_buf *buf = (struct drm_buf *)data;
 
-    LOGDEBUG2(L_OPENGL, "%d EGL configs found", count);
+	if (buf->fb_id)
+		drmModeRmFB(drm_fd, buf->fb_id);
 
-    configs = (EGLConfig *)malloc(count * sizeof(*configs));
-    if (!configs)
-        LOGFATAL("can't allocate space for EGL configs");
-
-    eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched);
-//    EGL_CHECK(eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched));
-    if (!matched) {
-        LOGFATAL("no EGL configs with appropriate attributes");
-    }
-
-    LOGDEBUG2(L_OPENGL, "%d appropriate EGL configs found, which match attributes", matched);
-
-    for (int i = 0; i < matched; ++i) {
-        EGLint gbm_format;
-        eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format);
-//        EGL_CHECK(eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format));
-
-        if (gbm_format == GBM_FORMAT_ARGB8888)
-            return configs[i];
-    }
-
-    LOGFATAL("no matching gbm config found");
-    return NULL;
+	free(buf);
 }
 
-PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display = NULL;
-PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC get_platform_surface = NULL;
+__attribute__ ((weak)) union gbm_bo_handle
+gbm_bo_get_handle_for_plane(struct gbm_bo *bo, int plane);
+
+__attribute__ ((weak)) int
+gbm_bo_get_fd(struct gbm_bo *bo);
+
+__attribute__ ((weak)) uint64_t
+gbm_bo_get_modifier(struct gbm_bo *bo);
+
+__attribute__ ((weak)) int
+gbm_bo_get_plane_count(struct gbm_bo *bo);
+
+__attribute__ ((weak)) uint32_t
+gbm_bo_get_stride_for_plane(struct gbm_bo *bo, int plane);
+
+__attribute__ ((weak)) uint32_t
+gbm_bo_get_offset(struct gbm_bo *bo, int plane);
 #endif
-
-void cVideoRender::SetDisplayResolution(const char* resolution)
-{
-	sscanf(resolution, "%dx%d@%d", &m_userReqDisplayWidth, &m_userReqDisplayHeight, &m_userReqDisplayRefreshRate);
-}
 
 static drmModeConnector *find_drm_connector(int fd, drmModeRes *resources)
 {
@@ -484,27 +314,337 @@ static int find_drm_device(drmModeRes **resources)
 	return fd;
 }
 
-int32_t cVideoRender::find_crtc_for_connector(const drmModeRes *resources, const drmModeConnector *connector)
+static const struct format_info format_info_array[] = {
+	{ DRM_FORMAT_NV12, "NV12", 2, { { 8, 1, 1 }, { 16, 2, 2 } }, },
+	{ DRM_FORMAT_YUV420, "YU12", 3, { { 8, 1, 1 }, { 8, 2, 2 }, {8, 2, 2 } }, },
+	{ DRM_FORMAT_ARGB8888, "AR24", 1, { { 32, 1, 1 } }, },
+};
+
+#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+static const struct format_info *find_format(uint32_t format)
 {
-	int i;
+	for (int i = 0; i < (int)ARRAY_SIZE(format_info_array); i++) {
+		if (format == format_info_array[i].format)
+			return &format_info_array[i];
+	}
+	return NULL;
+}
 
-	for (i = 0; i < connector->count_encoders; i++) {
-		const uint32_t encoder_id = connector->encoders[i];
-		drmModeEncoder *encoder = drmModeGetEncoder(m_fdDrm, encoder_id);
+///
+///	Clone drm buffer
+///
+///	@param dst[out]		dst video buffer
+///	@param src[in]		src video buffer
+///
+static void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
+{
+	struct drm_buf *buf = (struct drm_buf *)malloc(sizeof(struct drm_buf));
 
-		if (encoder) {
-			const int32_t crtc_id = find_crtc_for_encoder(resources, encoder);
-			drmModeFreeEncoder(encoder);
-			if (crtc_id != 0) {
-				return crtc_id;
+	buf->width = src->width;
+	buf->height = src->height;
+	buf->fb_id = src->fb_id;
+	buf->pix_fmt = src->pix_fmt;
+	buf->num_planes = src->num_planes;
+	buf->trickspeed = src->trickspeed;
+	buf->swbuffer = src->swbuffer;
+	buf->nb_objects = src->nb_objects;
+
+	for (int object = 0; object < buf->nb_objects; object++) {
+		buf->fd_prime[object] = src->fd_prime[object];
+	}
+
+	for (int i = 0; i < src->num_planes; i++) {
+		buf->size[i] = src->size[i];
+		buf->pitch[i] = src->pitch[i];
+		buf->handle[i] = src->handle[i];
+		buf->offset[i] = src->offset[i];
+		buf->obj_index[i] = src->obj_index[i];
+	}
+
+	void *src_buffer = NULL;
+	void *dst_buffer = NULL;
+
+	// planes aren't mmapped, do it (PRIME)
+	if (!src->plane[0]) {
+		for (int object = 0; object < buf->nb_objects; object++) {
+			// memcpy mmapped data
+			dst_buffer = malloc(src->size[object]);
+			src_buffer = mmap(NULL, src->size[object], PROT_READ, MAP_SHARED, src->fd_prime[object], 0);
+			if (src_buffer == MAP_FAILED) {
+				LOGERROR("VideoCloneBufB: cannot map buffer size %d prime_fd %d (%d): %m", src->size[object], src->fd_prime[object], errno);
+				return;
 			}
+
+			LOGDEBUG2(L_GRAB, "VideoCloneBuf: Copy %p to %p", src_buffer, dst_buffer);
+			memcpy(dst_buffer, src_buffer, src->size[object]);
+			munmap(src_buffer, src->size[object]);
+			for (int plane = 0; plane < buf->num_planes; plane++) {
+				if (buf->obj_index[plane] == object) {
+					buf->plane[plane] = (uint8_t *)dst_buffer;
+					LOGDEBUG2(L_GRAB, "VideoCloneBuf: buf->plane[%d] gets %p (object %d)", plane, dst_buffer, object);
+				}
+			}
+		}
+	} else {
+		for (int plane = 0; plane < buf->num_planes; plane++) {
+			dst_buffer = malloc(buf->size[plane]);
+			memcpy(dst_buffer, src->plane[plane], src->size[plane]);
+			buf->plane[plane] = (uint8_t *)dst_buffer;
 		}
 	}
 
-	return -1;
+	for (int plane = 0; plane < buf->num_planes; plane++) {
+		LOGDEBUG2(L_GRAB, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d",
+		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
+	}
+
+	*dst = buf;
+}
+
+/*****************************************************************************
+ * cVideoRender class
+ ****************************************************************************/
+
+///
+///	Allocate new video hw render.
+///
+///	@param stream	video stream
+///
+///	@returns a new initialized video hardware render.
+///
+cVideoRender::cVideoRender(cSoftHdDevice *device)
+{
+    m_pDevice = device;
+    m_pAudio = m_pDevice->Audio;
+}
+
+///
+///	Destroy a video render.
+///
+///	@param render	video render
+///
+cVideoRender::~cVideoRender(void)
+{
+	LOGDEBUG2(L_DRM, "~cVideoRender");
+	if (m_pFilterThread)
+		delete m_pFilterThread;
+	if (m_pDisplayThread)
+		delete m_pDisplayThread;
+	if (m_pDecodingThread)
+		delete m_pDecodingThread;
+	free(m_pLastFrame);
+	LOGDEBUG2(L_DRM, "~cVideoRender deleted");
+}
+
+void cVideoRender::StartThreads(void)
+{
+	m_pDecodingThread = new cDecodingThread(m_pDevice);
+	m_pDisplayThread = new cDisplayThread(this);
+	m_pFilterThread = new cFilterThread(this);
+
+	atomic_set(&m_framesFilled, 0);
+	m_closing = 0;
+	m_flushing = 0;
+	m_flushLastFrame = 0;
+	m_deintDisabled = m_configDeintDisabled;
+	m_enqueueBufferIdx = 0;
+	m_pLastFrame = (struct lastFrame *)calloc(1, sizeof(struct lastFrame));
+	ResumeVideo();
+}
+
+
+
+
+int cVideoRender::SetPlanePropertyRequest(drmModeAtomicReqPtr ModeReq, uint32_t objectID, const char *propName, uint64_t value)
+{
+	cDrmPlane *obj = nullptr;
+	
+	if (objectID == m_videoPlane.GetId())
+		obj = &m_videoPlane;
+	else if (objectID == m_osdPlane.GetId())
+		obj = &m_osdPlane;
+
+	if (!obj) {
+		LOGERROR("SetPlanePropertyRequest: Unable to find plane with id %d", objectID);
+		return -EINVAL;
+	}
+
+	int id = -1;
+
+	for (int i = 0; i < obj->GetCountProps(); i++) {
+		if (strcmp(obj->GetPropsInfoName(i), propName) == 0) {
+			id = obj->GetPropsInfoPropId(i);
+			break;
+		}
+	}
+
+	if (id < 0) {
+		LOGERROR("SetPlanePropertyRequest: Unable to find value for property \'%s\'.",
+			propName);
+		return -EINVAL;
+	}
+
+	return drmModeAtomicAddProperty(ModeReq, objectID, id, value);
+}
+
+// move to cDrmPlane
+void cVideoRender::SetPlaneZpos(drmModeAtomicReqPtr ModeReq, cDrmPlane *plane)
+{
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "zpos", plane->GetZpos());
+}
+
+void cVideoRender::SetPlane(drmModeAtomicReqPtr ModeReq, cDrmPlane *plane)
+{
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_ID", plane->GetCrtcId());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "FB_ID", plane->GetFbId());
+
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_X", plane->GetCrtcX());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_Y", plane->GetCrtcY());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_W", plane->GetCrtcW());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "CRTC_H", plane->GetCrtcH());
+
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_X", plane->GetSrcX());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_Y", plane->GetSrcY());
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_W", plane->GetSrcW() << 16);
+	SetPlanePropertyRequest(ModeReq, plane->GetId(), "SRC_H", plane->GetSrcH() << 16);
+}
+
+void cVideoRender::ReadHWPlatform(void)
+{
+	char *txt_buf;
+	char *read_ptr;
+	size_t bufsize = 128;
+	size_t read_size;
+
+	txt_buf = (char *) calloc(bufsize, sizeof(char));
+	m_hardwareQuirks = 0;
+
+	read_size = ReadLineFromFile(txt_buf, bufsize, "/sys/firmware/devicetree/base/compatible");
+	if (!read_size) {
+		free((void *)txt_buf);
+		return;
+	}
+
+	read_ptr = txt_buf;
+	// be aware: device tree string can contain \x0 bytes, so every C-string function
+	// thinks, we already reached the string's terminating null bytes
+	// so copy the string into a temporary string without the "\0"
+	char *_txt_buf = (char *) calloc(bufsize, sizeof(char));
+	char *_read_ptr = _txt_buf;
+	for (size_t i = 0; i < bufsize; i++) {
+		if (memcmp(read_ptr, "\0", sizeof(char))) {
+			memcpy(_read_ptr, read_ptr, sizeof(char));
+			_read_ptr++;
+		}
+		read_ptr++;
+	}
+
+	read_ptr = txt_buf;
+	LOGDEBUG2(L_DRM, "ReadHWPlatform: found \"%s\", set hardware quirks", _txt_buf);
+
+	while(read_size) {
+		if (strstr(read_ptr, "bcm2837")) {
+			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2837 (Raspberry Pi 2/3) found");
+			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
+			break;
+		}
+		if (strstr(read_ptr, "bcm2711")) {
+			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2711 (Raspberry Pi 4 Model B, Compute Module 4, Pi 400) found");
+			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
+			break;
+		}
+		if (strstr(read_ptr, "bcm2712")) {
+			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2712 (Raspberry Pi 5, Compute Module 5, Pi 500) found");
+			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
+			break;
+		}
+		if (strstr(read_ptr, "amlogic")) {
+			LOGDEBUG2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
+			m_hardwareQuirks |= QUIRK_CODEC_NEEDS_EXT_INIT
+				       |  QUIRK_CODEC_SKIP_FIRST_FRAMES
+				       |  QUIRK_NO_HW_DEINT;
+			break;
+		}
+
+		read_size -= (strlen(read_ptr) + 1);
+		read_ptr = (char *)&read_ptr[(strlen(read_ptr) + 1)];
+	}
+	free((void *)txt_buf);
+}
+
+// move to cDrmPlane
+int cVideoRender::CheckZpos(cDrmPlane *plane)
+{
+	drmModeAtomicReqPtr ModeReq;
+	const uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+
+	if (!(ModeReq = drmModeAtomicAlloc()))
+		LOGERROR("CheckZpos: cannot allocate atomic request (%d): %m", errno);
+
+	SetPlaneZpos(ModeReq, plane);
+
+	if (drmModeAtomicCommit(m_fdDrm, ModeReq, flags, NULL) != 0) {
+		LOGDEBUG2(L_DRM, "CheckZpos: cannot set atomic mode (%d), don't use zpos change: %m", errno);
+		m_useZpos = 0;
+		drmModeAtomicFree(ModeReq);
+		return 1;
+	}
+
+	drmModeAtomicFree(ModeReq);
+
+	return 0;
 }
 
 #ifdef USE_GLES
+EGLConfig cVideoRender::GetEGLConfig(void)
+{
+    EGLint config_attribute_list[] = {
+        EGL_BUFFER_SIZE, 32,
+        EGL_STENCIL_SIZE, EGL_DONT_CARE,
+        EGL_DEPTH_SIZE, EGL_DONT_CARE,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_NONE
+    };
+    EGLConfig *configs;
+    EGLint matched;
+    EGLint count;
+    eglGetConfigs(m_eglDisplay, NULL, 0, &count);
+//    EGL_CHECK(eglGetConfigs(m_eglDisplay, NULL, 0, &count));
+    if (count < 1) {
+        LOGFATAL("no EGL configs to choose from");
+    }
+
+    LOGDEBUG2(L_OPENGL, "%d EGL configs found", count);
+
+    configs = (EGLConfig *)malloc(count * sizeof(*configs));
+    if (!configs)
+        LOGFATAL("can't allocate space for EGL configs");
+
+    eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched);
+//    EGL_CHECK(eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched));
+    if (!matched) {
+        LOGFATAL("no EGL configs with appropriate attributes");
+    }
+
+    LOGDEBUG2(L_OPENGL, "%d appropriate EGL configs found, which match attributes", matched);
+
+    for (int i = 0; i < matched; ++i) {
+        EGLint gbm_format;
+        eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format);
+//        EGL_CHECK(eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format));
+
+        if (gbm_format == GBM_FORMAT_ARGB8888)
+            return configs[i];
+    }
+
+    LOGFATAL("no matching gbm config found");
+    return NULL;
+}
+
+PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display = NULL;
+PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC get_platform_surface = NULL;
+
 int cVideoRender::init_gbm(int w, int h, uint32_t format, uint64_t modifier)
 {
 	m_pGbmDevice = gbm_create_device(m_fdDrm);
@@ -576,6 +716,31 @@ int cVideoRender::InitEGL(void)
 	return 0;
 }
 #endif
+
+void cVideoRender::SetDisplayResolution(const char* resolution)
+{
+	sscanf(resolution, "%dx%d@%d", &m_userReqDisplayWidth, &m_userReqDisplayHeight, &m_userReqDisplayRefreshRate);
+}
+
+int32_t cVideoRender::find_crtc_for_connector(const drmModeRes *resources, const drmModeConnector *connector)
+{
+	int i;
+
+	for (i = 0; i < connector->count_encoders; i++) {
+		const uint32_t encoder_id = connector->encoders[i];
+		drmModeEncoder *encoder = drmModeGetEncoder(m_fdDrm, encoder_id);
+
+		if (encoder) {
+			const int32_t crtc_id = find_crtc_for_encoder(resources, encoder);
+			drmModeFreeEncoder(encoder);
+			if (crtc_id != 0) {
+				return crtc_id;
+			}
+		}
+	}
+
+	return -1;
+}
 
 int cVideoRender::FindDevice(void)
 {
@@ -899,35 +1064,6 @@ find_mode:
 }
 
 #ifdef USE_GLES
-static void drm_fb_destroy_callback(struct gbm_bo *bo, void *data)
-{
-	int drm_fd = gbm_device_get_fd(gbm_bo_get_device(bo));
-	struct drm_buf *buf = (struct drm_buf *)data;
-
-	if (buf->fb_id)
-		drmModeRmFB(drm_fd, buf->fb_id);
-
-	free(buf);
-}
-
-__attribute__ ((weak)) union gbm_bo_handle
-gbm_bo_get_handle_for_plane(struct gbm_bo *bo, int plane);
-
-__attribute__ ((weak)) int
-gbm_bo_get_fd(struct gbm_bo *bo);
-
-__attribute__ ((weak)) uint64_t
-gbm_bo_get_modifier(struct gbm_bo *bo);
-
-__attribute__ ((weak)) int
-gbm_bo_get_plane_count(struct gbm_bo *bo);
-
-__attribute__ ((weak)) uint32_t
-gbm_bo_get_stride_for_plane(struct gbm_bo *bo, int plane);
-
-__attribute__ ((weak)) uint32_t
-gbm_bo_get_offset(struct gbm_bo *bo, int plane);
-
 struct drm_buf *cVideoRender::drm_get_buf_from_bo(struct gbm_bo *bo)
 {
 	struct drm_buf *buf = (struct drm_buf *)gbm_bo_get_user_data(bo);
@@ -1003,22 +1139,6 @@ struct drm_buf *cVideoRender::drm_get_buf_from_bo(struct gbm_bo *bo)
 	return buf;
 }
 #endif
-
-static const struct format_info format_info_array[] = {
-	{ DRM_FORMAT_NV12, "NV12", 2, { { 8, 1, 1 }, { 16, 2, 2 } }, },
-	{ DRM_FORMAT_YUV420, "YU12", 3, { { 8, 1, 1 }, { 8, 2, 2 }, {8, 2, 2 } }, },
-	{ DRM_FORMAT_ARGB8888, "AR24", 1, { { 32, 1, 1 } }, },
-};
-
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-static const struct format_info *find_format(uint32_t format)
-{
-	for (int i = 0; i < (int)ARRAY_SIZE(format_info_array); i++) {
-		if (format == format_info_array[i].format)
-			return &format_info_array[i];
-	}
-	return NULL;
-}
 
 int cVideoRender::SetupFB(struct drm_buf *buf,
 			AVDRMFrameDescriptor *primedata)
@@ -1212,77 +1332,6 @@ void cVideoRender::DestroyFB(struct drm_buf *buf)
 	buf->dirty = 0;
 	buf->swbuffer = 0;
 	buf->num_planes = 0;
-}
-
-///
-///	Clone drm buffer
-///
-///	@param dst[out]		dst video buffer
-///	@param src[in]		src video buffer
-///
-static void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
-{
-	struct drm_buf *buf = (struct drm_buf *)malloc(sizeof(struct drm_buf));
-
-	buf->width = src->width;
-	buf->height = src->height;
-	buf->fb_id = src->fb_id;
-	buf->pix_fmt = src->pix_fmt;
-	buf->num_planes = src->num_planes;
-	buf->trickspeed = src->trickspeed;
-	buf->swbuffer = src->swbuffer;
-	buf->nb_objects = src->nb_objects;
-
-	for (int object = 0; object < buf->nb_objects; object++) {
-		buf->fd_prime[object] = src->fd_prime[object];
-	}
-
-	for (int i = 0; i < src->num_planes; i++) {
-		buf->size[i] = src->size[i];
-		buf->pitch[i] = src->pitch[i];
-		buf->handle[i] = src->handle[i];
-		buf->offset[i] = src->offset[i];
-		buf->obj_index[i] = src->obj_index[i];
-	}
-
-	void *src_buffer = NULL;
-	void *dst_buffer = NULL;
-
-	// planes aren't mmapped, do it (PRIME)
-	if (!src->plane[0]) {
-		for (int object = 0; object < buf->nb_objects; object++) {
-			// memcpy mmapped data
-			dst_buffer = malloc(src->size[object]);
-			src_buffer = mmap(NULL, src->size[object], PROT_READ, MAP_SHARED, src->fd_prime[object], 0);
-			if (src_buffer == MAP_FAILED) {
-				LOGERROR("VideoCloneBufB: cannot map buffer size %d prime_fd %d (%d): %m", src->size[object], src->fd_prime[object], errno);
-				return;
-			}
-
-			LOGDEBUG2(L_GRAB, "VideoCloneBuf: Copy %p to %p", src_buffer, dst_buffer);
-			memcpy(dst_buffer, src_buffer, src->size[object]);
-			munmap(src_buffer, src->size[object]);
-			for (int plane = 0; plane < buf->num_planes; plane++) {
-				if (buf->obj_index[plane] == object) {
-					buf->plane[plane] = (uint8_t *)dst_buffer;
-					LOGDEBUG2(L_GRAB, "VideoCloneBuf: buf->plane[%d] gets %p (object %d)", plane, dst_buffer, object);
-				}
-			}
-		}
-	} else {
-		for (int plane = 0; plane < buf->num_planes; plane++) {
-			dst_buffer = malloc(buf->size[plane]);
-			memcpy(dst_buffer, src->plane[plane], src->size[plane]);
-			buf->plane[plane] = (uint8_t *)dst_buffer;
-		}
-	}
-
-	for (int plane = 0; plane < buf->num_planes; plane++) {
-		LOGDEBUG2(L_GRAB, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d",
-		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
-	}
-
-	*dst = buf;
 }
 
 ///
@@ -2108,57 +2157,6 @@ void cVideoRender::WakeupDecodingThread(void)
 		m_pDecodingThread->Start();
 }
 
-//----------------------------------------------------------------------------
-//	Video API
-//----------------------------------------------------------------------------
-
-///
-///	Allocate new video hw render.
-///
-///	@param stream	video stream
-///
-///	@returns a new initialized video hardware render.
-///
-
-cVideoRender::cVideoRender(cSoftHdDevice *device)
-{
-    m_pDevice = device;
-    m_pAudio = m_pDevice->Audio;
-}
-
-///
-///	Destroy a video render.
-///
-///	@param render	video render
-///
-cVideoRender::~cVideoRender(void)
-{
-	LOGDEBUG2(L_DRM, "~cVideoRender");
-	if (m_pFilterThread)
-		delete m_pFilterThread;
-	if (m_pDisplayThread)
-		delete m_pDisplayThread;
-	if (m_pDecodingThread)
-		delete m_pDecodingThread;
-	free(m_pLastFrame);
-	LOGDEBUG2(L_DRM, "~cVideoRender deleted");
-}
-
-void cVideoRender::StartThreads(void)
-{
-	m_pDecodingThread = new cDecodingThread(m_pDevice);
-	m_pDisplayThread = new cDisplayThread(this);
-	m_pFilterThread = new cFilterThread(this);
-
-	atomic_set(&m_framesFilled, 0);
-	m_closing = 0;
-	m_flushing = 0;
-	m_flushLastFrame = 0;
-	m_deintDisabled = m_configDeintDisabled;
-	m_enqueueBufferIdx = 0;
-	m_pLastFrame = (struct lastFrame *)calloc(1, sizeof(struct lastFrame));
-	ResumeVideo();
-}
 
 
 void cVideoRender::EnqueueFB(AVFrame *inframe)
