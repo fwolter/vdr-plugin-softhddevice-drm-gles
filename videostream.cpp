@@ -58,12 +58,12 @@ extern "C" {
  */
 cVideoStream::cVideoStream(cSoftHdDevice *device)
 {
+	LOGDEBUG("%s:", __FUNCTION__);
+
 	m_pRender = device->Render;
 	m_pDecoder = nullptr;
 
-	m_closing = 0;
-
-	LOGDEBUG("%s:", __FUNCTION__);
+	Start();
 }
 
 /**
@@ -146,6 +146,7 @@ void cVideoStream::EnqueueInRb(int64_t pts, const void *data, int size)
 void cVideoStream::Exit(void)
 {
 	LOGDEBUG("%s:", __FUNCTION__);
+
 	if (m_pDecoder) {
 		m_pDecoder->Close();
 		delete(m_pDecoder);
@@ -156,30 +157,13 @@ void cVideoStream::Exit(void)
 }
 
 /**
- * @brief Clears all video data from the device
+ * @brief Clears all video stream data, which is buffered to be decoded
  */
-void cVideoStream::ClearVideo(void)
+void cVideoStream::Clear(void)
 {
-	// TODO: VERY TODO: make this better - this is very ugly!!!
-	// ClearVideo does not come from Play() or SetPlayMode() (closing_stream_requested)
-	// but from Clear() (or StillPicture) which is directly from VDR
-	// Wait for the clear, until the decode thread finished a decoding process
-	// The problem here is, that the reopen workaround deletes the VideoCtx for a moment,
-	// which of course is a problem for VideoDecodeInput in the separate thread, because
-	// that one wants VideoCtx....
-	if (!m_closing) {
-		m_wait = 1;
-		while (m_wait == 1) {
-			// don't wait, if no thread is running, which should set stream->wait = 2
-			// otherwise we run into an endless loop here
-			if (!m_pRender->DecodingThreadIsActive())
-				m_wait = 2;
-			usleep(10000);
-		}
-	}
+	LOGDEBUG("%s: packets %d", __FUNCTION__, atomic_read(&m_packetsFilled));
 
 	AVPacket *avpkt;
-	LOGDEBUG("%s: packets %d", __FUNCTION__, atomic_read(&m_packetsFilled));
 	m_pktsMutex.Lock();
 	atomic_set(&m_packetsFilled, 0);
 	m_packetRead = m_packetWrite = 0;
@@ -188,31 +172,37 @@ void cVideoStream::ClearVideo(void)
 	avpkt->size = 0;
 	avpkt->pts = AV_NOPTS_VALUE;
 
-	if (m_pRender->HardwareQuirks() & QUIRK_CODEC_FLUSH_WORKAROUND) {
-		if (m_pDecoder->ReopenCodec(m_codecId, m_pPar, &m_timebase, 0))
-			LOGFATAL("%s: Could not reopen the decoder (flush buffers)!", __FUNCTION__);
-	} else {
-		m_pDecoder->FlushBuffers();
-	}
 	m_pktsMutex.Unlock();
-
-	// no need to wait in decoding thread anymore
-	m_wait = 0;
 }
 
 /**
- * @brief Close the video stream
+ * @brief Close the decoder
  */
-void cVideoStream::Close(void)
+void cVideoStream::CloseDecoder(void)
 {
-	if (!m_trickSpeed || !m_pRender->GetTrickForward()) {
-		ClearVideo();
-		m_codecId = AV_CODEC_ID_NONE;
-		m_pDecoder->Close();
-		m_pPar = NULL;
+	LOGDEBUG2(L_CODEC, "%s", __FUNCTION__);
+
+	m_codecId = AV_CODEC_ID_NONE;
+	m_pDecoder->Close();
+	m_pPar = NULL;
+}
+
+/**
+ * @brief Flush the decoder
+ *
+ * Some hardware (RPI) needs a reopen workaround (close/open) here, because
+ * hardware doesn't do the hardware flush right.
+ */
+void cVideoStream::FlushDecoder(void)
+{
+	LOGDEBUG2(L_CODEC, "%s", __FUNCTION__);
+
+	if (m_pRender->HardwareQuirks() & QUIRK_CODEC_FLUSH_WORKAROUND) {
+		if (m_pDecoder->ReopenCodec(m_codecId, m_pPar, &m_timebase, 0))
+			LOGFATAL("%s: Could not reopen the decoder (flush)!", __FUNCTION__);
+	} else {
+		m_pDecoder->FlushBuffers();
 	}
-	m_closing = 0;
-	m_closeCondition.Signal();
 }
 
 /**
@@ -222,8 +212,8 @@ void cVideoStream::Close(void)
  *
  * @retval 0		packet was decoded or more data is needed
  * @retval 1		stream is paused
- * @retval -1		stream is empty
-*/
+ * @retval -1		stream is empty or closed
+ */
 int cVideoStream::DecodeInput(void)
 {
 	AVPacket *avpkt;
@@ -231,21 +221,23 @@ int cVideoStream::DecodeInput(void)
 	int ret = 0;
 	static int sent = 0;
 
-	if (CloseRequested()) {
-		Close();
+	if (IsClosing()) {
+		m_closeCondition.Signal();
 		return -1;
 	}
 
-	if (m_wait) {
-		m_wait = 2; // signalise, the turn has finished and we are waiting
-		return -1;
-	}
-
-	if (m_freezed) {		// stream freezed
-//		LOGINFO("VideoDecodeInput: stream->Freezed");
-		// clear is called during freezed
+	if (IsPaused()) {
+//		LOGINFO("%s: stream is paused", __FUNCTION__);
 		return 1;
 	}
+
+	// early skip, if there are no packets to decode
+	m_pktsMutex.Lock();
+	if (!atomic_read(&m_packetsFilled)) {
+		m_pktsMutex.Unlock();
+		return -1;
+	}
+	m_pktsMutex.Unlock();
 
 	if (m_newStream && m_codecId != AV_CODEC_ID_NONE) {
 		int width = 0;
@@ -253,11 +245,15 @@ int cVideoStream::DecodeInput(void)
 
 		// amlogic h264 decoder needs this
 		if ((m_codecId == AV_CODEC_ID_H264) && (m_pRender->HardwareQuirks() & QUIRK_CODEC_NEEDS_EXT_INIT)) {
-			if (!atomic_read(&m_packetsFilled))
+			m_pktsMutex.Lock();
+			if (!atomic_read(&m_packetsFilled)) {
+				m_pktsMutex.Unlock();
 				return -1;
+			}
 
 			cH264Parser h264Parser(&m_packetRb[m_packetRead]);
 			h264Parser.GetDimensions(&width, &height);
+			m_pktsMutex.Unlock();
 
 			LOGDEBUG2(L_CODEC, "%s: Parsed width %d height %d", __FUNCTION__, width, height);
 		}
@@ -282,7 +278,7 @@ int cVideoStream::DecodeInput(void)
 		if (ret != AVERROR(EAGAIN)) { // something went wrong or packet was sent, advance packet
 			m_packetRead = (m_packetRead + 1) % VIDEO_PACKET_MAX;
 			atomic_dec(&m_packetsFilled);
-			// in backward trickspeed force the decoder to decode the frame
+			// in backward trickspeed force the decoder to decode the frame, if minPkts are sent
 			if (ret == 0 && m_pRender->GetTrickSpeed() && !m_pRender->GetTrickForward()) {
 				sent++;
 				if (sent >= minPkts) {
@@ -293,20 +289,19 @@ int cVideoStream::DecodeInput(void)
 		}
 		m_pktsMutex.Unlock();
 
-// this is normal Playback
+		// this is normal Playback
 		if (!m_pRender->GetTrickSpeed()) {
 			if (!m_newStream) { // this is for mediaplayer ?
 				if (!m_pDecoder->ReceiveFrame(0, &frame)) {
 					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), frame)) {
-						if (CloseRequested()) {
-							Close();
+						if (IsClosing()) {
 							av_frame_free(&frame);
 							return -1;
 						}
 					}
 				}
 			}
-// this is TrickSpeed
+		// this is TrickSpeed
 		} else {
 receive_trickspeed:
 			// try receiving frame from decoder
@@ -321,8 +316,7 @@ receive_trickspeed:
 					LOGDEBUG2(L_TRICK, "%s: Trickspeed, send another cloned trick frame %d %p", __FUNCTION__, m_pRender->GetTrickCounter(), trickframe);
 					m_pRender->MarkAsTrickspeedFrame(trickframe);
 					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), trickframe)) {
-						if (CloseRequested()) {
-							Close();
+						if (IsClosing()) {
 							av_frame_free(&trickframe);
 							av_frame_free(&frame);
 							sent = 0;
@@ -330,8 +324,7 @@ receive_trickspeed:
 						}
 					}
 					m_pRender->DecTrickCounter();
-					if (CloseRequested()) {
-						Close();
+					if (IsClosing()) {
 						av_frame_free(&frame);
 						sent = 0;
 						return -1;
@@ -345,12 +338,7 @@ receive_trickspeed:
 
 				goto receive_trickspeed; // try to get another frame
 			} else if (ret == AVERROR_EOF) { // needs flush / reopen
-				if (m_pRender->HardwareQuirks() & QUIRK_CODEC_FLUSH_WORKAROUND) {
-					if (m_pDecoder->ReopenCodec(m_codecId, m_pPar, &m_timebase, 0))
-						LOGFATAL("%s: Could not reopen the decoder (flush buffers)!", __FUNCTION__);
-				} else {
-					m_pDecoder->FlushBuffers();
-				}
+				FlushDecoder();
 				sent = 0;
 			}
 		}
@@ -422,14 +410,17 @@ void cVideoStream::SetTimebase(int num, int den)
 }
 
 /**
- * @brief Request a stream closing
+ * @brief Stop the stream
  *
- * @param timeoutInMs		wait up to timeoutInMs milliseconds for closed stream
+ * Skips the decoding of the stream until m_closing gets false again (with Start())
  */
-void cVideoStream::RequestClose(int timeoutInMs)
+void cVideoStream::Stop(void)
 {
+	int timeoutInMs = 1000;
 	m_closing = 1;
 
 	if (!m_closeCondition.Wait(timeoutInMs))
 		LOGERROR("%s: Timeout while closing stream (%d ms)!", __FUNCTION__, timeoutInMs);
+
+	LOGDEBUG2(L_CODEC, "%s: stream is closing", __FUNCTION__);
 }

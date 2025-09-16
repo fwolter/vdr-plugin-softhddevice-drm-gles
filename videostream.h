@@ -44,28 +44,31 @@ public:
 
 	cVideoDecoder *Decoder(void) { return m_pDecoder; };
 	void SetDecoder(cVideoDecoder *decoder) { m_pDecoder = decoder; };
+	int DecodeInput(void);
 
 	void InitPacketRb(void);
 	void EnqueueInRb(int64_t, const void *, int);
-	int DecodeInput(void);
 
 	void Open(void) { m_newStream = 1; };
-	void RequestClose(int);
-	void Freeze(void) { m_freezed = 1; };
-	void WakeUp(void) { m_freezed = 0; };
-	int IsClosing(void) { return m_closing; };
-	int IsFreezed(void) { return m_freezed; };
-
 	void Exit(void);
-	void ClearVideo(void);
+	void Clear(void);
+	void FlushDecoder(void);
+	void CloseDecoder(void);
+
+
+	void Start(void) { m_closing = 0; };
+	void Stop(void);
+	int IsClosing(void) { return m_closing; };
+	void Resume(void) { m_paused = 0; };
+	void Pause(void) { m_paused = 1; };
+	int IsPaused(void) { return m_paused; };
+
 
 	void SetCodecId(enum AVCodecID id) { m_codecId = id; };
 	void SetParameters(AVCodecParameters *par) { m_pPar = par; };
 	void SetTimebase(int, int);
 	void SetTrickpkts(int pkts) { m_trickpkts = pkts; };
-	void SetTrickSpeed(int trick) { m_trickSpeed = trick; };
 	void SetInterlaced(int);
-	int GetTrickSpeed(void) { return m_trickSpeed; };
 	int GetPacketsFilled(void);
 	void IncreasePacketsFilled(void);
 	AVPacket *GetPacketToWrite(void);
@@ -89,18 +92,12 @@ private:
 
 	volatile char m_newStream;		///< flag for new stream
 	volatile char m_closing;		///< flag for closing request
-	volatile char m_trickSpeed;		///< flag for trickspeed stream
-	volatile char m_freezed;		///< flag for freezed stream
+	volatile char m_paused;			///< flag for paused stream
 	int m_interlaced;			///< flag for interlaced stream
-	int m_wait;				///< we should wait for decoding next frame
-						///< 0: no need to wait, 1: wait requested, 2: wating
-						///< TODO: need to do a better solution
 	cMutex m_pktsMutex;			///< mutex for accessing the packet ringbuffer
 	cCondWait m_closeCondition;		///< condition object to wait for finishing jobs while closing
 
 	void CleanupPacketRb(void);
-	int CloseRequested(void) { return (m_closing && m_codecId != AV_CODEC_ID_NONE); };
-	void Close(void);
 };
 
 #endif

@@ -667,14 +667,14 @@ bool cSoftHdDevice::CanReplay(void) const
 */
 bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 {
-	LOGDEBUG("SetPlayMode: play_mode %d", play_mode);
 	LOGDEBUG("%s: %d", __FUNCTION__, play_mode);
 
 	switch (play_mode) {
 	case 0:			// none audio/video
-		VideoStream->SetTrickSpeed(0);
-		if (VideoStream->GetCodecId() != AV_CODEC_ID_NONE)
-			VideoStream->RequestClose(5000);
+		VideoStream->Stop();
+		VideoStream->Clear();
+		VideoStream->CloseDecoder();
+
 		Render->SetClosing(1);
 		SkipAudio = 0;
 		Audio->Resume();
@@ -683,12 +683,12 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 			NewAudioStream = 1;
 		}
 		VideoStream->SetInterlaced(0); // probably not necessary
-		VideoStream->WakeUp();
+		VideoStream->Start();
+		VideoStream->Resume();
 		break;
 	case 1:			// audio/video
 		Render->WakeupDecodingThread();
 		Render->WakeupDisplayThread();
-		//Play(); Play is a vdr command!!!
 		break;
 	case 2:			// audio only
 		Render->ExitDecodingThread();
@@ -698,12 +698,10 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 		LOGDEBUG("softhddev: FIXME: audio only, silence video errors");
 		Render->WakeupDecodingThread();
 		Render->WakeupDisplayThread();
-		//Play();
 		break;
 	case 4:			// video only
 		Render->WakeupDecodingThread();
 		Render->WakeupDisplayThread();
-		//Play();
 		break;
 	default:
 		LOGERROR("SetPlayMode: playmode not supported %d", play_mode);
@@ -740,72 +738,90 @@ int64_t cSoftHdDevice::GetSTC(void)
 */
 void cSoftHdDevice::TrickSpeed(int speed, bool forward)
 {
-    LOGDEBUG("%s: %d %d", __FUNCTION__, speed, forward);
-    LOGDEBUG("TrickSpeed: speed %d %s",
-		speed, forward ? "forward" : "backward");
+    LOGDEBUG("%s: %d %s", __FUNCTION__, speed, forward ? "forward" : "backward");
 
-    LOGDEBUG("TrickSpeed: speed %d %s, trigger new trickspeed", speed, forward ? "forward" : "backward");
+    // start stream if closed
+    VideoStream->Start();
+    // start stream if paused
+    VideoStream->Resume();
 
-    Render->SetClosing(0);
-    if (VideoStream->IsFreezed()) {
-	LOGDEBUG("TrickSpeed: StreamFreezed %d SkipAudio %d", VideoStream->IsFreezed(), SkipAudio);
-	VideoStream->WakeUp();
-	ClearAudio();
-	SkipAudio = 0;
-    }
-
-    VideoStream->SetTrickSpeed(1);
     Render->SetTrickSpeed(speed, forward);
-	if (Render->VideoIsPaused())
-		Render->StartVideo();
+
+    // start render thread
+    Render->StartVideo();
 }
 
 /**
-**	Clears all video and audio data from the device.
-*/
+ * @brief Clears all video and audio data from the device.
+ *
+ * This is called by VDR via DeviceClear() in the Empty() call
+ *
+ * Empty() does clears all VDR internal packets
+ *
+ * DeviceClear() needs to
+ *  1. stop the stream and let the decoding thread wait
+ *  2. clear the packet buffer (drop packets which are not yet decoded)
+ *  3. flush the packets already sent to the decoder
+ *  4. stop/finish the renderer thread (this also does stopping the filter thread
+ *  5. clear audio data
+ *  6. start the stream again
+ */
 void cSoftHdDevice::Clear(void)
 {
     LOGDEBUG("%s:", __FUNCTION__);
     cDevice::Clear();
 
-    LOGDEBUG("Clear(void)");
-    VideoStream->ClearVideo();
+    VideoStream->Stop();
+    VideoStream->Clear();
+    VideoStream->FlushDecoder();
+
     Render->SetClosing(0);
+
     ClearAudio();
+
+    // we need a Start() here, because when VDR does SkipSeconds()
+    // it doesn't send a Play() again, if we skip during a playing stream
+    VideoStream->Start();
 }
 
 /**
-**	Sets the device into play mode (after a previous trick mode)
-*/
+ * @brief Sets the device into play mode (after a previous trick mode)
+ *
+ * This is called by VDR via DevicePlay() in the Play() and Goto() call
+ *
+ * Play() needs to
+ *  1. start and/or resume the stream
+ *  2. unmute and resume audio
+ *  3. wakeup the renderer
+ */
 void cSoftHdDevice::Play(void)
 {
     LOGDEBUG("%s:", __FUNCTION__);
     cDevice::Play();
 
-    LOGDEBUG("Play(void)");
-    if (VideoStream->GetTrickSpeed() && VideoStream->GetCodecId() != AV_CODEC_ID_NONE) {
-	VideoStream->RequestClose(5000);
-	Render->SetClosing(0);
-    }
-    VideoStream->SetTrickSpeed(0);
+    VideoStream->Start();
+    VideoStream->Resume();
+
     SkipAudio = 0;
-    VideoStream->WakeUp();
     Audio->Resume();
-	Render->SetTrickSpeed(0, 1);
+
+    Render->SetTrickSpeed(0, 1);
     Render->StartVideo();
 }
 
 /**
-**	Puts the device into "freeze frame" mode.
-*/
+ * @brief Puts the device into "freeze frame" mode.
+ */
 void cSoftHdDevice::Freeze(void)
 {
     LOGDEBUG("%s:", __FUNCTION__);
     cDevice::Freeze();
 
-    LOGDEBUG("Freeze(void)");
-    VideoStream->Freeze();
+    // pause video stream
+    VideoStream->Pause();
+    // pause audio playpack
     Audio->Pause();
+    // pause the renderer
     Render->PauseVideo();
 }
 
@@ -817,7 +833,6 @@ void cSoftHdDevice::Mute(void)
     LOGDEBUG("%s:", __FUNCTION__);
     cDevice::Mute();
 
-    LOGDEBUG("Mute(void)");
     SkipAudio = 1;
 }
 
@@ -907,7 +922,7 @@ void cSoftHdDevice::StillPicture(const uchar * data, int size)
     }
     VideoStream->IncreasePacketsFilled();
 
-    VideoStream->Freeze();
+    VideoStream->Pause();
     if (VideoStream->Decoder()->GetContext()) {
 	if ((int)(VideoStream->Decoder()->GetContext()->codec_id) != codec) {
 	    VideoStream->Decoder()->Close();
@@ -945,12 +960,7 @@ receive:
 	goto receive;
     } else if (ret == AVERROR_EOF) {
 	// AVERROR_EOF, flush needed
-	if (Render->HardwareQuirks() & QUIRK_CODEC_FLUSH_WORKAROUND) {
-	    if (VideoStream->Decoder()->ReopenCodec(codec, NULL, NULL, 0))
-		LOGFATAL("StillPicture: Could not reopen the decoder (flush buffers)!");
-	} else {
-	    VideoStream->Decoder()->FlushBuffers();
-	}
+	VideoStream->FlushDecoder();
     } else {
 	// sth went wrong or AVERROR(EAGAIN)
 	LOGDEBUG2(L_STILL, "StillPicture: Receive Frame returned %d, should not happen!", ret);
@@ -961,8 +971,9 @@ receive:
 	VideoStream->SetCodecId(AV_CODEC_ID_NONE);
     }
     ClearAudio();
-    VideoStream->ClearVideo();
-    VideoStream->WakeUp();
+    VideoStream->Clear();
+    VideoStream->FlushDecoder();
+    VideoStream->Resume();
     Audio->Resume();
 }
 
@@ -1107,8 +1118,8 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 
     AudioAvPkt->pts = AV_NOPTS_VALUE;
 
-    if (VideoStream->IsFreezed()) {	// stream is freezed, don't accept new audio data
-	LOGDEBUG("PlayAudio: StreamFreezed");
+    if (VideoStream->IsPaused()) {	// stream is paused, don't accept new audio data
+	LOGDEBUG("PlayAudio: Stream is paused");
 	return 0;
     }
 
@@ -1118,7 +1129,6 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
     }
 
     // hard limit buffer full: don't overrun audio buffers on replay
-    // stream freezed
     if (Audio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE){
 //	LOGDEBUG("PlayAudio: Buffer is Full (%d|%d)!", Audio->GetFreeBytes(), AUDIO_MIN_BUFFER_FREE);
 	return 0;
@@ -1330,7 +1340,7 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
     int64_t pts = AV_NOPTS_VALUE;
     int i, n;
 
-    if (VideoStream->IsFreezed()) {
+    if (VideoStream->IsPaused()) {
 	return 0;
     }
 
