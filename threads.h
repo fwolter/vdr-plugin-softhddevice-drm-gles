@@ -1,3 +1,22 @@
+/**
+ * @file threads.h
+ * @brief Thread classes declarations
+ *
+ * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * License: AGPLv3
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ */
+
 #ifndef __THREADS_H
 #define __THREADS_H
 
@@ -5,105 +24,98 @@
 
 #define VIDEO_SURFACES_MAX 3
 
-//----------------------------------------------------------------------------
-//	Thread
-//----------------------------------------------------------------------------
-
-///
-///	Decoding thread
-///
 class cSoftHdDevice;
 
+/**
+ * Decoding thread class
+ */
 class cDecodingThread : public cThread
 {
 private:
-    cSoftHdDevice *Device;
+	cSoftHdDevice *m_pDevice;
 public:
-    cDecodingThread(cSoftHdDevice *);
-    virtual ~cDecodingThread(void);
-    void Stop(void);
+	cDecodingThread(cSoftHdDevice *);
+	virtual ~cDecodingThread(void);
+	void Stop(void);
 protected:
-    virtual void Action(void);
+	virtual void Action(void);
 };
 
-///
-///	Display thread
-///
 class cVideoRender;
 
+/**
+ * Display thread class
+ */
 class cDisplayThread : public cThread
 {
 private:
-    cVideoRender *Render;
+	cVideoRender *m_pRender;
 public:
-    cDisplayThread(cVideoRender *);
-    virtual ~cDisplayThread(void);
-    void Stop(void);
+	cDisplayThread(cVideoRender *);
+	virtual ~cDisplayThread(void);
+	void Stop(void);
 protected:
-    virtual void Action(void);
+	virtual void Action(void);
 };
 
-///
-///	Audio handler thread
-///
-
+/**
+ * Audio thread class
+ */
 class cSoftHdAudio;
 
-class cAudioHandlerThread : public cThread
+class cAudioThread : public cThread
 {
 private:
-    cSoftHdAudio *Audio;
-    cMutex Mutex;
-    cCondVar StartWait;
+	cSoftHdAudio *m_pAudio;
+	cMutex m_mutex;
+	cCondVar m_startWait;						///< condition is triggered if audio and video is ready
 public:
-    cAudioHandlerThread(cSoftHdAudio *);
-    virtual ~cAudioHandlerThread(void);
-    void Stop(void);
-    void SendStartSignal(void);
+	cAudioThread(cSoftHdAudio *);
+	virtual ~cAudioThread(void);
+	void Stop(void);
+	void SendStartSignal(void);
 protected:
-    virtual void Action(void);
+	virtual void Action(void);
 };
 
-///
-///	Filter thread
-///
-
+/**
+ * Filter thread class
+ */
 class cFilterThread : public cThread
 {
 private:
-    cVideoRender *Render;
+	cVideoRender *m_pRender;
 
-    AVFilterGraph *filter_graph;
-    AVFilterContext *buffersrc_ctx;
-    AVFilterContext *buffersink_ctx;
+	AVFilterGraph *m_pFilterGraph;
+	AVFilterContext *m_pBuffersrcCtx;
+	AVFilterContext *m_pBuffersinkCtx;
 
-    int FilterBug;
-    int FilterTrick;
-    int FilterStill;
+	int m_filterBug;							///< flag for a ffmpeg bug
+	int m_filterTrick;							///< the current filter handles trickspeed frames
+	int m_filterStill;							///< the current filter handles stillpicture frames
+	int m_isInterlaceFilter;					///< the current filter is an deinterlace filter
 
-    AVFrame *FramesDeintRb[VIDEO_SURFACES_MAX];
-    int FramesDeintFilled;
-    int FramesDeintWrite;
-    int FramesDeintRead;
+	AVFrame *m_pFramesRb[VIDEO_SURFACES_MAX];	///< ringbuffer for frames to be filtered
+	int m_numFramesFilled;						///< number of frames in the ringbuffer
+	int m_framesWrite;							///< ringbuffer write pointer
+	int m_framesRead;							///< ringbuffer read pointer
 
-    cCondVar m_waitIdleCondition;
+	cCondVar m_waitIdleCondition;				///< condition is triggered, if ringbuffer is empty
 
-    AVFrame *RbGetFrame(void);
-    int m_isInterlaceFilter;
-
+	AVFrame *RbGetFrame(void);
 public:
-    cFilterThread(cVideoRender *);
-    virtual ~cFilterThread(void);
+	cFilterThread(cVideoRender *);
+	virtual ~cFilterThread(void);
 
-    int Init(const AVCodecContext *, AVFrame *, int);
-    void Stop(void);
-    int GetFramesDeintFilled(void);
-    void RbPushFrame(AVFrame *);
-    int IsInterlaceFilter(void) { return m_isInterlaceFilter; };
+	int Init(const AVCodecContext *, AVFrame *, int);
+	void Stop(void);
+	int GetRbFramesFilled(void);
+	void RbPushFrame(AVFrame *);
+	int IsInterlaceFilter(void) { return m_isInterlaceFilter; };
 
-    void WaitForIdle(void);
+	void WaitForIdle(void);
 protected:
-    virtual void Action(void);
+	virtual void Action(void);
 };
 
 #endif

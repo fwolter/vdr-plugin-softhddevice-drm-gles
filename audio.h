@@ -89,7 +89,7 @@ private:
 	cSoftHdDevice *m_pDevice;				///< pointer to device
 
 	// thread
-	cAudioHandlerThread *m_pAudioThread;	///< pointer to audio thread
+	cAudioThread *m_pAudioThread;			///< pointer to audio thread
 	volatile char m_running;				///< audio running / stopped
 	void StartAudioThread(AVFrame *);		///< start the audio thread
 

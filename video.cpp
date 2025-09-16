@@ -1598,7 +1598,7 @@ audioclock:
 
 	if (abs(diff) > 5000) {	// more than 5s
 		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d, Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
-			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetFramesDeintFilled(),
+			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
 			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), m_pDevice->GetVideoAudioDelay(), diff);
 	}
@@ -1606,7 +1606,7 @@ audioclock:
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
 		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			m_framesDropped, m_framesDuped,
-			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetFramesDeintFilled(),
+			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
 			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), m_pDevice->GetVideoAudioDelay(), diff);
 
@@ -1620,7 +1620,7 @@ audioclock:
 	if (diff > 35 && !(abs(diff) > 5000)) {	// audio is more than 35ms behind video, duplicate video frame
 		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			m_framesDropped, m_framesDuped,
-			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetFramesDeintFilled(),
+			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
 			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audio_pts),
 			Timestamp2String(video_pts), m_pDevice->GetVideoAudioDelay(), diff);
 
@@ -2338,7 +2338,7 @@ int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame)
 			}
 		}
 
-		if (m_pFilterThread->GetFramesDeintFilled() < VIDEO_SURFACES_MAX) {
+		if (m_pFilterThread->GetRbFramesFilled() < VIDEO_SURFACES_MAX) {
 			m_pFilterThread->RbPushFrame(frame);
 		} else {
 			usleep(10000);

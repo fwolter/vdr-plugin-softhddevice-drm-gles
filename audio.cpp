@@ -1226,7 +1226,7 @@ void cSoftHdAudio::Init(int passthrough)
 	m_passthrough = passthrough;
 	InitRingbuffer();
 	AlsaInit();
-	m_pAudioThread = new cAudioHandlerThread(this);
+	m_pAudioThread = new cAudioThread(this);
 }
 
 /**
@@ -1300,7 +1300,7 @@ void cSoftHdAudio::FlushAlsaBuffers(void)
 /**
  * @brief Play some samples and return
  * 
- * PlayWithAlsa is called in the cAudioHandlerThread
+ * PlayWithAlsa is called in the cAudioThread
  *
  * @retval	-1	error
  * @retval	1	running
