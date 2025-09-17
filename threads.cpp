@@ -337,6 +337,7 @@ void cFilterThread::Action(void)
 
     while (Running()) {
 	if (!GetFramesDeintFilled()) {
+	    m_waitIdleCondition.Broadcast();
 	    usleep(10000);
 	    continue;
 	}
@@ -447,6 +448,9 @@ void cFilterThread::RbPushFrame(AVFrame *frame)
 
 void cFilterThread::Stop(void)
 {
+    if (!Active())
+	return;
+
     LOGDEBUG("video: Stopping filter thread");
     Cancel(2);
     FilterBug = 0;
@@ -460,4 +464,15 @@ void cFilterThread::Stop(void)
     }
 
     avfilter_graph_free(&filter_graph);
+}
+
+void cFilterThread::WaitForIdle(void)
+{
+    if (!Active())
+	return;
+
+    cMutex mutex;
+    mutex.Lock();
+    if (!m_waitIdleCondition.TimedWait(mutex, 2000))
+	LOGERROR("%s: timeout while waiting for empty filter ringbuffer");
 }

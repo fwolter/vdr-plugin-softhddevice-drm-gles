@@ -86,6 +86,8 @@ private:
     int FramesDeintWrite;
     int FramesDeintRead;
 
+    cCondVar m_waitIdleCondition;
+
     AVFrame *RbGetFrame(void);
     int m_isInterlaceFilter;
 
@@ -99,6 +101,7 @@ public:
     void RbPushFrame(AVFrame *);
     int IsInterlaceFilter(void) { return m_isInterlaceFilter; };
 
+    void WaitForIdle(void);
 protected:
     virtual void Action(void);
 };

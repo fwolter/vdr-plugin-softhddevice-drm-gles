@@ -2952,3 +2952,13 @@ void cVideoRender::DisableOglOsd(void)
 int cVideoRender::DecodingThreadIsActive(void) {
 	return m_pDecodingThread->Active();
 };
+
+void cVideoRender::StopFilter(void)
+{
+	m_pFilterThread->Stop();
+}
+
+void cVideoRender::WaitForFilterIdle(void)
+{
+	m_pFilterThread->WaitForIdle();
+}

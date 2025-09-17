@@ -819,6 +819,11 @@ void cSoftHdDevice::Freeze(void)
 
     // pause video stream
     VideoStream->Pause();
+
+    // wait for the filter thread to have an empty ringbuffer and close the filter
+    Render->WaitForFilterIdle();
+    Render->StopFilter();
+
     // pause audio playpack
     Audio->Pause();
     // pause the renderer

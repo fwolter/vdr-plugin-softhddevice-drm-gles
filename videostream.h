@@ -60,7 +60,7 @@ public:
 	void Stop(void);
 	int IsClosing(void) { return m_closing; };
 	void Resume(void) { m_paused = 0; };
-	void Pause(void) { m_paused = 1; };
+	void Pause(void);
 	int IsPaused(void) { return m_paused; };
 
 
@@ -96,6 +96,7 @@ private:
 	int m_interlaced;			///< flag for interlaced stream
 	cMutex m_pktsMutex;			///< mutex for accessing the packet ringbuffer
 	cCondWait m_closeCondition;		///< condition object to wait for finishing jobs while closing
+	cCondVar m_pauseCondition;		///< condition object to wait for pausing the stream
 
 	void CleanupPacketRb(void);
 };

@@ -228,6 +228,7 @@ int cVideoStream::DecodeInput(void)
 
 	if (IsPaused()) {
 //		LOGINFO("%s: stream is paused", __FUNCTION__);
+		m_pauseCondition.Broadcast();
 		return 1;
 	}
 
@@ -423,4 +424,21 @@ void cVideoStream::Stop(void)
 		LOGERROR("%s: Timeout while closing stream (%d ms)!", __FUNCTION__, timeoutInMs);
 
 	LOGDEBUG2(L_CODEC, "%s: stream is closing", __FUNCTION__);
+}
+
+/**
+ * @brief Pause the stream
+ *
+ * Prevent the stream from decoding new frames and sending them to filter or renderer
+ * cCondVar is necessary to finish a decoding loop
+ */
+void cVideoStream::Pause(void)
+{
+	int timeoutInMs = 2000;
+
+	m_paused = 1;
+	cMutex mutex;
+	mutex.Lock();
+	if (!m_pauseCondition.TimedWait(mutex, timeoutInMs))
+		LOGERROR("%s: Timeout while pausing stream (%d ms)!", __FUNCTION__, timeoutInMs);
 }

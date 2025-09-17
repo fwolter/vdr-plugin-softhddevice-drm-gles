@@ -189,6 +189,8 @@ public:
 	void ClearFramesToFilter(void) { m_numFramesToFilter = 0; };
 	void IncFramesToFilter(void) { m_numFramesToFilter++; };
 	void DecFramesToFilter(void) { m_numFramesToFilter--; };
+	void WaitForFilterIdle(void);
+	void StopFilter(void);
 
 #ifdef USE_GLES
 	// GLES
