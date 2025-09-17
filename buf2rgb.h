@@ -1,25 +1,34 @@
+/**
+ * @file buf2rgb.h
+ * @brief Some helper functions header file
+ *
+ * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * License: AGPLv3
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ */
+
 #ifndef __BUF2RGB_H
 #define __BUF2RGB_H
 
-/*
-#ifdef __cplusplus
-extern "C" {
-#endif
-*/
 #include "drm_buf.h"
 
 /****************************************************************************************
-* Helpers
-****************************************************************************************/
+ * Helpers
+ ***************************************************************************************/
 uint8_t *buf2rgb(struct drm_buf *buf, int *size, int w, int h, enum AVPixelFormat dst_pix_fmt);
 uint8_t *scalergb24(uint8_t *src, int *size, int src_w, int src_h, int dst_w, int dst_h);
 void alphablend(uint8_t *result, uint8_t *front, uint8_t *back, const unsigned int width, const unsigned int height);
 uint8_t *blitvideo(uint8_t *src, int dst_w, int dst_h, int dst_x, int dst_y, int src_w, int src_h);
 void PrintStreamData(const uint8_t *data, int size);
 
-/*
-#ifdef __cplusplus
-}
-#endif
-*/
 #endif
