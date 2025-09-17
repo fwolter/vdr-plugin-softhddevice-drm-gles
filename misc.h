@@ -1,34 +1,25 @@
-///
-///	@file misc.h	@brief Misc function header file
-///
-///	Copyright (c) 2009 - 2012 by Lutz Sammer.  All Rights Reserved.
-///
-///	Contributor(s):
-///		Copied from uwm.
-///
-///	License: AGPLv3
-///
-///	This program is free software: you can redistribute it and/or modify
-///	it under the terms of the GNU Affero General Public License as
-///	published by the Free Software Foundation, either version 3 of the
-///	License.
-///
-///	This program is distributed in the hope that it will be useful,
-///	but WITHOUT ANY WARRANTY; without even the implied warranty of
-///	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-///	GNU Affero General Public License for more details.
-///
-//////////////////////////////////////////////////////////////////////////////
+/**
+ * @file misc.h
+ * @brief Misc function header file
+ *
+ * Copyright: (c) 2009 - 2012 by Lutz Sammer.  All Rights Reserved.
+ * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * License: AGPLv3
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ */
 
 #ifndef __MISC_H
 #define __MISC_H
-
-/*
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-*/
 
 #include <syslog.h>
 #include <stdarg.h>
@@ -44,8 +35,8 @@ extern "C"
 #endif
 
 /**
-**	Workaround for av_err2str() not working with C++
-*/
+ * @brief Workaround for av_err2str() not working with C++
+ */
 #ifdef av_err2str
 #undef av_err2str
 static inline const char* av_err2string(int errnum)
@@ -64,10 +55,10 @@ static inline const char* av_err2string(int errnum)
 #endif
 
 /**
-**	Nice time-stamp string.
-**
-**	@param ts	time stamp
-*/
+ * @brief Nice time-stamp string.
+ *
+ * @param ts	time stamp
+ */
 static inline const char *Timestamp2String(int64_t ts)
 {
 	static char buf[3][16];
@@ -83,10 +74,5 @@ static inline const char *Timestamp2String(int64_t ts)
 
 	return buf[idx];
 }
-/*
-#ifdef __cplusplus
-}
-#endif
-*/
-#endif
 
+#endif

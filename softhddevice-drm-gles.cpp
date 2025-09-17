@@ -64,22 +64,22 @@ extern "C"
 */
 void cSoftOsd::SetActive(bool on)
 {
-    LOGDEBUG2(L_OSD, "OSD %s: %d level %d", __FUNCTION__, on, OsdLevel);
+	LOGDEBUG2(L_OSD, "OSD %s: %d level %d", __FUNCTION__, on, OsdLevel);
 
-    if (Active() == on) {
+	if (Active() == on) {
 	return;				// already active, no action
-    }
-    cOsd::SetActive(on);
+	}
+	cOsd::SetActive(on);
 
-    if (on) {
+	if (on) {
 	Dirty = 1;
 	// only flush here if there are already bitmaps
 	if (GetBitmap(0)) {
-	    Flush();
+		Flush();
 	}
-    } else {
+	} else {
 	Device->OsdClose();
-    }
+	}
 }
 
 /**
@@ -94,13 +94,13 @@ void cSoftOsd::SetActive(bool on)
 cSoftOsd::cSoftOsd(int left, int top, uint level, cSoftHdDevice *device)
 :cOsd(left, top, level)
 {
-    /* FIXME: OsdWidth/OsdHeight not correct!
-     */
-    LOGDEBUG2(L_OSD, "OSD %s: %dx%d%+d%+d, %d", __FUNCTION__, OsdWidth(),
+	/* FIXME: OsdWidth/OsdHeight not correct!
+	 */
+	LOGDEBUG2(L_OSD, "OSD %s: %dx%d%+d%+d, %d", __FUNCTION__, OsdWidth(),
 	OsdHeight(), left, top, level);
 
-    Device = device;
-    OsdLevel = level;
+	Device = device;
+	OsdLevel = level;
 }
 
 /**
@@ -110,10 +110,10 @@ cSoftOsd::cSoftOsd(int left, int top, uint level, cSoftHdDevice *device)
 */
 cSoftOsd::~cSoftOsd(void)
 {
-    LOGDEBUG2(L_OSD, "OSD %s: level %d", __FUNCTION__, OsdLevel);
+	LOGDEBUG2(L_OSD, "OSD %s: level %d", __FUNCTION__, OsdLevel);
 
-    SetActive(false);
-    // done by SetActive: OsdClose();
+	SetActive(false);
+	// done by SetActive: OsdClose();
 }
 
 /**
@@ -121,22 +121,22 @@ cSoftOsd::~cSoftOsd(void)
 */
 eOsdError cSoftOsd::SetAreas(const tArea * areas, int n)
 {
-    LOGDEBUG2(L_OSD, "OSD %s: %d areas", __FUNCTION__, n);
+	LOGDEBUG2(L_OSD, "OSD %s: %d areas", __FUNCTION__, n);
 
-    // clear old OSD, when new areas are set
-    if (!IsTrueColor()) {
+	// clear old OSD, when new areas are set
+	if (!IsTrueColor()) {
 	cBitmap *bitmap;
 	int i;
 
 	for (i = 0; (bitmap = GetBitmap(i)); i++) {
-	    bitmap->Clean();
+		bitmap->Clean();
 	}
-    }
-    if (Active()) {
+	}
+	if (Active()) {
 	Device->OsdClose();
 	Dirty = 1;
-    }
-    return cOsd::SetAreas(areas, n);
+	}
+	return cOsd::SetAreas(areas, n);
 }
 
 /**
@@ -144,125 +144,125 @@ eOsdError cSoftOsd::SetAreas(const tArea * areas, int n)
 */
 void cSoftOsd::Flush(void)
 {
-    cPixmapMemory *pm;
+	cPixmapMemory *pm;
 
-    LOGDEBUG2(L_OSD, "OSD %s: level %d active %d", __FUNCTION__, OsdLevel,
+	LOGDEBUG2(L_OSD, "OSD %s: level %d active %d", __FUNCTION__, OsdLevel,
 	Active());
 
-    if (!Active()) {			// this osd is not active
+	if (!Active()) {			// this osd is not active
 	return;
-    }
+	}
 
-    if (!IsTrueColor()) {
+	if (!IsTrueColor()) {
 	cBitmap *bitmap;
 	int i;
 
 	static char warned;
 
 	if (!warned) {
-	    LOGDEBUG2(L_OSD, "OSD %s: FIXME: should be truecolor",
+		LOGDEBUG2(L_OSD, "OSD %s: FIXME: should be truecolor",
 		__FUNCTION__);
-	    warned = 1;
+		warned = 1;
 	}
 
 	// draw all bitmaps
 	for (i = 0; (bitmap = GetBitmap(i)); ++i) {
-	    uint8_t *argb;
-	    int xs;
-	    int ys;
-	    int x;
-	    int y;
-	    int w;
-	    int h;
-	    int x1;
-	    int y1;
-	    int x2;
-	    int y2;
+		uint8_t *argb;
+		int xs;
+		int ys;
+		int x;
+		int y;
+		int w;
+		int h;
+		int x1;
+		int y1;
+		int x2;
+		int y2;
 
-	    // get dirty bounding box
-	    if (Dirty) {		// forced complete update
+		// get dirty bounding box
+		if (Dirty) {		// forced complete update
 		x1 = 0;
 		y1 = 0;
 		x2 = bitmap->Width() - 1;
 		y2 = bitmap->Height() - 1;
-	    } else if (!bitmap->Dirty(x1, y1, x2, y2)) {
+		} else if (!bitmap->Dirty(x1, y1, x2, y2)) {
 		continue;		// nothing dirty continue
-	    }
-	    // convert and upload only visible dirty areas
-	    xs = bitmap->X0() + Left();
-	    ys = bitmap->Y0() + Top();
-	    // FIXME: negtative position bitmaps
-	    w = x2 - x1 + 1;
-	    h = y2 - y1 + 1;
-	    // clip to screen
-	    if (1) {			// just for the case it makes trouble
+		}
+		// convert and upload only visible dirty areas
+		xs = bitmap->X0() + Left();
+		ys = bitmap->Y0() + Top();
+		// FIXME: negtative position bitmaps
+		w = x2 - x1 + 1;
+		h = y2 - y1 + 1;
+		// clip to screen
+		if (1) {			// just for the case it makes trouble
 		int width;
 		int height;
 		double video_aspect;
 
 		if (xs < 0) {
-		    if (xs + x1 < 0) {
+			if (xs + x1 < 0) {
 			x1 -= xs + x1;
 			w += xs + x1;
 			if (w <= 0) {
-			    continue;
+				continue;
 			}
-		    }
-		    xs = 0;
+			}
+			xs = 0;
 		}
 		if (ys < 0) {
-		    if (ys + y1 < 0) {
+			if (ys + y1 < 0) {
 			y1 -= ys + y1;
 			h += ys + y1;
 			if (h <= 0) {
-			    continue;
+				continue;
 			}
-		    }
-		    ys = 0;
+			}
+			ys = 0;
 		}
 		Device->GetOsdSize(width, height, video_aspect);
 		if (w > width - xs - x1) {
-		    w = width - xs - x1;
-		    if (w <= 0) {
+			w = width - xs - x1;
+			if (w <= 0) {
 			continue;
-		    }
-		    x2 = x1 + w - 1;
+			}
+			x2 = x1 + w - 1;
 		}
 		if (h > height - ys - y1) {
-		    h = height - ys - y1;
-		    if (h <= 0) {
+			h = height - ys - y1;
+			if (h <= 0) {
 			continue;
-		    }
-		    y2 = y1 + h - 1;
+			}
+			y2 = y1 + h - 1;
 		}
-	    }
+		}
 
-	    if (w > bitmap->Width() || h > bitmap->Height()) {
+		if (w > bitmap->Width() || h > bitmap->Height()) {
 		LOGDEBUG2(L_OSD, ": dirty area too big");
-	    }
+		}
 
-	    argb = (uint8_t *) malloc(w * h * sizeof(uint32_t));
-	    for (y = y1; y <= y2; ++y) {
+		argb = (uint8_t *) malloc(w * h * sizeof(uint32_t));
+		for (y = y1; y <= y2; ++y) {
 		for (x = x1; x <= x2; ++x) {
-		    ((uint32_t *) argb)[x - x1 + (y - y1) * w] =
+			((uint32_t *) argb)[x - x1 + (y - y1) * w] =
 			bitmap->GetColor(x, y);
 		}
-	    }
-	    LOGDEBUG2(L_OSD, "OSD %s: draw %dx%d%+d%+d bm", __FUNCTION__, w, h,
+		}
+		LOGDEBUG2(L_OSD, "OSD %s: draw %dx%d%+d%+d bm", __FUNCTION__, w, h,
 		xs + x1, ys + y1);
-	    Device->OsdDrawARGB(0, 0, w, h, w * sizeof(uint32_t), argb, xs + x1,
+		Device->OsdDrawARGB(0, 0, w, h, w * sizeof(uint32_t), argb, xs + x1,
 		ys + y1);
 
-	    bitmap->Clean();
-	    // FIXME: reuse argb
-	    free(argb);
+		bitmap->Clean();
+		// FIXME: reuse argb
+		free(argb);
 	}
 	Dirty = 0;
 	return;
-    }
+	}
 
-    LOCK_PIXMAPS;
-    while ((pm = (dynamic_cast < cPixmapMemory * >(RenderPixmaps())))) {
+	LOCK_PIXMAPS;
+	while ((pm = (dynamic_cast < cPixmapMemory * >(RenderPixmaps())))) {
 	int xp;
 	int yp;
 	int stride;
@@ -280,23 +280,23 @@ void cSoftOsd::Flush(void)
 	// clip to osd
 	xp = 0;
 	if (x < 0) {
-	    xp = -x;
-	    w -= xp;
-	    x = 0;
+		xp = -x;
+		w -= xp;
+		x = 0;
 	}
 
 	yp = 0;
 	if (y < 0) {
-	    yp = -y;
-	    h -= yp;
-	    y = 0;
+		yp = -y;
+		h -= yp;
+		y = 0;
 	}
 
 	if (w > Width() - x) {
-	    w = Width() - x;
+		w = Width() - x;
 	}
 	if (h > Height() - y) {
-	    h = Height() - y;
+		h = Height() - y;
 	}
 
 	x += Left();
@@ -304,37 +304,37 @@ void cSoftOsd::Flush(void)
 
 	// clip to screen
 	if (1) {			// just for the case it makes trouble
-	    // and it can happen!
-	    int width;
-	    int height;
-	    double video_aspect;
+		// and it can happen!
+		int width;
+		int height;
+		double video_aspect;
 
-	    if (x < 0) {
+		if (x < 0) {
 		w += x;
 		xp += -x;
 		x = 0;
-	    }
-	    if (y < 0) {
+		}
+		if (y < 0) {
 		h += y;
 		yp += -y;
 		y = 0;
-	    }
+		}
 
-	    Device->GetOsdSize(width, height, video_aspect);
-	    if (w > width - x) {
+		Device->GetOsdSize(width, height, video_aspect);
+		if (w > width - x) {
 		w = width - x;
-	    }
-	    if (h > height - y) {
+		}
+		if (h > height - y) {
 		h = height - y;
-	    }
+		}
 	}
 	LOGDEBUG2(L_OSD, "OSD %s: draw %dx%d%+d%+d*%d -> %+d%+d %p",
-	    __FUNCTION__, w, h, xp, yp, stride, x, y, pm->Data());
+		__FUNCTION__, w, h, xp, yp, stride, x, y, pm->Data());
 	Device->OsdDrawARGB(xp, yp, w, h, stride, pm->Data(), x, y);
 
 	DestroyPixmap(pm);
-    }
-    Dirty = 0;
+	}
+	Dirty = 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -351,22 +351,22 @@ void cSoftOsd::Flush(void)
 cOsd *cSoftOsdProvider::CreateOsd(int left, int top, uint level)
 {
 #ifdef USE_GLES
-    if (Device->ConfigDisableOglOsd) {
-        LOGDEBUG("OSD %s: %d, %d, %d, OpenGL disabled, using software rendering", __FUNCTION__, left, top, level);
-        return Osd = new cSoftOsd(left, top, level, Device);
-    }
+	if (Device->ConfigDisableOglOsd) {
+		LOGDEBUG("OSD %s: %d, %d, %d, OpenGL disabled, using software rendering", __FUNCTION__, left, top, level);
+		return Osd = new cSoftOsd(left, top, level, Device);
+	}
 
-    if (StartOpenGlThread()) {
-        LOGDEBUG2(L_OSD, "OSD %s: %d, %d, %d, using OpenGL OSD support", __FUNCTION__, left, top, level);
-        return Osd = new cOglOsd(left, top, level, oglThread, Device);
-    }
+	if (StartOpenGlThread()) {
+		LOGDEBUG2(L_OSD, "OSD %s: %d, %d, %d, using OpenGL OSD support", __FUNCTION__, left, top, level);
+		return Osd = new cOglOsd(left, top, level, oglThread, Device);
+	}
 
-    LOGDEBUG("OSD %s: %d, %d, %d, OpenGL failed, using software rendering", __FUNCTION__, left, top, 999);
-    Device->SetDisableOglOsd();
-    return Osd = new cSoftOsd(left, top, 999, Device);
+	LOGDEBUG("OSD %s: %d, %d, %d, OpenGL failed, using software rendering", __FUNCTION__, left, top, 999);
+	Device->SetDisableOglOsd();
+	return Osd = new cSoftOsd(left, top, 999, Device);
 #else
-    LOGDEBUG2(L_OSD, "OSD %s: %d, %d, %d", __FUNCTION__, left, top, level);
-    return Osd = new cSoftOsd(left, top, level, Device);
+	LOGDEBUG2(L_OSD, "OSD %s: %d, %d, %d", __FUNCTION__, left, top, level);
+	return Osd = new cSoftOsd(left, top, level, Device);
 #endif
 }
 
@@ -377,69 +377,69 @@ cOsd *cSoftOsdProvider::CreateOsd(int left, int top, uint level)
 */
 bool cSoftOsdProvider::ProvidesTrueColor(void)
 {
-    return true;
+	return true;
 }
 
 #ifdef USE_GLES
 const cImage *cSoftOsdProvider::GetImageData(int ImageHandle) {
-    return cOsdProvider::GetImageData(ImageHandle);
+	return cOsdProvider::GetImageData(ImageHandle);
 }
 
 void cSoftOsdProvider::OsdSizeChanged(void) {
-    // cleanup OpenGL context
-    if (!Device->ConfigDisableOglOsd)
-        cSoftOsdProvider::StopOpenGlThread();
-    cSoftOsdProvider::UpdateOsdSize();
+	// cleanup OpenGL context
+	if (!Device->ConfigDisableOglOsd)
+		cSoftOsdProvider::StopOpenGlThread();
+	cSoftOsdProvider::UpdateOsdSize();
 }
 
 bool cSoftOsdProvider::StartOpenGlThread(void) {
-    if (Device->ConfigDisableOglOsd) {
-        LOGDEBUG2(L_OPENGL, "OpenGL OSD disabled, OpenGL worker thread NOT started");
-        return false;
-    }
+	if (Device->ConfigDisableOglOsd) {
+		LOGDEBUG2(L_OPENGL, "OpenGL OSD disabled, OpenGL worker thread NOT started");
+		return false;
+	}
 
-    if (oglThread.get()) {
-        if (oglThread->Active()) {
-            return true;
-        }
-        oglThread.reset();
-    }
-    cCondWait wait;
-    LOGDEBUG2(L_OPENGL, "Trying to start OpenGL worker thread");
-    oglThread.reset(new cOglThread(&wait, Device->ConfigMaxSizeGPUImageCache, Device));
-    wait.Wait();
+	if (oglThread.get()) {
+		if (oglThread->Active()) {
+			return true;
+		}
+		oglThread.reset();
+	}
+	cCondWait wait;
+	LOGDEBUG2(L_OPENGL, "Trying to start OpenGL worker thread");
+	oglThread.reset(new cOglThread(&wait, Device->ConfigMaxSizeGPUImageCache, Device));
+	wait.Wait();
 
-    if (oglThread->Active()) {
-        LOGINFO("OpenGL worker thread started");
-        return true;
-    }
+	if (oglThread->Active()) {
+		LOGINFO("OpenGL worker thread started");
+		return true;
+	}
 
-    LOGDEBUG2(L_OPENGL, "OpenGL worker thread NOT started");
-    return false;
+	LOGDEBUG2(L_OPENGL, "OpenGL worker thread NOT started");
+	return false;
 }
 
 void cSoftOsdProvider::StopOpenGlThread(void) {
-    LOGDEBUG2(L_OPENGL, "stopping OpenGL worker thread");
-    if (oglThread) {
-        oglThread->Stop();
-    }
-    oglThread.reset();
-    LOGINFO("OpenGL worker thread stopped");
+	LOGDEBUG2(L_OPENGL, "stopping OpenGL worker thread");
+	if (oglThread) {
+		oglThread->Stop();
+	}
+	oglThread.reset();
+	LOGINFO("OpenGL worker thread stopped");
 }
 
 int cSoftOsdProvider::StoreImageData(const cImage &Image)
 {
-    if (StartOpenGlThread()) {
-        int imgHandle = oglThread->StoreImage(Image);
-        return imgHandle;
-    }
-    return 0;
+	if (StartOpenGlThread()) {
+		int imgHandle = oglThread->StoreImage(Image);
+		return imgHandle;
+	}
+	return 0;
 }
 
 void cSoftOsdProvider::DropImageData(int imgHandle)
 {
-    if (StartOpenGlThread())
-        oglThread->DropImageData(imgHandle);
+	if (StartOpenGlThread())
+		oglThread->DropImageData(imgHandle);
 }
 #endif
 
@@ -449,13 +449,13 @@ void cSoftOsdProvider::DropImageData(int imgHandle)
 cSoftOsdProvider::cSoftOsdProvider(cSoftHdDevice *device)
 :  cOsdProvider()
 {
-    LOGDEBUG("%s:", __FUNCTION__);
-    LOGDEBUG2(L_OSD, "OSD %s:", __FUNCTION__);
-    Device = device;
+	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG2(L_OSD, "OSD %s:", __FUNCTION__);
+	Device = device;
 
 #ifdef USE_GLES
-    if (!Device->ConfigDisableOglOsd)
-        StopOpenGlThread();
+	if (!Device->ConfigDisableOglOsd)
+		StopOpenGlThread();
 #endif
 }
 
@@ -464,10 +464,10 @@ cSoftOsdProvider::cSoftOsdProvider(cSoftHdDevice *device)
 */
 cSoftOsdProvider::~cSoftOsdProvider()
 {
-    LOGDEBUG2(L_OSD, "%s:", __FUNCTION__);
+	LOGDEBUG2(L_OSD, "%s:", __FUNCTION__);
 #ifdef USE_GLES
-    if (!Device->ConfigDisableOglOsd)
-        StopOpenGlThread();
+	if (!Device->ConfigDisableOglOsd)
+		StopOpenGlThread();
 #endif
 }
 
@@ -482,12 +482,12 @@ cSoftOsdProvider::~cSoftOsdProvider()
 */
 static inline cOsdItem *SeparatorItem(const char *label)
 {
-    cOsdItem *item;
+	cOsdItem *item;
 
-    item = new cOsdItem(cString::sprintf("* %s: ", label));
-    item->SetSelectable(false);
+	item = new cOsdItem(cString::sprintf("* %s: ", label));
+	item->SetSelectable(false);
 
-    return item;
+	return item;
 }
 
 /**
@@ -498,15 +498,15 @@ static inline cOsdItem *SeparatorItem(const char *label)
 **	@param msg	open message
 */
 inline cOsdItem *cMenuSetupSoft::CollapsedItem(const char *label, int &flag,
-    const char *msg)
+	const char *msg)
 {
-    cOsdItem *item;
+	cOsdItem *item;
 
-    item =
+	item =
 	new cMenuEditBoolItem(cString::sprintf("* %s", label), &flag,
 	msg ? msg : tr("show"), tr("hide"));
 
-    return item;
+	return item;
 }
 
 /**
@@ -514,10 +514,10 @@ inline cOsdItem *cMenuSetupSoft::CollapsedItem(const char *label, int &flag,
 */
 void cMenuSetupSoft::Create(void)
 {
-    int current;
+	int current;
 
-    current = Current();		// get current menu item index
-    Clear();				// clear the menu
+	current = Current();		// get current menu item index
+	Clear();				// clear the menu
 #ifdef USE_GLES
 #ifdef WRITE_PNG
 //    pngVariant[0] = tr("none");
@@ -527,12 +527,12 @@ void cMenuSetupSoft::Create(void)
 #endif
 #endif
 
-    //
-    //	general
-    //
-    Add(CollapsedItem(tr("General"), General));
+	//
+	//	general
+	//
+	Add(CollapsedItem(tr("General"), General));
 
-    if (General) {
+	if (General) {
 	Add(new cMenuEditBoolItem(tr("Make primary device"), &MakePrimary,
 		trVDR("no"), trVDR("yes")));
 	Add(new cMenuEditBoolItem(tr("Hide main menu entry"),
@@ -545,13 +545,13 @@ void cMenuSetupSoft::Create(void)
 		Add(new cMenuEditIntItem(tr("GPU mem used for image caching (MB)"), &MaxSizeGPUImageCache, 0, 4000));
 	}
 #endif
-    }
+	}
 
-    //
-    //	statistics
-    //
-    Add(CollapsedItem(tr("Statistics"), Statistics));
-    if (Statistics) {
+	//
+	//	statistics
+	//
+	Add(CollapsedItem(tr("Statistics"), Statistics));
+	if (Statistics) {
 	int duped;
 	int dropped;
 	int counter;
@@ -567,28 +567,28 @@ void cMenuSetupSoft::Create(void)
 		(" OSD: Using software rendering")), osUnknown, false));
 #endif
 
-    }
+	}
 
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-    //
-    //	debug
-    //
-    if (!Device->ConfigDisableOglOsd) {
+	//
+	//	debug
+	//
+	if (!Device->ConfigDisableOglOsd) {
 	Add(CollapsedItem(tr("Debug"), DebugMenu));
 	if (DebugMenu) {
 		Add(new cMenuEditBoolItem(tr("Write OSD to file"), &WritePngs, trVDR("no"), trVDR("yes")));
 //		Add(new cMenuEditStraItem(tr("Write OSD to file"), &WritePngs, 4, pngVariant));
 	}
-    }
+	}
 #endif
 #endif
-    //
-    //	logging
-    //
-    Add(CollapsedItem(tr("Logging"), Logging));
+	//
+	//	logging
+	//
+	Add(CollapsedItem(tr("Logging"), Logging));
 
-    if (Logging) {
+	if (Logging) {
 	Add(new cMenuEditBoolItem(tr("Logging default"),
 		&LogDefault, trVDR("off"), trVDR("on")));
 	if (LogDefault) {
@@ -621,24 +621,24 @@ void cMenuSetupSoft::Create(void)
 		Add(new cMenuEditBoolItem(tr("\040\040Grabbing debug logs"),
 			&LogGrab, trVDR("no"), trVDR("yes")));
 	}
-    }
+	}
 
-    //
-    //	video
-    //
-    Add(CollapsedItem(tr("Video"), VideoMenu));
+	//
+	//	video
+	//
+	Add(CollapsedItem(tr("Video"), VideoMenu));
 
-    if (VideoMenu) {
+	if (VideoMenu) {
 	Add(new cMenuEditBoolItem(tr("Disable Deinterlacer"),
 		&DisableDeint, trVDR("no"), trVDR("yes")));
-    }
+	}
 
-    //
-    //	audio
-    //
-    Add(CollapsedItem(tr("Audio"), Audio));
+	//
+	//	audio
+	//
+	Add(CollapsedItem(tr("Audio"), Audio));
 
-    if (Audio) {
+	if (Audio) {
 	Add(new cMenuEditIntItem(tr("Audio/Video delay (ms)"), &AudioDelay,
 		-1000, 1000));
 	Add(new cMenuEditBoolItem(tr("Volume control"), &AudioSoftvol,
@@ -673,9 +673,9 @@ void cMenuSetupSoft::Create(void)
 		Add(new cMenuEditBoolItem(tr("Enable automatic AES"), &AudioAutoAES,
 			trVDR("no"), trVDR("yes")));
 	}
-    }
-    Add(CollapsedItem(tr("Audio Filter"), AudioFilter));
-    if (AudioFilter) {
+	}
+	Add(CollapsedItem(tr("Audio Filter"), AudioFilter));
+	if (AudioFilter) {
 		Add(new cMenuEditBoolItem(tr(" Enable Audio Equalizer"), &AudioEq,
 			trVDR("no"), trVDR("yes")));
 		if (AudioEq) {
@@ -718,8 +718,8 @@ void cMenuSetupSoft::Create(void)
 		}
 	}
 
-    SetCurrent(Get(current));		// restore selected menu entry
-    Display();				// display build menu
+	SetCurrent(Get(current));		// restore selected menu entry
+	Display();				// display build menu
 }
 
 /**
@@ -727,25 +727,25 @@ void cMenuSetupSoft::Create(void)
 */
 eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 {
-    int old_General = General;
+	int old_General = General;
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-    int old_DebugMenu = DebugMenu;
+	int old_DebugMenu = DebugMenu;
 #endif
 #endif
-    int old_Statistics = Statistics;
-    int old_Logging = Logging;
-    int old_LogDefault = LogDefault;
-    int old_Audio = Audio;
-    int old_VideoMenu = VideoMenu;
-    int old_AudioFilter = AudioFilter;
-    int old_AudioEq = AudioEq;
-    int old_AudioNormalize = AudioNormalize;
-    int old_AudioCompression = AudioCompression;
-    int old_AudioPassthroughDefault = AudioPassthroughDefault;
-    eOSState state = cMenuSetupPage::ProcessKey(key);
+	int old_Statistics = Statistics;
+	int old_Logging = Logging;
+	int old_LogDefault = LogDefault;
+	int old_Audio = Audio;
+	int old_VideoMenu = VideoMenu;
+	int old_AudioFilter = AudioFilter;
+	int old_AudioEq = AudioEq;
+	int old_AudioNormalize = AudioNormalize;
+	int old_AudioCompression = AudioCompression;
+	int old_AudioPassthroughDefault = AudioPassthroughDefault;
+	eOSState state = cMenuSetupPage::ProcessKey(key);
 
-    if (key != kNone) {
+	if (key != kNone) {
 		// update menu only, if something on the structure has changed
 		// this is needed because VDR menus are evil slow
 		if (old_General != General ||
@@ -763,9 +763,9 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 			old_AudioPassthroughDefault != AudioPassthroughDefault) {
 			Create();			// update menu
 		}
-    }
+	}
 
-    return state;
+	return state;
 }
 
 /**
@@ -775,79 +775,79 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 */
 cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
 {
-    Device = device;
-    AudioDevice = Device->Audio;
+	Device = device;
+	AudioDevice = Device->Audio;
 
-    //
-    //	general
-    //
-    General = 0;
-    MakePrimary = Device->ConfigMakePrimary;
+	//
+	//	general
+	//
+	General = 0;
+	MakePrimary = Device->ConfigMakePrimary;
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-    DebugMenu = 0;
-    WritePngs = Device->GetConfigWritePngs();
+	DebugMenu = 0;
+	WritePngs = Device->GetConfigWritePngs();
 #endif
 #endif
-    Statistics = 0;
-    HideMainMenuEntry = Device->ConfigHideMainMenuEntry;
-    //
-    //	logging
-    //
-    Logging = 0;
-    LogDefault = Device->LogState;
-    LogDebug_ = Device->ConfigLog & L_DEBUG;
-    LogAVSync = Device->ConfigLog & L_AV_SYNC;
-    LogSound = Device->ConfigLog & L_SOUND;
-    LogOSD = Device->ConfigLog & L_OSD;
-    LogDRM = Device->ConfigLog & L_DRM;
-    LogCodec = Device->ConfigLog & L_CODEC;
-    LogStill = Device->ConfigLog & L_STILL;
-    LogTrick = Device->ConfigLog & L_TRICK;
-    LogMedia = Device->ConfigLog & L_MEDIA;
-    LogGL = Device->ConfigLog & L_OPENGL;
-    LogGLTime = Device->ConfigLog & L_OPENGL_TIME;
-    LogGLTimeAll = Device->ConfigLog & L_OPENGL_TIME_ALL;
-    LogPacket = Device->ConfigLog & L_PACKET;
-    LogGrab = Device->ConfigLog & L_GRAB;
-    //
-    //	video
-    //
-    VideoMenu = 0;
-    DisableDeint = Device->ConfigDisableDeint;
-    //
-    //	audio
-    //
-    Audio = 0;
-    AudioDelay = Device->ConfigVideoAudioDelay;
-    AudioPassthroughDefault = Device->AudioPassthroughState;
-    AudioPassthroughPCM = Device->ConfigAudioPassthrough & CODEC_PCM;
-    AudioPassthroughAC3 = Device->ConfigAudioPassthrough & CODEC_AC3;
-    AudioPassthroughEAC3 = Device->ConfigAudioPassthrough & CODEC_EAC3;
-    AudioPassthroughDTS = Device->ConfigAudioPassthrough & CODEC_DTS;
-    AudioDownmix = Device->ConfigAudioDownmix;
-    AudioSoftvol = Device->ConfigAudioSoftvol;
-    AudioNormalize = Device->ConfigAudioNormalize;
-    AudioMaxNormalize = Device->ConfigAudioMaxNormalize;
-    AudioCompression = Device->ConfigAudioCompression;
-    AudioMaxCompression = Device->ConfigAudioMaxCompression;
-    AudioStereoDescent = Device->ConfigAudioStereoDescent;
-    AudioBufferTime = Device->ConfigAudioBufferTime;
-    AudioAutoAES = Device->ConfigAudioAutoAES;
+	Statistics = 0;
+	HideMainMenuEntry = Device->ConfigHideMainMenuEntry;
+	//
+	//	logging
+	//
+	Logging = 0;
+	LogDefault = Device->LogState;
+	LogDebug_ = Device->ConfigLog & L_DEBUG;
+	LogAVSync = Device->ConfigLog & L_AV_SYNC;
+	LogSound = Device->ConfigLog & L_SOUND;
+	LogOSD = Device->ConfigLog & L_OSD;
+	LogDRM = Device->ConfigLog & L_DRM;
+	LogCodec = Device->ConfigLog & L_CODEC;
+	LogStill = Device->ConfigLog & L_STILL;
+	LogTrick = Device->ConfigLog & L_TRICK;
+	LogMedia = Device->ConfigLog & L_MEDIA;
+	LogGL = Device->ConfigLog & L_OPENGL;
+	LogGLTime = Device->ConfigLog & L_OPENGL_TIME;
+	LogGLTimeAll = Device->ConfigLog & L_OPENGL_TIME_ALL;
+	LogPacket = Device->ConfigLog & L_PACKET;
+	LogGrab = Device->ConfigLog & L_GRAB;
+	//
+	//	video
+	//
+	VideoMenu = 0;
+	DisableDeint = Device->ConfigDisableDeint;
+	//
+	//	audio
+	//
+	Audio = 0;
+	AudioDelay = Device->ConfigVideoAudioDelay;
+	AudioPassthroughDefault = Device->AudioPassthroughState;
+	AudioPassthroughPCM = Device->ConfigAudioPassthrough & CODEC_PCM;
+	AudioPassthroughAC3 = Device->ConfigAudioPassthrough & CODEC_AC3;
+	AudioPassthroughEAC3 = Device->ConfigAudioPassthrough & CODEC_EAC3;
+	AudioPassthroughDTS = Device->ConfigAudioPassthrough & CODEC_DTS;
+	AudioDownmix = Device->ConfigAudioDownmix;
+	AudioSoftvol = Device->ConfigAudioSoftvol;
+	AudioNormalize = Device->ConfigAudioNormalize;
+	AudioMaxNormalize = Device->ConfigAudioMaxNormalize;
+	AudioCompression = Device->ConfigAudioCompression;
+	AudioMaxCompression = Device->ConfigAudioMaxCompression;
+	AudioStereoDescent = Device->ConfigAudioStereoDescent;
+	AudioBufferTime = Device->ConfigAudioBufferTime;
+	AudioAutoAES = Device->ConfigAudioAutoAES;
 	//
 	// audio filter
 	//
-    AudioEq = Device->ConfigAudioEq;
-    AudioFilter = 0;
-    for (int i = 0; i < 18; i++) {
+	AudioEq = Device->ConfigAudioEq;
+	AudioFilter = 0;
+	for (int i = 0; i < 18; i++) {
 		AudioEqBand[i] = Device->SetupAudioEqBand[i];
 	}
 
 #ifdef USE_GLES
-    MaxSizeGPUImageCache = Device->ConfigMaxSizeGPUImageCache;
+	MaxSizeGPUImageCache = Device->ConfigMaxSizeGPUImageCache;
 #endif
 
-    Create();
+	Create();
 }
 
 /**
@@ -855,18 +855,18 @@ cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
 */
 void cMenuSetupSoft::Store(void)
 {
-    SetupStore("MakePrimary", Device->ConfigMakePrimary = MakePrimary);
+	SetupStore("MakePrimary", Device->ConfigMakePrimary = MakePrimary);
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-    Device->SetConfigWritePngs(WritePngs);
-    SetupStore("WritePngs", Device->GetConfigWritePngs());
+	Device->SetConfigWritePngs(WritePngs);
+	SetupStore("WritePngs", Device->GetConfigWritePngs());
 #endif
 #endif
-    SetupStore("HideMainMenuEntry", Device->ConfigHideMainMenuEntry = HideMainMenuEntry);
-    SetupStore("AudioDelay", Device->ConfigVideoAudioDelay = AudioDelay);
-    Device->SetVideoAudioDelay(Device->ConfigVideoAudioDelay);
+	SetupStore("HideMainMenuEntry", Device->ConfigHideMainMenuEntry = HideMainMenuEntry);
+	SetupStore("AudioDelay", Device->ConfigVideoAudioDelay = AudioDelay);
+	Device->SetVideoAudioDelay(Device->ConfigVideoAudioDelay);
 
-    Device->ConfigLog =
+	Device->ConfigLog =
 	(LogDebug_ ? L_DEBUG : 0) |
 	(LogAVSync ? L_AV_SYNC : 0) |
 	(LogSound ? L_SOUND : 0) |
@@ -881,59 +881,59 @@ void cMenuSetupSoft::Store(void)
 	(LogGLTimeAll ? L_OPENGL_TIME_ALL : 0) |
 	(LogPacket ? L_PACKET : 0) |
 	(LogGrab ? L_GRAB : 0);
-    Device->LogState = LogDefault;
-    if (Device->LogState) {
+	Device->LogState = LogDefault;
+	if (Device->LogState) {
 	SetupStore("LogLevel", Device->ConfigLog);
 	Device->SetLogLevel(Device->ConfigLog);
 	cSoftHdLogger::GetLogger()->SetLogLevel(Device->ConfigLog);
-    } else {
+	} else {
 	SetupStore("LogLevel", -Device->ConfigLog);
 	Device->SetLogLevel(0);
 	cSoftHdLogger::GetLogger()->SetLogLevel(0);
-    }
+	}
 
-    SetupStore("DisableDeint", Device->ConfigDisableDeint = DisableDeint);
-    if (Device->ConfigDisableDeint) {
+	SetupStore("DisableDeint", Device->ConfigDisableDeint = DisableDeint);
+	if (Device->ConfigDisableDeint) {
 	LOGDEBUG("Disable deinterlacer!");
-    }
-    Device->SetDisableDeint();
+	}
+	Device->SetDisableDeint();
 
-    // FIXME: can handle more audio state changes here
-    // downmix changed reset audio, to get change direct
-    if (Device->ConfigAudioDownmix != AudioDownmix) {
+	// FIXME: can handle more audio state changes here
+	// downmix changed reset audio, to get change direct
+	if (Device->ConfigAudioDownmix != AudioDownmix) {
 	Device->ResetChannelId();
-    }
-    Device->ConfigAudioPassthrough = (AudioPassthroughPCM ? CODEC_PCM : 0)
+	}
+	Device->ConfigAudioPassthrough = (AudioPassthroughPCM ? CODEC_PCM : 0)
 	| (AudioPassthroughAC3 ? CODEC_AC3 : 0)
 	| (AudioPassthroughEAC3 ? CODEC_EAC3 : 0)
 	| (AudioPassthroughDTS ? CODEC_DTS : 0);
-    Device->AudioPassthroughState = AudioPassthroughDefault;
-    if (Device->AudioPassthroughState) {
+	Device->AudioPassthroughState = AudioPassthroughDefault;
+	if (Device->AudioPassthroughState) {
 	SetupStore("AudioPassthrough", Device->ConfigAudioPassthrough);
 	Device->SetPassthrough(Device->ConfigAudioPassthrough);
-    } else {
+	} else {
 	SetupStore("AudioPassthrough", -Device->ConfigAudioPassthrough);
 	Device->SetPassthrough(0);
-    }
-    SetupStore("AudioDownmix", Device->ConfigAudioDownmix = AudioDownmix);
-    AudioDevice->SetDownmix(Device->ConfigAudioDownmix);
-    SetupStore("AudioSoftvol", Device->ConfigAudioSoftvol = AudioSoftvol);
-    AudioDevice->SetSoftvol(Device->ConfigAudioSoftvol);
-    SetupStore("AudioNormalize", Device->ConfigAudioNormalize = AudioNormalize);
-    SetupStore("AudioMaxNormalize", Device->ConfigAudioMaxNormalize =
+	}
+	SetupStore("AudioDownmix", Device->ConfigAudioDownmix = AudioDownmix);
+	AudioDevice->SetDownmix(Device->ConfigAudioDownmix);
+	SetupStore("AudioSoftvol", Device->ConfigAudioSoftvol = AudioSoftvol);
+	AudioDevice->SetSoftvol(Device->ConfigAudioSoftvol);
+	SetupStore("AudioNormalize", Device->ConfigAudioNormalize = AudioNormalize);
+	SetupStore("AudioMaxNormalize", Device->ConfigAudioMaxNormalize =
 	AudioMaxNormalize);
-    AudioDevice->SetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
-    SetupStore("AudioCompression", Device->ConfigAudioCompression = AudioCompression);
-    SetupStore("AudioMaxCompression", Device->ConfigAudioMaxCompression =
+	AudioDevice->SetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
+	SetupStore("AudioCompression", Device->ConfigAudioCompression = AudioCompression);
+	SetupStore("AudioMaxCompression", Device->ConfigAudioMaxCompression =
 	AudioMaxCompression);
-    AudioDevice->SetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
-    SetupStore("AudioStereoDescent", Device->ConfigAudioStereoDescent =
+	AudioDevice->SetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
+	SetupStore("AudioStereoDescent", Device->ConfigAudioStereoDescent =
 	AudioStereoDescent);
-    AudioDevice->SetStereoDescent(Device->ConfigAudioStereoDescent);
-    SetupStore("AudioBufferTime", Device->ConfigAudioBufferTime = AudioBufferTime);
-    AudioDevice->SetBufferTimeInMs(Device->ConfigAudioBufferTime);
-    SetupStore("AudioAutoAES", Device->ConfigAudioAutoAES = AudioAutoAES);
-    AudioDevice->SetAutoAES(Device->ConfigAudioAutoAES);
+	AudioDevice->SetStereoDescent(Device->ConfigAudioStereoDescent);
+	SetupStore("AudioBufferTime", Device->ConfigAudioBufferTime = AudioBufferTime);
+	AudioDevice->SetBufferTimeInMs(Device->ConfigAudioBufferTime);
+	SetupStore("AudioAutoAES", Device->ConfigAudioAutoAES = AudioAutoAES);
+	AudioDevice->SetAutoAES(Device->ConfigAudioAutoAES);
 	SetupStore("AudioEq", Device->ConfigAudioEq = AudioEq);
 	SetupStore("AudioEqBand01b", Device->SetupAudioEqBand[0] = AudioEqBand[0]);
 	SetupStore("AudioEqBand02b", Device->SetupAudioEqBand[1] = AudioEqBand[1]);
@@ -953,9 +953,9 @@ void cMenuSetupSoft::Store(void)
 	SetupStore("AudioEqBand16b", Device->SetupAudioEqBand[15] = AudioEqBand[15]);
 	SetupStore("AudioEqBand17b", Device->SetupAudioEqBand[16] = AudioEqBand[16]);
 	SetupStore("AudioEqBand18b", Device->SetupAudioEqBand[17] = AudioEqBand[17]);
-    AudioDevice->SetEq(Device->SetupAudioEqBand, Device->ConfigAudioEq);
+	AudioDevice->SetEq(Device->SetupAudioEqBand, Device->ConfigAudioEq);
 #ifdef USE_GLES
-    SetupStore("MaxSizeGPUImageCache", Device->ConfigMaxSizeGPUImageCache = MaxSizeGPUImageCache);
+	SetupStore("MaxSizeGPUImageCache", Device->ConfigMaxSizeGPUImageCache = MaxSizeGPUImageCache);
 #endif
 }
 
@@ -971,11 +971,11 @@ void cMenuSetupSoft::Store(void)
 */
 cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 {
-    LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("%s:", __FUNCTION__);
 
-    Device = new cSoftHdDevice();
-    Audio = Device->Audio;
-    Device->StartThreads();
+	Device = new cSoftHdDevice();
+	Audio = Device->Audio;
+	Device->StartThreads();
 }
 
 /**
@@ -983,7 +983,7 @@ cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 */
 cPluginSoftHdDevice::~cPluginSoftHdDevice(void)
 {
-    LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("%s:", __FUNCTION__);
 }
 
 /**
@@ -993,7 +993,7 @@ cPluginSoftHdDevice::~cPluginSoftHdDevice(void)
 */
 const char *cPluginSoftHdDevice::Version(void)
 {
-    return VERSION;
+	return VERSION;
 }
 
 /**
@@ -1003,7 +1003,7 @@ const char *cPluginSoftHdDevice::Version(void)
 */
 const char *cPluginSoftHdDevice::Description(void)
 {
-    return tr(DESCRIPTION);
+	return tr(DESCRIPTION);
 }
 
 /**
@@ -1013,7 +1013,7 @@ const char *cPluginSoftHdDevice::Description(void)
 */
 const char *cPluginSoftHdDevice::CommandLineHelp(void)
 {
-    return Device->CommandLineHelp();
+	return Device->CommandLineHelp();
 }
 
 /**
@@ -1021,9 +1021,9 @@ const char *cPluginSoftHdDevice::CommandLineHelp(void)
 */
 bool cPluginSoftHdDevice::ProcessArgs(int argc, char *argv[])
 {
-    LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("%s:", __FUNCTION__);
 
-    return Device->ProcessArgs(argc, argv);
+	return Device->ProcessArgs(argc, argv);
 }
 
 /**
@@ -1035,10 +1035,10 @@ bool cPluginSoftHdDevice::ProcessArgs(int argc, char *argv[])
 */
 bool cPluginSoftHdDevice::Initialize(void)
 {
-    LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("%s:", __FUNCTION__);
 
-    // nothing to do
-    return true;
+	// nothing to do
+	return true;
 }
 
 /**
@@ -1060,7 +1060,7 @@ bool cPluginSoftHdDevice::Start(void)
 	}
 	Device->Start();
 
-    return true;
+	return true;
 }
 
 /**
@@ -1069,9 +1069,9 @@ bool cPluginSoftHdDevice::Start(void)
 */
 void cPluginSoftHdDevice::Stop(void)
 {
-    //LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("%s:", __FUNCTION__);
 
-    Device->Stop();
+	Device->Stop();
 }
 
 /**
@@ -1079,9 +1079,9 @@ void cPluginSoftHdDevice::Stop(void)
 */
 const char *cPluginSoftHdDevice::MainMenuEntry(void)
 {
-    //LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("%s:", __FUNCTION__);
 
-    return Device->ConfigHideMainMenuEntry ? NULL : tr(MAINMENUENTRY);
+	return Device->ConfigHideMainMenuEntry ? NULL : tr(MAINMENUENTRY);
 }
 
 /**
@@ -1089,9 +1089,9 @@ const char *cPluginSoftHdDevice::MainMenuEntry(void)
 */
 cOsdObject *cPluginSoftHdDevice::MainMenuAction(void)
 {
-    //LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("%s:", __FUNCTION__);
 
-    return new cSoftHdMenu("SoftHdDevice", Device);
+	return new cSoftHdMenu("SoftHdDevice", Device);
 }
 
 /**
@@ -1099,9 +1099,9 @@ cOsdObject *cPluginSoftHdDevice::MainMenuAction(void)
 */
 cMenuSetupPage *cPluginSoftHdDevice::SetupMenu(void)
 {
-    //LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("%s:", __FUNCTION__);
 
-    return new cMenuSetupSoft(Device);
+	return new cMenuSetupSoft(Device);
 }
 
 /**
@@ -1114,186 +1114,186 @@ cMenuSetupPage *cPluginSoftHdDevice::SetupMenu(void)
 */
 bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 {
-    //LOGDEBUG("%s: '%s' = '%s'", __FUNCTION__, name, value);
+	//LOGDEBUG("%s: '%s' = '%s'", __FUNCTION__, name, value);
 
-    if (!strcasecmp(name, "MakePrimary")) {
+	if (!strcasecmp(name, "MakePrimary")) {
 	Device->ConfigMakePrimary = atoi(value);
 	return true;
-    }
+	}
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-    if (!strcasecmp(name, "WritePngs")) {
+	if (!strcasecmp(name, "WritePngs")) {
 	Device->SetConfigWritePngs(atoi(value));
 	return true;
-    }
+	}
 #endif
 #endif
-    if (!strcasecmp(name, "HideMainMenuEntry")) {
+	if (!strcasecmp(name, "HideMainMenuEntry")) {
 	Device->ConfigHideMainMenuEntry = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "LogLevel")) {
+	}
+	if (!strcasecmp(name, "LogLevel")) {
 	int i = atoi(value);
 	Device->LogState = i > 0;
 	Device->ConfigLog = abs(i);
 	if (Device->LogState) {
-	    Device->SetLogLevel(Device->ConfigLog);
-	    cSoftHdLogger::GetLogger()->SetLogLevel(Device->ConfigLog);
+		Device->SetLogLevel(Device->ConfigLog);
+		cSoftHdLogger::GetLogger()->SetLogLevel(Device->ConfigLog);
 	} else {
-	    Device->SetLogLevel(0);
-	    cSoftHdLogger::GetLogger()->SetLogLevel(0);
+		Device->SetLogLevel(0);
+		cSoftHdLogger::GetLogger()->SetLogLevel(0);
 	}
 	return true;
-    }
-    if (!strcasecmp(name, "DisableDeint")) {
+	}
+	if (!strcasecmp(name, "DisableDeint")) {
 	Device->ConfigDisableDeint = atoi(value);
 	Device->SetDisableDeint();
 	return true;
-    }
-    if (!strcasecmp(name, "AudioDelay")) {
+	}
+	if (!strcasecmp(name, "AudioDelay")) {
 	Device->ConfigVideoAudioDelay = atoi(value);
 	Device->SetVideoAudioDelay(Device->ConfigVideoAudioDelay);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioPassthrough")) {
+	}
+	if (!strcasecmp(name, "AudioPassthrough")) {
 	int i;
 
 	i = atoi(value);
 	Device->AudioPassthroughState = i > 0;
 	Device->ConfigAudioPassthrough = abs(i);
 	if (Device->AudioPassthroughState) {
-	    Device->SetPassthrough(Device->ConfigAudioPassthrough);
+		Device->SetPassthrough(Device->ConfigAudioPassthrough);
 	} else {
-	    Device->SetPassthrough(0);
+		Device->SetPassthrough(0);
 	}
 	return true;
-    }
-    if (!strcasecmp(name, "AudioDownmix")) {
+	}
+	if (!strcasecmp(name, "AudioDownmix")) {
 	Audio->SetDownmix(Device->ConfigAudioDownmix = atoi(value));
 	return true;
-    }
-    if (!strcasecmp(name, "AudioSoftvol")) {
+	}
+	if (!strcasecmp(name, "AudioSoftvol")) {
 	Audio->SetSoftvol(Device->ConfigAudioSoftvol = atoi(value));
 	return true;
-    }
-    if (!strcasecmp(name, "AudioNormalize")) {
+	}
+	if (!strcasecmp(name, "AudioNormalize")) {
 	Device->ConfigAudioNormalize = atoi(value);
 	Audio->SetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioMaxNormalize")) {
+	}
+	if (!strcasecmp(name, "AudioMaxNormalize")) {
 	Device->ConfigAudioMaxNormalize = atoi(value);
 	Audio->SetNormalize(Device->ConfigAudioNormalize, Device->ConfigAudioMaxNormalize);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioCompression")) {
+	}
+	if (!strcasecmp(name, "AudioCompression")) {
 	Device->ConfigAudioCompression = atoi(value);
 	Audio->SetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioMaxCompression")) {
+	}
+	if (!strcasecmp(name, "AudioMaxCompression")) {
 	Device->ConfigAudioMaxCompression = atoi(value);
 	Audio->SetCompression(Device->ConfigAudioCompression, Device->ConfigAudioMaxCompression);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioStereoDescent")) {
+	}
+	if (!strcasecmp(name, "AudioStereoDescent")) {
 	Device->ConfigAudioStereoDescent = atoi(value);
 	Audio->SetStereoDescent(Device->ConfigAudioStereoDescent);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioBufferTime")) {
+	}
+	if (!strcasecmp(name, "AudioBufferTime")) {
 	Device->ConfigAudioBufferTime = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioAutoAES")) {
+	}
+	if (!strcasecmp(name, "AudioAutoAES")) {
 	Device->ConfigAudioAutoAES = atoi(value);
 	Audio->SetAutoAES(Device->ConfigAudioAutoAES);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEq")) {
+	}
+	if (!strcasecmp(name, "AudioEq")) {
 	Device->ConfigAudioEq = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand01b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand01b")) {
 	Device->SetupAudioEqBand[0] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand02b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand02b")) {
 	Device->SetupAudioEqBand[1] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand03b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand03b")) {
 	Device->SetupAudioEqBand[2] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand04b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand04b")) {
 	Device->SetupAudioEqBand[3] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand05b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand05b")) {
 	Device->SetupAudioEqBand[4] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand06b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand06b")) {
 	Device->SetupAudioEqBand[5] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand07b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand07b")) {
 	Device->SetupAudioEqBand[6] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand08b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand08b")) {
 	Device->SetupAudioEqBand[7] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand09b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand09b")) {
 	Device->SetupAudioEqBand[8] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand10b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand10b")) {
 	Device->SetupAudioEqBand[9] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand11b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand11b")) {
 	Device->SetupAudioEqBand[10] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand12b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand12b")) {
 	Device->SetupAudioEqBand[11] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand13b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand13b")) {
 	Device->SetupAudioEqBand[12] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand14b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand14b")) {
 	Device->SetupAudioEqBand[13] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand15b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand15b")) {
 	Device->SetupAudioEqBand[14] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand16b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand16b")) {
 	Device->SetupAudioEqBand[15] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand17b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand17b")) {
 	Device->SetupAudioEqBand[16] = atoi(value);
 	return true;
-    }
-    if (!strcasecmp(name, "AudioEqBand18b")) {
+	}
+	if (!strcasecmp(name, "AudioEqBand18b")) {
 	Device->SetupAudioEqBand[17] = atoi(value);
 	Audio->SetEq(Device->SetupAudioEqBand, Device->ConfigAudioEq);
 	return true;
-    }
+	}
 #ifdef USE_GLES
-    if (!strcasecmp(name, "MaxSizeGPUImageCache")) {
+	if (!strcasecmp(name, "MaxSizeGPUImageCache")) {
 	Device->ConfigMaxSizeGPUImageCache = atoi(value);
 	return true;
-    }
+	}
 #endif
-    return false;
+	return false;
 }
 
 /**
@@ -1305,11 +1305,11 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 */
 bool cPluginSoftHdDevice::Service(const char *id, void *data)
 {
-    //LOGDEBUG("%s: id %s", __FUNCTION__, id);
-    (void)id;
-    (void)data;
+	//LOGDEBUG("%s: id %s", __FUNCTION__, id);
+	(void)id;
+	(void)data;
 
-    return false;
+	return false;
 }
 
 //----------------------------------------------------------------------------
@@ -1333,7 +1333,7 @@ static const char *SVDRPHelpText[] = {
 */
 const char **cPluginSoftHdDevice::SVDRPHelpPages(void)
 {
-    return SVDRPHelpText;
+	return SVDRPHelpText;
 }
 
 /**
@@ -1353,7 +1353,7 @@ cString cPluginSoftHdDevice::SVDRPCommand(const char *command,
 		return "PLAY url";
 	}
 
-    return NULL;
+	return NULL;
 }
 
 VDRPLUGINCREATOR(cPluginSoftHdDevice);	// Don't touch this!

@@ -27,7 +27,7 @@ extern "C" {
 
 #include "codec_video.h"
 
-#define VIDEO_BUFFER_SIZE (512 * 1024)		///< video PES buffer default size
+#define VIDEO_BUFFER_SIZE (512 * 1024)	///< video PES buffer default size
 #define VIDEO_PACKET_MAX 192			///< max number of video packets held in ringbuffer
 
 class cVideoDecoder;
@@ -81,20 +81,20 @@ private:
 
 	// TODO: move ringbuffer to a separate class
 	AVPacket m_packetRb[VIDEO_PACKET_MAX];	///< PES packet ring buffer
-	int m_packetWrite;			///< ring buffer write pointer
-	int m_packetRead;			///< ring buffer read pointer
+	int m_packetWrite;				///< ring buffer write pointer
+	int m_packetRead;				///< ring buffer read pointer
 	atomic_t m_packetsFilled;		///< how many of the ring buffer is used
 
 	enum AVCodecID m_codecId;		///< current codec id
 	AVCodecParameters *m_pPar;		///< current codec parameters
-	struct AVRational m_timebase;		///< current codec timepase
-	int m_trickpkts;			///< how many avpkt does the decoder need in trickspeed mode?
+	struct AVRational m_timebase;	///< current codec timepase
+	int m_trickpkts;				///< how many avpkt does the decoder need in trickspeed mode?
 
 	volatile char m_newStream;		///< flag for new stream
 	volatile char m_closing;		///< flag for closing request
 	volatile char m_paused;			///< flag for paused stream
-	int m_interlaced;			///< flag for interlaced stream
-	cMutex m_pktsMutex;			///< mutex for accessing the packet ringbuffer
+	int m_interlaced;				///< flag for interlaced stream
+	cMutex m_pktsMutex;				///< mutex for accessing the packet ringbuffer
 	cCondWait m_closeCondition;		///< condition object to wait for finishing jobs while closing
 	cCondVar m_pauseCondition;		///< condition object to wait for pausing the stream
 

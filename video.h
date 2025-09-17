@@ -201,147 +201,89 @@ public:
 #endif
 
 private:
-	cSoftHdDevice *m_pDevice;
-		///< pointer to cSoftHdDevice
-	cSoftHdAudio *m_pAudio;
-		///< pointer to cSoftHdAudio
-	cDecodingThread *m_pDecodingThread;
-		///< pointer to decoding thread
-	cDisplayThread *m_pDisplayThread;
-		///< pointer to display thread
-	cFilterThread *m_pFilterThread;
-		///< pointer to deinterlace filter thread
-	cCondWait m_waitCleanCondition;
-		///< condition to wait on while display cleanup
-	cMutex m_waitCleanMutex;
-		///< mutex used while display cleanup
+	cSoftHdDevice *m_pDevice;			///< pointer to cSoftHdDevice
+	cSoftHdAudio *m_pAudio;				///< pointer to cSoftHdAudio
+	cDecodingThread *m_pDecodingThread;	///< pointer to decoding thread
+	cDisplayThread *m_pDisplayThread;	///< pointer to display thread
+	cFilterThread *m_pFilterThread;		///< pointer to deinterlace filter thread
+	cCondWait m_waitCleanCondition;		///< condition to wait on while display cleanup
+	cMutex m_waitCleanMutex;			///< mutex used while display cleanup
 	cMutex m_trickspeedMutex;
 	cMutex m_playbackMutex;
 	cMutex m_videoClockMutex;
 	cMutex m_displayQueue;
 
-	int m_hardwareQuirks;
-		///< hardware specific quirks
+	int m_hardwareQuirks;				///< hardware specific quirks
 
-	int m_userReqDisplayWidth;
-		///< user requested display width
-	int m_userReqDisplayHeight;
-		///< user requested display height
-	uint32_t m_userReqDisplayRefreshRate;
-		///< user requested display refresh rate
+	int m_userReqDisplayWidth;			///< user requested display width
+	int m_userReqDisplayHeight;			///< user requested display height
+	uint32_t m_userReqDisplayRefreshRate;	///< user requested display refresh rate
 
-	AVFrame *m_framesRb[VIDEO_SURFACES_MAX];
-		///< ringbuffer for frames to be displayed
-		///< (VIDEO_SURFACES_MAX is defined in thread.h)
-	int m_framesWrite;
-		///< m_framesRb write pointer
-	int m_framesRead;
-		///< m_framesRb read pointer
-	atomic_t m_framesFilled;
-		///< how many of m_framesRb is used
-	int m_trickSpeed;
-		///< current trick speed
-	int m_trickCounter;
-		///< current trick speed counter
-		///< (handles, how much trickspeed frame are left to be rendered)
-	int m_trickForward;
-		///< true, if trickspeed plays forward
-	int m_videoIsPaused;
-		///< true, if video is paused
-	int m_closing;
-		///< flag if render thread should be closed
-		///< a black frame is set instead of video frame
-	int m_flushing;
-		///< flag if render thread should be closed
-		///< in difference to m_closing, the video frame is untouched,
-		///< i.e. the last one remains displayed
-	int m_flushLastFrame;
-		///< flag about need to clear the last video frame in next turn
-		///< i.e. when did m_flushing and the video frame hasn't been freed
-	int m_exitThread;
-		///< internal flag, which is set, when display thread should be stopped
+	AVFrame *m_framesRb[VIDEO_SURFACES_MAX];	///< ringbuffer for frames to be displayed (VIDEO_SURFACES_MAX is defined in thread.h)
+	int m_framesWrite;					///< m_framesRb write pointer
+	int m_framesRead;					///< m_framesRb read pointer
+	atomic_t m_framesFilled;			///< how many of m_framesRb is used
+	int m_trickSpeed;					///< current trick speed
+	int m_trickCounter;					///< current trick speed counter (handles, how much trickspeed frame are left to be rendered)
+	int m_trickForward;					///< true, if trickspeed plays forward
+	int m_videoIsPaused;				///< true, if video is paused
+	int m_closing;						///< flag if render thread should be closed()
+										///< a black frame is set instead of video frame)
+	int m_flushing;						///< flag if render thread should be closed
+										///< in difference to m_closing, the video frame is untouched,
+										///< i.e. the last one remains displayed
+	int m_flushLastFrame;				///< flag about need to clear the last video frame in next turn
+										///< i.e. when did m_flushing and the video frame hasn't been freed
+	int m_exitThread;					///< internal flag, which is set, when display thread should be stopped
 
-	int m_numFramesToFilter;
-		///< number of frames to be filtered
-	int m_deintDisabled;
-		///< set, if deinterlacer is disabled
-	int m_configDeintDisabled;
-		///< set, if a deinterlacer on/off should be triggered
+	int m_numFramesToFilter;			///< number of frames to be filtered
+	int m_deintDisabled;				///< set, if deinterlacer is disabled
+	int m_configDeintDisabled;			///< set, if a deinterlacer on/off should be triggered
 	int m_numWrongProgressive;
 
-	int m_disableOglOsd;
-		///< set, if ogl osd is disabled
+	int m_disableOglOsd;				///< set, if ogl osd is disabled
 
-	int m_startgrab;
-		///< internal flag to trigger grabbing
-	cCondVar m_grabCond;
-		///< condition gets signalled, if renederer finished to clone the grabbed buffers
-	cSoftHdGrab m_grabOsd;
-		///< keeps the current grabbed osd
-	cSoftHdGrab m_grabVideo;
-		///< keeps the current grabbed video
-	cRect m_lastVideoGrab;
-		///< crtc rect of the last shown video frame
+	int m_startgrab;					///< internal flag to trigger grabbing
+	cCondVar m_grabCond;				///< condition gets signalled, if renederer finished to clone the grabbed buffers
+	cSoftHdGrab m_grabOsd;				///< keeps the current grabbed osd
+	cSoftHdGrab m_grabVideo;			///< keeps the current grabbed video
+	cRect m_lastVideoGrab;				///< crtc rect of the last shown video frame
 
-	int m_startCounter;
-		///< counter for displayed frames, indicates a video start
-	int m_framesDuped;
-		///< number of frames duplicated
-	int m_framesDropped;
-		///< number of frames dropped
-	AVRational *m_timebase;
-		///< pointer to AVCodecContext pkts_timebase
-	int64_t m_pts;
-		///< current video PTS
+	int m_startCounter;					///< counter for displayed frames, indicates a video start
+	int m_framesDuped;					///< number of frames duplicated
+	int m_framesDropped;				///< number of frames dropped
+	AVRational *m_timebase;				///< pointer to AVCodecContext pkts_timebase
+	int64_t m_pts;						///< current video PTS
 
-	int m_fdDrm;
-		///< drm file descriptor
+	int m_fdDrm;						///< drm file descriptor
 	drmModeModeInfo m_drmModeInfo;
 	drmModeCrtc *m_drmModeCrtcSaved;
 	drmEventContext m_drmEventCtx;
 
-	cRect m_videoRect;
-		///< rect of the currently displayed video
-	int m_videoIsScaled;
-		///< true, if the currently displayed video is scaled
+	cRect m_videoRect;					///< rect of the currently displayed video
+	int m_videoIsScaled;				///< true, if the currently displayed video is scaled
 
-	struct drm_buf m_buffer[RENDERBUFFERS];
-		///< array of drm buffer structs
-	struct drm_buf *m_pBufOsd;
-		///< pointer to osd drm buffer struct
-	struct drm_buf m_bufBlack;
-		///< black drm buffer
-	int m_useZpos;
-		///< is set, if drm hardware can use zpos
-	uint64_t m_zposOverlay;
-		///< zpos of overlay plane
-	uint64_t m_zposPrimary;
-		///< zpos of primary plane
-	uint32_t m_connectorId;
-		///< current connector ID
-	uint32_t m_crtcId;
-		///< current crtc ID
-	uint32_t m_crtcIndex;
-		///< current crtc index
-	cDrmPlane m_videoPlane;
-		///< the video drm plane
-	cDrmPlane m_osdPlane;
-		///< the osd drm plane
-	struct lastFrame *m_pLastFrame;
-		///< pointer to last rendered frame struct (e.g. needed for later free)
-	int m_numBuffers;
-		///< numer of framebuffers currently set up
-	int m_enqueueBufferIdx;
-		///< index of the current (sw) framebuffer in the array
-	int m_osdShown;
-		///< set, if osd is shown currently
+	struct drm_buf m_buffer[RENDERBUFFERS];	///< array of drm buffer structs
+	struct drm_buf *m_pBufOsd;			///< pointer to osd drm buffer struct
+	struct drm_buf m_bufBlack;			///< black drm buffer
+	int m_useZpos;						///< is set, if drm hardware can use zpos
+	uint64_t m_zposOverlay;				///< zpos of overlay plane
+	uint64_t m_zposPrimary;				///< zpos of primary plane
+	uint32_t m_connectorId;				///< current connector ID
+	uint32_t m_crtcId;					///< current crtc ID
+	uint32_t m_crtcIndex;				///< current crtc index
+	cDrmPlane m_videoPlane;				///< the video drm plane
+	cDrmPlane m_osdPlane;				///< the osd drm plane
+	struct lastFrame *m_pLastFrame;		///< pointer to last rendered frame struct (e.g. needed for later free)
+	int m_numBuffers;					///< numer of framebuffers currently set up
+	int m_enqueueBufferIdx;				///< index of the current (sw) framebuffer in the array
+	int m_osdShown;						///< set, if osd is shown currently
 
 #ifdef USE_GLES
 	EGLSurface m_eglSurface;
 	EGLDisplay m_eglDisplay;
 	EGLContext m_eglContext;
-	int m_glInitiated;
-		///< true, if OpenGL/ES context is initiated
+	int m_glInitiated;					///< true, if OpenGL/ES context is initiated
 
 	struct gbm_device *m_pGbmDevice;
 	struct gbm_surface *m_pGbmSurface;

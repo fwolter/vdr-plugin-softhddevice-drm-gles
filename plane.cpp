@@ -31,8 +31,8 @@
 
 cDrmPlane::cDrmPlane(void)
 {
-    m_planeId = 0;
-    m_zpos = 0;
+	m_planeId = 0;
+	m_zpos = 0;
 }
 
 cDrmPlane::~cDrmPlane(void)
@@ -99,8 +99,8 @@ void cDrmPlane::FreeProperties(void)
  * @param srccH		height of the source rect
  */
 void cDrmPlane::SetParams(uint64_t crtcId, uint64_t fbId,
-		     uint64_t crtcX, uint64_t crtcY, uint64_t crtcW, uint64_t crtcH,
-		     uint64_t srcX,  uint64_t srcY,  uint64_t srcW,  uint64_t srcH)
+			 uint64_t crtcX, uint64_t crtcY, uint64_t crtcW, uint64_t crtcH,
+			 uint64_t srcX,  uint64_t srcY,  uint64_t srcW,  uint64_t srcH)
 {
 	m_crtcId = crtcId;
 	m_fbId = fbId;

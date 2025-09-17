@@ -71,7 +71,7 @@ static void ReleaseFrame( __attribute__ ((unused)) void *opaque, uint8_t *data)
 }
 
 static int GetPropertyValue(int m_fdDrm, uint32_t objectID,
-		     uint32_t objectType, const char *propName, uint64_t *value)
+			 uint32_t objectType, const char *propName, uint64_t *value)
 {
 	uint32_t i;
 	int found = 0;
@@ -183,8 +183,8 @@ static int TestCaps(int fd)
 #ifdef USE_GLES
 static const EGLint context_attribute_list[] =
 {
-    EGL_CONTEXT_CLIENT_VERSION, 2,
-    EGL_NONE
+	EGL_CONTEXT_CLIENT_VERSION, 2,
+	EGL_NONE
 };
 
 static void drm_fb_destroy_callback(struct gbm_bo *bo, void *data)
@@ -395,7 +395,7 @@ static void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 
 	for (int plane = 0; plane < buf->num_planes; plane++) {
 		LOGDEBUG2(L_GRAB, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d",
-		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
+			   plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
 	}
 
 	*dst = buf;
@@ -414,8 +414,8 @@ static void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 ///
 cVideoRender::cVideoRender(cSoftHdDevice *device)
 {
-    m_pDevice = device;
-    m_pAudio = m_pDevice->Audio;
+	m_pDevice = device;
+	m_pAudio = m_pDevice->Audio;
 }
 
 ///
@@ -561,8 +561,8 @@ void cVideoRender::ReadHWPlatform(void)
 		if (strstr(read_ptr, "amlogic")) {
 			LOGDEBUG2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
 			m_hardwareQuirks |= QUIRK_CODEC_NEEDS_EXT_INIT
-				       |  QUIRK_CODEC_SKIP_FIRST_FRAMES
-				       |  QUIRK_NO_HW_DEINT;
+					   |  QUIRK_CODEC_SKIP_FIRST_FRAMES
+					   |  QUIRK_NO_HW_DEINT;
 			break;
 		}
 
@@ -598,48 +598,48 @@ int cVideoRender::CheckZpos(cDrmPlane *plane)
 #ifdef USE_GLES
 EGLConfig cVideoRender::GetEGLConfig(void)
 {
-    EGLint config_attribute_list[] = {
-        EGL_BUFFER_SIZE, 32,
-        EGL_STENCIL_SIZE, EGL_DONT_CARE,
-        EGL_DEPTH_SIZE, EGL_DONT_CARE,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
-        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
-        EGL_NONE
-    };
-    EGLConfig *configs;
-    EGLint matched;
-    EGLint count;
-    eglGetConfigs(m_eglDisplay, NULL, 0, &count);
+	EGLint config_attribute_list[] = {
+		EGL_BUFFER_SIZE, 32,
+		EGL_STENCIL_SIZE, EGL_DONT_CARE,
+		EGL_DEPTH_SIZE, EGL_DONT_CARE,
+		EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
+		EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+		EGL_NONE
+	};
+	EGLConfig *configs;
+	EGLint matched;
+	EGLint count;
+	eglGetConfigs(m_eglDisplay, NULL, 0, &count);
 //    EGL_CHECK(eglGetConfigs(m_eglDisplay, NULL, 0, &count));
-    if (count < 1) {
-        LOGFATAL("no EGL configs to choose from");
-    }
+	if (count < 1) {
+		LOGFATAL("no EGL configs to choose from");
+	}
 
-    LOGDEBUG2(L_OPENGL, "%d EGL configs found", count);
+	LOGDEBUG2(L_OPENGL, "%d EGL configs found", count);
 
-    configs = (EGLConfig *)malloc(count * sizeof(*configs));
-    if (!configs)
-        LOGFATAL("can't allocate space for EGL configs");
+	configs = (EGLConfig *)malloc(count * sizeof(*configs));
+	if (!configs)
+		LOGFATAL("can't allocate space for EGL configs");
 
-    eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched);
+	eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched);
 //    EGL_CHECK(eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched));
-    if (!matched) {
-        LOGFATAL("no EGL configs with appropriate attributes");
-    }
+	if (!matched) {
+		LOGFATAL("no EGL configs with appropriate attributes");
+	}
 
-    LOGDEBUG2(L_OPENGL, "%d appropriate EGL configs found, which match attributes", matched);
+	LOGDEBUG2(L_OPENGL, "%d appropriate EGL configs found, which match attributes", matched);
 
-    for (int i = 0; i < matched; ++i) {
-        EGLint gbm_format;
-        eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format);
+	for (int i = 0; i < matched; ++i) {
+		EGLint gbm_format;
+		eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format);
 //        EGL_CHECK(eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format));
 
-        if (gbm_format == GBM_FORMAT_ARGB8888)
-            return configs[i];
-    }
+		if (gbm_format == GBM_FORMAT_ARGB8888)
+			return configs[i];
+	}
 
-    LOGFATAL("no matching gbm config found");
-    return NULL;
+	LOGFATAL("no matching gbm config found");
+	return NULL;
 }
 
 PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display = NULL;
@@ -885,11 +885,11 @@ find_mode:
 
 		if (plane->possible_crtcs & (1 << m_crtcIndex)) {
 			if (GetPropertyValue(m_fdDrm, plane_res->planes[j],
-					     DRM_MODE_OBJECT_PLANE, "type", &type)) {
+						 DRM_MODE_OBJECT_PLANE, "type", &type)) {
 				LOGDEBUG2(L_DRM, "FindDevice: Failed to get property 'type'");
 			}
 			if (GetPropertyValue(m_fdDrm, plane_res->planes[j],
-					     DRM_MODE_OBJECT_PLANE, "zpos", &zpos)) {
+						 DRM_MODE_OBJECT_PLANE, "zpos", &zpos)) {
 				LOGDEBUG2(L_DRM, "FindDevice: Failed to get property 'zpos'");
 			} else {
 				m_useZpos = 1;
@@ -1082,8 +1082,8 @@ struct drm_buf *cVideoRender::drm_get_buf_from_bo(struct gbm_bo *bo)
 	buf->pix_fmt = gbm_bo_get_format(bo);
 
 	if (gbm_bo_get_handle_for_plane && gbm_bo_get_modifier &&
-            gbm_bo_get_plane_count && gbm_bo_get_stride_for_plane &&
-            gbm_bo_get_offset) {
+			gbm_bo_get_plane_count && gbm_bo_get_stride_for_plane &&
+			gbm_bo_get_offset) {
 		uint64_t modifiers[4] = {0};
 		modifiers[0] = gbm_bo_get_modifier(bo);
 		const int num_planes = gbm_bo_get_plane_count(bo);
@@ -1992,7 +1992,7 @@ page_flip:
 
 int cVideoRender::DrmHandleEvent(void)
 {
-    return drmHandleEvent(m_fdDrm, &m_drmEventCtx);
+	return drmHandleEvent(m_fdDrm, &m_drmEventCtx);
 }
 
 //----------------------------------------------------------------------------
@@ -2064,7 +2064,7 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
 #ifdef USE_GLES
 	if (m_disableOglOsd) {
 		LOGDEBUG2(L_OSD, "VideoOsdDrawARGB width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d",
-		       width, height, pitch, argb, x, y, m_pBufOsd->pitch[0], xi, yi);
+			   width, height, pitch, argb, x, y, m_pBufOsd->pitch[0], xi, yi);
 		for (int i = 0; i < height; ++i) {
 			memcpy(m_pBufOsd->plane[0] + x * 4 + (i + y) * m_pBufOsd->pitch[0],
 				argb + i * pitch, MIN((size_t)pitch, m_pBufOsd->pitch[0]));
@@ -2302,14 +2302,14 @@ int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame)
 
 		// set the interlaced switch depending on the framerate
 		if ((video_ctx->framerate.num > 0) &&
-		    (video_ctx->framerate.num / video_ctx->framerate.den > 30))
+			(video_ctx->framerate.num / video_ctx->framerate.den > 30))
 			interlaced = 0;
 		else if (video_ctx->framerate.num > 0)
 			interlaced = 1;
 
 		// set the interlaced switch depending on an active deinterlace filter, if framerate is not available
 		if ((video_ctx->framerate.num == 0) &&
-		     !interlaced && m_pFilterThread->Active() && m_pFilterThread->IsInterlaceFilter()) {
+			 !interlaced && m_pFilterThread->Active() && m_pFilterThread->IsInterlaceFilter()) {
 			LOGWARNING("RenderFrame: WARNING!!! frame without interlaced flag arrived while deinterlace filter is active (P %d)!", ++m_numWrongProgressive);
 			interlaced = 1;
 		}
@@ -2630,7 +2630,7 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 
 	for (int plane = 0; plane < buf->num_planes; plane++) {
 		LOGDEBUG2(L_GRAB, "ConvertVideoBufToRgb: VIDEO plane %d address %p pitch %d offset %d handle %d size %d",
-		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
+			   plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
 	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_RGB24);
@@ -2661,7 +2661,7 @@ void cVideoRender::ConvertOsdBufToRgb(void)
 
 	for (int plane = 0; plane < buf->num_planes; plane++) {
 		LOGDEBUG2(L_GRAB, "VideoGrab: OSD plane %d address %p pitch %d offset %d handle %d size %d",
-		       plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
+			   plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
 	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_BGRA);
@@ -2729,9 +2729,9 @@ cSoftHdGrab *cVideoRender::GetGrab(int *size, int *width, int *height, int *x, i
 ///
 void cVideoRender::GetStats(int *duped, int *dropped, int *counter)
 {
-    *duped = m_framesDuped;
-    *dropped = m_framesDropped;
-    *counter = m_startCounter;
+	*duped = m_framesDuped;
+	*dropped = m_framesDropped;
+	*counter = m_startCounter;
 }
 
 //----------------------------------------------------------------------------
