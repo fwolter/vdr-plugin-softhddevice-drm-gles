@@ -975,7 +975,7 @@ cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 
 	Device = new cSoftHdDevice();
 	Audio = Device->Audio;
-	Device->StartThreads();
+	Device->Init();
 }
 
 /**

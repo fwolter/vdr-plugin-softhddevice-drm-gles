@@ -115,6 +115,95 @@ void cDrmPlane::SetParams(uint64_t crtcId, uint64_t fbId,
 }
 
 /**
+ * @brief Add the properties to the mode setting request
+ *
+ * @param ModeReq	pointer to the atomic mode request
+ * @param propName	name of the property to set
+ * @param value		property value
+ */
+int cDrmPlane::SetPropertyRequest(drmModeAtomicReqPtr ModeReq, const char *propName, uint64_t value)
+{
+	int id = -1;
+
+	for (int i = 0; i < GetCountProps(); i++) {
+		if (strcmp(GetPropsInfoName(i), propName) == 0) {
+			id = GetPropsInfoPropId(i);
+			break;
+		}
+	}
+
+	if (id < 0) {
+		LOGERROR("SetPropertyRequest: Unable to find value for property \'%s\'.",
+			propName);
+		return -EINVAL;
+	}
+
+	return drmModeAtomicAddProperty(ModeReq, GetId(), id, value);
+}
+
+/**
+ * @brief Set the plane zpos property
+ *
+ * @param ModeReq	pointer to the atomic mode request
+ */
+void cDrmPlane::SetPlaneZpos(drmModeAtomicReqPtr ModeReq)
+{
+	SetPropertyRequest(ModeReq, "zpos", GetZpos());
+}
+
+/**
+ * @brief Set all other plane properties
+ *
+ * @param ModeReq	pointer to the atomic mode request
+ */
+void cDrmPlane::SetPlane(drmModeAtomicReqPtr ModeReq)
+{
+	SetPropertyRequest(ModeReq, "CRTC_ID", GetCrtcId());
+	SetPropertyRequest(ModeReq, "FB_ID", GetFbId());
+
+	SetPropertyRequest(ModeReq, "CRTC_X", GetCrtcX());
+	SetPropertyRequest(ModeReq, "CRTC_Y", GetCrtcY());
+	SetPropertyRequest(ModeReq, "CRTC_W", GetCrtcW());
+	SetPropertyRequest(ModeReq, "CRTC_H", GetCrtcH());
+
+	SetPropertyRequest(ModeReq, "SRC_X", GetSrcX());
+	SetPropertyRequest(ModeReq, "SRC_Y", GetSrcY());
+	SetPropertyRequest(ModeReq, "SRC_W", GetSrcW() << 16);
+	SetPropertyRequest(ModeReq, "SRC_H", GetSrcH() << 16);
+}
+
+/**
+ * @brief Check, if the plane is able to set the zpos property
+ *
+ * @param fdDrm		drm file descriptor
+ * 
+ * @returns 1		plane can use zpos
+ * @returns 0		plane can't use zpos
+ */
+int cDrmPlane::HasZpos(int fdDrm)
+{
+	drmModeAtomicReqPtr ModeReq;
+	const uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+
+	if (!(ModeReq = drmModeAtomicAlloc())) {
+		LOGERROR("HasZpos: cannot allocate atomic request (%d): %m", errno);
+		return 0;
+	}
+
+	SetPlaneZpos(ModeReq);
+
+	if (drmModeAtomicCommit(fdDrm, ModeReq, flags, NULL) != 0) {
+		LOGDEBUG2(L_DRM, "HasZpos: cannot set atomic mode (%d), don't use zpos change: %m", errno);
+		drmModeAtomicFree(ModeReq);
+		return 0;
+	}
+
+	drmModeAtomicFree(ModeReq);
+
+	return 1;
+}
+
+/**
  * @brief Dump the plane parameter modesetting values
  */
 void cDrmPlane::DumpParameters(void)

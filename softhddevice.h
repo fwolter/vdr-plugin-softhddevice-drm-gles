@@ -162,7 +162,7 @@ public:
 
 // Stream
 		cVideoStream *VideoStream;
-		void StartThreads(void);
+		void Init(void);
 
 // Render
 		cVideoRender *Render;

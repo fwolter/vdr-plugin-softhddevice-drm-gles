@@ -55,6 +55,7 @@ extern "C" {
 #include "threads.h"
 #include "grab.h"
 #include "plane.h"
+#include "drmdevice.h"
 
 #define RENDERBUFFERS 36			///< number of render video buffers
 
@@ -114,7 +115,8 @@ public:
 	void ReadHWPlatform(void);
 	int HardwareQuirks(void) { return m_hardwareQuirks; };
 	void DisableDeint(int);
-	void DisableOglOsd(void);
+	void DisableOglOsd(void) { m_disableOglOsd = 1; };
+	int OglOsdDisabled(void) { return m_disableOglOsd; };
 
 	void SetDisplayResolution(const char *);
 	void SetVideoOutputPosition(const cRect &);
@@ -149,7 +151,7 @@ public:
 	cSoftHdGrab *GetGrab(int *, int *, int *, int *, int *, int);
 
 	// Threads
-	void StartThreads(void);
+	void Prepare(void);
 	int DecodingThreadIsActive(void);
 	void WakeupDecodingThread(void);
 	void WakeupDisplayThread(void);
@@ -157,12 +159,6 @@ public:
 	void ExitDisplayThread(void);
 
 	// DRM -> new class?
-	int SetPlanePropertyRequest(drmModeAtomicReqPtr, uint32_t, const char *, uint64_t);
-	void SetPlaneZpos(drmModeAtomicReqPtr, cDrmPlane *);
-	void SetPlane(drmModeAtomicReqPtr, cDrmPlane *);
-	int CheckZpos(cDrmPlane *);
-	int32_t find_crtc_for_connector(const drmModeRes *, const drmModeConnector *);
-	int init_gbm(int, int, uint32_t, uint64_t);
 	int DrmHandleEvent(void);
 
 	// Frame and buffer
@@ -194,10 +190,10 @@ public:
 
 #ifdef USE_GLES
 	// GLES
-	EGLSurface EglSurface(void) { return m_eglSurface; };
-	EGLDisplay EglDisplay(void) { return m_eglDisplay; };
-	EGLDisplay EglContext(void) { return m_eglContext; };
-	int GlInitiated(void) { return m_glInitiated; };
+	EGLSurface EglSurface(void) { return m_pDrmDevice->EglSurface(); };
+	EGLDisplay EglDisplay(void) { return m_pDrmDevice->EglDisplay(); };
+	EGLContext EglContext(void) { return m_pDrmDevice->EglContext(); };
+	int GlInitiated(void) { return m_pDrmDevice->GlInitiated(); };
 #endif
 
 private:
@@ -214,10 +210,6 @@ private:
 	cMutex m_displayQueue;
 
 	int m_hardwareQuirks;				///< hardware specific quirks
-
-	int m_userReqDisplayWidth;			///< user requested display width
-	int m_userReqDisplayHeight;			///< user requested display height
-	uint32_t m_userReqDisplayRefreshRate;	///< user requested display refresh rate
 
 	AVFrame *m_framesRb[VIDEO_SURFACES_MAX];	///< ringbuffer for frames to be displayed (VIDEO_SURFACES_MAX is defined in thread.h)
 	int m_framesWrite;					///< m_framesRb write pointer
@@ -255,51 +247,29 @@ private:
 	AVRational *m_timebase;				///< pointer to AVCodecContext pkts_timebase
 	int64_t m_pts;						///< current video PTS
 
-	int m_fdDrm;						///< drm file descriptor
-	drmModeModeInfo m_drmModeInfo;
-	drmModeCrtc *m_drmModeCrtcSaved;
-	drmEventContext m_drmEventCtx;
-
 	cRect m_videoRect;					///< rect of the currently displayed video
 	int m_videoIsScaled;				///< true, if the currently displayed video is scaled
 
 	struct drm_buf m_buffer[RENDERBUFFERS];	///< array of drm buffer structs
 	struct drm_buf *m_pBufOsd;			///< pointer to osd drm buffer struct
 	struct drm_buf m_bufBlack;			///< black drm buffer
-	int m_useZpos;						///< is set, if drm hardware can use zpos
-	uint64_t m_zposOverlay;				///< zpos of overlay plane
-	uint64_t m_zposPrimary;				///< zpos of primary plane
-	uint32_t m_connectorId;				///< current connector ID
-	uint32_t m_crtcId;					///< current crtc ID
-	uint32_t m_crtcIndex;				///< current crtc index
-	cDrmPlane m_videoPlane;				///< the video drm plane
-	cDrmPlane m_osdPlane;				///< the osd drm plane
 	struct lastFrame *m_pLastFrame;		///< pointer to last rendered frame struct (e.g. needed for later free)
 	int m_numBuffers;					///< numer of framebuffers currently set up
 	int m_enqueueBufferIdx;				///< index of the current (sw) framebuffer in the array
 	int m_osdShown;						///< set, if osd is shown currently
 
 #ifdef USE_GLES
-	EGLSurface m_eglSurface;
-	EGLDisplay m_eglDisplay;
-	EGLContext m_eglContext;
-	int m_glInitiated;					///< true, if OpenGL/ES context is initiated
-
-	struct gbm_device *m_pGbmDevice;
-	struct gbm_surface *m_pGbmSurface;
 	struct gbm_bo *m_bo;
 	struct gbm_bo *m_pOldBo;
 	struct gbm_bo *m_pNextBo;
-
-	int InitEGL(void);
-	EGLConfig GetEGLConfig(void);
-	struct drm_buf *drm_get_buf_from_bo(struct gbm_bo *);
 #endif
 	int GetFrameFlags(AVFrame *);
 	void SetFrameFlags(AVFrame *, int);
 
 	void SetVideoClock(int64_t);
 	int ShouldWaitForAudio(void);
+
+	cDrmDevice *m_pDrmDevice;
 };
 
 #endif

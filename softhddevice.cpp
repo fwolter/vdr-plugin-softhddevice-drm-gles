@@ -513,9 +513,9 @@ cSoftHdDevice::cSoftHdDevice(void)
 	VideoStream = new cVideoStream(this);
 }
 
-void cSoftHdDevice::StartThreads(void)
+void cSoftHdDevice::Init(void)
 {
-	Render->StartThreads();
+	Render->Prepare();
 }
 
 /**

@@ -66,6 +66,10 @@ public:
 		   uint64_t, uint64_t, uint64_t, uint64_t,
 		   uint64_t, uint64_t, uint64_t, uint64_t);
 
+	void SetPlaneZpos(drmModeAtomicReqPtr);
+	void SetPlane(drmModeAtomicReqPtr);
+	int HasZpos(int);
+
 private:
 	uint32_t m_planeId;                 ///< the plane's ID
 	uint64_t m_type;                    ///< type: DRM_PLANE_TYPE_PRIMARY or DRM_PLANE_TYPE_OVERLAY
@@ -84,6 +88,8 @@ private:
 	uint64_t m_srcW;
 	uint64_t m_srcH;
 	uint64_t m_zpos;
+
+	int SetPropertyRequest(drmModeAtomicReqPtr, const char *, uint64_t);
 };
 
 #endif
