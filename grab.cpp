@@ -51,13 +51,13 @@ void cSoftHdGrab::FreeBuf(void)
 	if (!m_pBuf)
 		return;
 
-	for (int plane = 0; plane < m_pBuf->num_planes; plane++) {
-		if (m_pBuf->size[plane]) {
-		LOGDEBUG2(L_GRAB, "%s: free buf %p (plane %d)", __FUNCTION__, m_pBuf->plane[plane], plane);
-		free(m_pBuf->plane[plane]);
+	for (int plane = 0; plane < m_pBuf->NumPlanes(); plane++) {
+		if (m_pBuf->Size(plane)) {
+		LOGDEBUG2(L_GRAB, "%s: free buf %p (plane %d)", __FUNCTION__, m_pBuf->Plane(plane), plane);
+		free(m_pBuf->Plane(plane));
 		}
 	}
-	free(m_pBuf);
+	delete m_pBuf;
 
 	m_pBuf = nullptr;
 }

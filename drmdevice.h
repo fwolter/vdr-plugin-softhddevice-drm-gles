@@ -98,14 +98,13 @@ public:
     EGLContext EglContext(void) { return m_eglContext; };
 	int GlInitiated(void) { return m_glInitiated; };
     struct gbm_surface *GbmSurface(void) { return m_pGbmSurface; };
-    struct drm_buf *GetBufFromBo(struct gbm_bo *);
+    cDrmBuffer *GetBufFromBo(struct gbm_bo *);
 #endif
     uint32_t ConnectorId(void) { return m_connectorId; };
     int SetPropertyRequest(drmModeAtomicReqPtr, uint32_t, uint32_t, const char *, uint64_t);
     void SaveCrtc(void);
     void RestoreCrtc(void);
     int HandleEvent(void);
-    const struct format_info *FindFormat(uint32_t);
     int CreatePropertyBlob(uint32_t *);
     void InitEvent(void);
 

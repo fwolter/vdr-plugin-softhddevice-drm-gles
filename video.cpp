@@ -130,202 +130,6 @@ void cVideoRender::SetDisplayResolution(const char* resolution)
 	m_pDrmDevice->SetUserReqDisplayRefreshRate(userReqDisplayRefreshRate);
 }
 
-int cVideoRender::SetupFB(struct drm_buf *buf, AVDRMFrameDescriptor *primedata)
-{
-	int fdDrm = m_pDrmDevice->Fd();
-
-	uint64_t modifier[4] = { 0, 0, 0, 0 };
-	uint32_t mod_flags = 0;
-	buf->handle[0] = buf->handle[1] = buf->handle[2] = buf->handle[3] = 0;
-	buf->pitch[0] = buf->pitch[1] = buf->pitch[2] = buf->pitch[3] = 0;
-	buf->offset[0] = buf->offset[1] = buf->offset[2] = buf->offset[3] = 0;
-	buf->nb_objects = buf->num_planes = 0;
-
-	if (primedata) {
-		// we have no DRM objects yet, so return
-		if (!primedata->nb_objects) {
-			LOGWARNING("SetupFB: No primedata objects available!");
-			return 1;
-		}
-
-		AVDRMLayerDescriptor *layer = &primedata->layers[0];
-
-		buf->pix_fmt = layer->format;
-		buf->num_planes = layer->nb_planes;
-		buf->nb_objects = primedata->nb_objects;
-
-		LOGDEBUG2(L_DRM, "SetupFB: PRIMEDATA %d x %d, pix_fmt %4.4s nb_planes %d nb_objects %d",
-			buf->width, buf->height, (char *)&buf->pix_fmt, buf->num_planes, buf->nb_objects);
-
-		// create handles for PrimeFDs
-		for (int object = 0; object < primedata->nb_objects; object++) {
-			if (drmPrimeFDToHandle(fdDrm,
-				primedata->objects[object].fd, &buf->primehandle[object])) {
-
-				LOGERROR("SetupFB: PRIMEDATA Failed to retrieve the Prime Handle %i size %zu (%d): %m",
-					primedata->objects[object].fd,
-					primedata->objects[object].size, errno);
-				return -errno;
-			}
-			buf->fd_prime[object] = primedata->objects[object].fd;
-			buf->size[object] = primedata->objects[object].size;
-			LOGDEBUG2(L_DRM, "SetupFB: PRIMEDATA create handle for PrimeFD (%d|%i): PrimeFD %i ToHandle %i size %zu modifier %" PRIx64 "",
-				object, primedata->nb_objects, primedata->objects[object].fd, buf->primehandle[object],
-				primedata->objects[object].size, primedata->objects[object].format_modifier);
-		}
-
-		// fill the planes
-		for (int plane = 0; plane < layer->nb_planes; plane++) {
-			int object = layer->planes[plane].object_index;
-			uint32_t handle = buf->primehandle[object];
-			if (handle) {
-				buf->handle[plane] = handle;
-				buf->pitch[plane] = layer->planes[plane].pitch;
-				buf->offset[plane] = layer->planes[plane].offset;
-				buf->obj_index[plane] = object;
-				if (primedata->objects[object].format_modifier)
-					modifier[plane] = primedata->objects[object].format_modifier;
-
-				LOGDEBUG2(L_DRM, "SetupFB: PRIMEDATA fill plane %d: handle %d object_index %i pitch %d offset %d size %d modifier %" PRIx64 " (buf->plane not mapped!)",
-					plane, buf->handle[plane], buf->obj_index[plane], buf->pitch[plane], buf->offset[plane], buf->size[plane], modifier[plane]);
-			}
-		}
-		if (modifier[0] && modifier[0] != DRM_FORMAT_MOD_INVALID)
-			mod_flags = DRM_MODE_FB_MODIFIERS;
-	} else {
-		const struct format_info *format_info = m_pDrmDevice->FindFormat(buf->pix_fmt);
-		if (!format_info) {
-			LOGERROR("SetupFB: No suitable format found!");
-			return 1;
-		}
-
-		buf->num_planes = format_info->num_planes;
-
-		LOGDEBUG2(L_DRM, "SetupFB:  %d x %d, pix_fmt %4.4s nb_planes %d",
-			buf->width, buf->height, (char *)&buf->pix_fmt, buf->num_planes);
-
-		for (int plane = 0; plane < format_info->num_planes; plane++) {
-			const struct format_plane_info *plane_info = &format_info->planes[plane];
-
-			struct drm_mode_create_dumb creq;
-			creq.height = buf->height / plane_info->ysub;
-			creq.width = buf->width / plane_info->xsub;
-			creq.bpp = plane_info->bitspp;
-
-			if (drmIoctl(fdDrm, DRM_IOCTL_MODE_CREATE_DUMB, &creq) < 0){
-				LOGERROR("SetupFB: cannot create dumb buffer %dx%d@%d (%d): %m",
-					creq.width, creq.height, creq.bpp, errno);
-				return -errno;
-			}
-
-			buf->handle[plane] = creq.handle;
-			buf->pitch[plane] = creq.pitch;
-			buf->size[plane] = creq.size;
-
-			struct drm_mode_map_dumb mreq;
-			memset(&mreq, 0, sizeof(struct drm_mode_map_dumb));
-			mreq.handle = buf->handle[plane];
-
-			if (drmIoctl(fdDrm, DRM_IOCTL_MODE_MAP_DUMB, &mreq)){
-				LOGERROR("SetupFB: cannot prepare dumb buffer for mapping (%d): %m", errno);
-				return -errno;
-			}
-
-			buf->plane[plane] = (uint8_t *)mmap(0, creq.size, PROT_READ | PROT_WRITE, MAP_SHARED, fdDrm, mreq.offset);
-
-			if (buf->plane[plane] == MAP_FAILED) {
-				LOGERROR("SetupFB: cannot map dumb buffer (%d): %m", errno);
-				return -errno;
-			}
-
-			memset(buf->plane[plane], 0, buf->size[plane]);
-
-			LOGDEBUG2(L_DRM, "SetupFB: fill plane %d: handle %d pitch %d offset %d size %d address %p",
-				plane, buf->handle[plane], buf->pitch[plane], buf->offset[plane], buf->size[plane], buf->plane[plane]);
-		}
-	}
-
-	int ret = -1;
-	ret = drmModeAddFB2WithModifiers(fdDrm, buf->width, buf->height, buf->pix_fmt,
-					 buf->handle, buf->pitch, buf->offset, modifier, &buf->fb_id, mod_flags);
-
-	if (ret) {
-		if (mod_flags)
-			LOGERROR("SetupFB: cannot create modifiers framebuffer (%d): %m", errno);
-
-		ret = drmModeAddFB2(fdDrm, buf->width, buf->height, buf->pix_fmt,
-			buf->handle, buf->pitch, buf->offset, &buf->fb_id, 0);
-	}
-
-	if (ret)
-		LOGFATAL("SetupFB: cannot create framebuffer (%d): %m", errno);
-
-	LOGDEBUG2(L_DRM, "SetupFB: Added %sFB fb_id %d width %d height %d pix_fmt %4.4s",
-		primedata ? "primedata " : "", buf->fb_id, buf->width, buf->height, (char *)&buf->pix_fmt);
-
-	buf->dirty = 1;
-	return 0;
-}
-
-void cVideoRender::DestroyFB(struct drm_buf *buf)
-{
-	struct drm_mode_destroy_dumb dreq;
-	int fdDrm = m_pDrmDevice->Fd();
-
-	LOGDEBUG2(L_DRM, "DestroyFB: destroy FB %d", buf->fb_id);
-
-	for (int i = 0; i < buf->num_planes; i++) {
-		if (buf->plane[i]) {
-			if (munmap(buf->plane[i], buf->size[i]))
-				LOGERROR("DestroyFB: failed unmap FB (%d): %m", errno);
-		}
-	}
-
-	if (drmModeRmFB(fdDrm, buf->fb_id) < 0)
-		LOGERROR("DestroyFB: cannot rm FB (%d): %m", errno);
-
-	if (buf->fd_prime[0] && buf->swbuffer) {
-		if (close(buf->fd_prime[0]))
-			LOGERROR("DestroyFB: error closing prime fd %d (%d): %m", buf->fd_prime[0], errno);
-		buf->fd_prime[0] = 0;
-	}
-
-	for (int i = 0; i < buf->num_planes; i++) {
-		if (buf->plane[i]) {
-			memset(&dreq, 0, sizeof(dreq));
-			dreq.handle = buf->handle[i];
-
-			if (drmIoctl(fdDrm, DRM_IOCTL_MODE_DESTROY_DUMB, &dreq) < 0)
-				LOGERROR("DestroyFB: cannot destroy dumb buffer (%d): %m", errno);
-			buf->handle[i] = 0;
-
-		}
-
-		buf->plane[i] = 0;
-		buf->size[i] = 0;
-		buf->pitch[i] = 0;
-		buf->offset[i] = 0;
-		buf->obj_index[i] = 0;
-	}
-
-	for (int i = 0; i < buf->nb_objects; i++) {
-		if (buf->primehandle[i]) {
-		// this can happen, when we SetPlayMode 0 while in trickspeed
-		// does not show negative effects, but its not nice though -> TODO
-			if (drmIoctl(fdDrm, DRM_IOCTL_GEM_CLOSE, &buf->primehandle[i]) < 0)
-				LOGERROR("DestroyFB: cannot close handle %d FB %d GEM (%d): %m", buf->primehandle[i], buf->fb_id, errno);
-		}
-	}
-
-	buf->width = 0;
-	buf->height = 0;
-	buf->fb_id = 0;
-	buf->trickspeed = 0;
-	buf->dirty = 0;
-	buf->swbuffer = 0;
-	buf->num_planes = 0;
-}
-
 ///
 /// Clean DRM
 ///
@@ -355,12 +159,12 @@ void cVideoRender::CleanUp(void)
 
 	// Destroy FBs
 	for (i = 0; i < RENDERBUFFERS; ++i) {
-		if (m_buffer[i].dirty == 0)
+		if (!m_buffer[i].IsDirty())
 			continue;
 
 		// TODO: can m_pLastFrame->buf ever be the black buffer??
-		if (m_closing || (m_buffer[i].fb_id != m_pLastFrame->buf->fb_id)) {
-			DestroyFB(&m_buffer[i]);
+		if (m_closing || (m_buffer[i].Id() != m_pLastFrame->buf->Id())) {
+			m_buffer[i].Destroy();
 		}
 	}
 
@@ -377,78 +181,6 @@ void cVideoRender::CleanUp(void)
 	LOGDEBUG("CleanUp: DRM cleaned (m_framesFilled %d m_numFramesToFilter %d)", atomic_read(&m_framesFilled), atomic_read(&m_numFramesToFilter));
 }
 
-
-///
-///	Clone drm buffer
-///
-///	@param dst[out]		dst video buffer
-///	@param src[in]		src video buffer
-///
-static void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
-{
-	struct drm_buf *buf = (struct drm_buf *)malloc(sizeof(struct drm_buf));
-
-	buf->width = src->width;
-	buf->height = src->height;
-	buf->fb_id = src->fb_id;
-	buf->pix_fmt = src->pix_fmt;
-	buf->num_planes = src->num_planes;
-	buf->trickspeed = src->trickspeed;
-	buf->swbuffer = src->swbuffer;
-	buf->nb_objects = src->nb_objects;
-
-	for (int object = 0; object < buf->nb_objects; object++) {
-		buf->fd_prime[object] = src->fd_prime[object];
-	}
-
-	for (int i = 0; i < src->num_planes; i++) {
-		buf->size[i] = src->size[i];
-		buf->pitch[i] = src->pitch[i];
-		buf->handle[i] = src->handle[i];
-		buf->offset[i] = src->offset[i];
-		buf->obj_index[i] = src->obj_index[i];
-	}
-
-	void *src_buffer = NULL;
-	void *dst_buffer = NULL;
-
-	// planes aren't mmapped, do it (PRIME)
-	if (!src->plane[0]) {
-		for (int object = 0; object < buf->nb_objects; object++) {
-			// memcpy mmapped data
-			dst_buffer = malloc(src->size[object]);
-			src_buffer = mmap(NULL, src->size[object], PROT_READ, MAP_SHARED, src->fd_prime[object], 0);
-			if (src_buffer == MAP_FAILED) {
-				LOGERROR("VideoCloneBufB: cannot map buffer size %d prime_fd %d (%d): %m", src->size[object], src->fd_prime[object], errno);
-				return;
-			}
-
-			LOGDEBUG2(L_GRAB, "VideoCloneBuf: Copy %p to %p", src_buffer, dst_buffer);
-			memcpy(dst_buffer, src_buffer, src->size[object]);
-			munmap(src_buffer, src->size[object]);
-			for (int plane = 0; plane < buf->num_planes; plane++) {
-				if (buf->obj_index[plane] == object) {
-					buf->plane[plane] = (uint8_t *)dst_buffer;
-					LOGDEBUG2(L_GRAB, "VideoCloneBuf: buf->plane[%d] gets %p (object %d)", plane, dst_buffer, object);
-				}
-			}
-		}
-	} else {
-		for (int plane = 0; plane < buf->num_planes; plane++) {
-			dst_buffer = malloc(buf->size[plane]);
-			memcpy(dst_buffer, src->plane[plane], src->size[plane]);
-			buf->plane[plane] = (uint8_t *)dst_buffer;
-		}
-	}
-
-	for (int plane = 0; plane < buf->num_planes; plane++) {
-		LOGDEBUG2(L_GRAB, "VideoCloneBuf: Cloned plane %d address %p pitch %d offset %d handle %d size %d",
-			   plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
-	}
-
-	*dst = buf;
-}
-
 ///
 ///	Commit the frame to the hardware
 ///
@@ -459,7 +191,7 @@ static void VideoCloneBuf(struct drm_buf **dst, struct drm_buf *src)
 //	retval -2	something went wrong, no modesetting was done
 //
 ///
-int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
+int cVideoRender::CommitBuffer(cDrmBuffer *buf, int skip_video)
 {
 	int dirty = 0; // 0: no commit, 1: osd only, 2: video only, 3: both
 	AVFrame *frame = NULL;
@@ -486,7 +218,7 @@ int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
 		goto skip_video;
 
 	if (buf)
-		frame = buf->frame;
+		frame = buf->Frame();
 
 	// handle the video plane
 	// Get video size and position and set crtc rect
@@ -520,9 +252,9 @@ int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
 		}
 	}
 
-	videoPlane->SetParams(m_pDrmDevice->CrtcId(), buf->fb_id,
+	videoPlane->SetParams(m_pDrmDevice->CrtcId(), buf->Id(),
 		DispX + (DispWidth - PicWidth) / 2, DispY + (DispHeight - PicHeight) / 2, PicWidth, PicHeight,
-		0, 0, buf->width, buf->height);
+		0, 0, buf->Width(), buf->Height());
 
 	// set dimensions for grab early, because we might skip this at the next frame
 	m_lastVideoGrab.Set(DispX + (DispWidth - PicWidth) / 2,
@@ -536,7 +268,7 @@ int cVideoRender::CommitBuffer(struct drm_buf *buf, int skip_video)
 skip_video:
 	// handle the osd plane
 	// We had draw activity on the osd buffer
-	if (m_pBufOsd && m_pBufOsd->dirty) {
+	if (m_pBufOsd && m_pBufOsd->IsDirty()) {
 		if (m_pDrmDevice->UseZpos()) {
 			videoPlane->SetZpos(m_osdShown ? m_pDrmDevice->ZposPrimary() : m_pDrmDevice->ZposOverlay());
 			osdPlane->SetZpos(m_osdShown ? m_pDrmDevice->ZposOverlay() : m_pDrmDevice->ZposPrimary());
@@ -548,31 +280,29 @@ skip_video:
 				osdPlane->GetId(), osdPlane->GetZpos());
 		}
 
-		osdPlane->SetParams(m_pDrmDevice->CrtcId(), m_pBufOsd->fb_id,
-			0, 0, m_osdShown ? m_pBufOsd->width : 0, m_osdShown ? m_pBufOsd->height : 0,
-			0, 0, m_osdShown ? m_pBufOsd->width : 0, m_osdShown ? m_pBufOsd->height : 0);
+		osdPlane->SetParams(m_pDrmDevice->CrtcId(), m_pBufOsd->Id(),
+			0, 0, m_osdShown ? m_pBufOsd->Width() : 0, m_osdShown ? m_pBufOsd->Height() : 0,
+			0, 0, m_osdShown ? m_pBufOsd->Width() : 0, m_osdShown ? m_pBufOsd->Height() : 0);
 
 		osdPlane->SetPlane(ModeReq);
 		dirty += 1;
 		LOGDEBUG2(L_DRM, "DisplayFrame: SetPlane OSD %d (fb = %" PRIu64 ")", m_osdShown, osdPlane->GetFbId());
-		m_pBufOsd->dirty = 0;
+		m_pBufOsd->MarkClean();
 	}
 
 	if (m_startgrab) {
 		if (m_pBufOsd && m_osdShown) {
 			LOGDEBUG2(L_GRAB, "DisplayFrame: Trigger osd grab arrived");
-			struct drm_buf *osdBuf = NULL;
-			VideoCloneBuf(&osdBuf, m_pBufOsd);
+			cDrmBuffer *osdBuf = new cDrmBuffer(m_pBufOsd);
 			// dimensions should be the size on screen
-			m_grabOsd.SetRect(0, 0, m_pBufOsd->width, m_pBufOsd->height);
+			m_grabOsd.SetRect(0, 0, m_pBufOsd->Width(), m_pBufOsd->Height());
 			m_grabOsd.SetBuf(osdBuf);
 		}
 
-		struct drm_buf *pbuf = buf ? buf : (m_pLastFrame->buf ? m_pLastFrame->buf : NULL);
+		cDrmBuffer *pbuf = buf ? buf : (m_pLastFrame->buf ? m_pLastFrame->buf : NULL);
 		if (pbuf) {
 			LOGDEBUG2(L_GRAB, "DisplayFrame: Trigger video grab arrived");
-			struct drm_buf *videoBuf = NULL;
-			VideoCloneBuf(&videoBuf, pbuf);
+			cDrmBuffer *videoBuf = new cDrmBuffer(pbuf);
 			// use dimensions which have been set earlier
 			m_grabVideo.SetRect(m_lastVideoGrab.X(), m_lastVideoGrab.Y(), m_lastVideoGrab.Width(), m_lastVideoGrab.Height());
 			m_grabVideo.SetBuf(videoBuf);
@@ -610,7 +340,7 @@ skip_video:
 //	retval -1	drop frame
 //
 ///
-int cVideoRender::Sync(AVFrame *frame, int *skip_video, struct drm_buf **buf)
+int cVideoRender::Sync(AVFrame *frame, int *skip_video, cDrmBuffer **buf)
 {
 	int64_t audio_pts;
 	int64_t video_pts;
@@ -807,62 +537,59 @@ void cVideoRender::MarkAsStillpictureFrame(AVFrame *frame)
 //	retval 1	sth went wrong
 //
 ///
-int cVideoRender::GetBuffer(AVFrame *frame, struct drm_buf **buf)
+cDrmBuffer *cVideoRender::GetBuffer(AVFrame *frame)
 {
-	struct drm_buf *pbuf = NULL;
+	cDrmBuffer *pbuf = nullptr;
 	int i;
 
 	AVDRMFrameDescriptor *primedata = (AVDRMFrameDescriptor *)frame->data[0];
 
 	// search for a made fd / FB combination
 	for (i = 0; i < RENDERBUFFERS; i++) {
-		if (m_flushLastFrame && !m_buffer[i].swbuffer)
+		if (m_flushLastFrame && !m_buffer[i].IsSwBuffer())
 			break;
 
-		if (m_buffer[i].trickspeed && !m_buffer[i].swbuffer)
+		if (m_buffer[i].IsTrickspeedBuffer() && !m_buffer[i].IsSwBuffer())
 			break;
 
-		if (m_buffer[i].dirty == 0)
+		if (!m_buffer[i].IsDirty())
 			continue;
 
-		if (m_buffer[i].fd_prime[0] == primedata->objects[0].fd) {
+		if (m_buffer[i].FdPrime(0) == primedata->objects[0].fd) {
 			pbuf = &m_buffer[i];
 			break;
 		}
 	}
 
 	// search for a "free" buffer
-	if (pbuf == 0) {
+	if (pbuf == nullptr) {
 		for (i = 0; i < RENDERBUFFERS; i++) {
-			if (m_buffer[i].dirty == 0)
+			if (!m_buffer[i].IsDirty())
 				break;
 		}
-		if (m_buffer[i].dirty) {
+		if (m_buffer[i].IsDirty()) {
 			LOGDEBUG("GetBuffer: SHOULD NOT HAPPEN! no free buffer available!");
-			return 1;
+			return nullptr;
 		}
 
 		pbuf = &m_buffer[i];
+		if (pbuf->Setup(m_pDrmDevice->Fd(), (uint32_t)frame->width, (uint32_t)frame->height,
+		               0, primedata))
+			return nullptr;
 
-		pbuf->width = (uint32_t)frame->width;
-		pbuf->height = (uint32_t)frame->height;
-
-		if (SetupFB(pbuf, primedata))
-			return 1;
-
-		m_buffer[i].swbuffer = 0;
+		m_buffer[i].MarkAsHwBuffer();
 	}
 
-	if (pbuf == 0) {
+	if (pbuf == nullptr) {
 		LOGDEBUG("GetBuffer: SHOULD NOT HAPPEN! failed, no buffer found!");
-		return 1;
+		return nullptr;
 	}
 
-	pbuf->trickspeed = IsTrickspeedFrame(frame);
+	pbuf->SetTrickspeed(IsTrickspeedFrame(frame));
 
-	*buf = pbuf;
-	return 0;
+	return pbuf;
 }
+
 
 ///
 ///	Check if we should wait for audio to come up with video
@@ -895,7 +622,7 @@ int cVideoRender::ShouldWaitForAudio(void) {
 ///
 int cVideoRender::DisplayFrame(void)
 {
-	struct drm_buf *buf = NULL;
+	cDrmBuffer *buf = NULL;
 	AVFrame *frame = NULL;
 	int skip_video = 0;
 	int timeout; // ms
@@ -942,7 +669,7 @@ dequeue:
 		}
 
 		// wait max. 15ms in case we have an osd
-		if (m_pBufOsd && m_pBufOsd->dirty && !timeout--) {
+		if (m_pBufOsd && m_pBufOsd->IsDirty() && !timeout--) {
 			skip_video = 1;
 			LOGDEBUG2(L_DRM, "DisplayFrame: no video but osd, skip video");
 			goto page_flip;
@@ -1005,12 +732,13 @@ dequeue:
 
 skip_sync:
 	// get suitable framebuffer
-	if (GetBuffer(frame, &buf)) {
+	buf = GetBuffer(frame);
+	if (!buf) {
 		av_frame_free(&frame);
 		return 1;
 	}
 
-	buf->frame = frame;
+	buf->SetFrame(frame);
 
 page_flip:
 	// no modesetting was done
@@ -1035,7 +763,7 @@ page_flip:
 	if (m_pLastFrame->frame) {
 		// if the m_pLastFrame was a trickframe or a flush is forced, destroy the FB
 		if (m_flushLastFrame || m_pLastFrame->trickspeed) {
-			DestroyFB(m_pLastFrame->buf);
+			m_pLastFrame->buf->Destroy();
 			m_pLastFrame->buf = nullptr;
 			m_pLastFrame->trickspeed = 0;
 			m_flushLastFrame = 0;
@@ -1044,13 +772,13 @@ page_flip:
 	}
 
 	// TODO: the whole m_pLastFrame handling has to be done better!
-	if (buf && buf->fb_id != m_bufBlack.fb_id) {
-		m_pLastFrame->frame = buf->frame;
+	if (buf && buf->Id() != m_bufBlack.Id()) {
+		m_pLastFrame->frame = buf->Frame();
 		m_pLastFrame->buf = buf;
-		m_pLastFrame->trickspeed = buf->trickspeed;
+		m_pLastFrame->trickspeed = buf->IsTrickspeedBuffer();
 	}
 
-	if (buf && buf->fb_id == m_bufBlack.fb_id) {
+	if (buf && buf->Id() == m_bufBlack.Id()) {
 		m_pLastFrame->buf = nullptr;
 		m_pLastFrame->trickspeed = 0;
 	}
@@ -1075,10 +803,10 @@ void cVideoRender::OsdClear(void)
 {
 #ifdef USE_GLES
 	if (m_disableOglOsd) {
-		memset((void *)m_pBufOsd->plane[0], 0,
-			(size_t)(m_pBufOsd->pitch[0] * m_pBufOsd->height));
+		memset((void *)m_pBufOsd->Plane(0), 0,
+			(size_t)(m_pBufOsd->Pitch(0) * m_pBufOsd->Height()));
 	} else {
-		struct drm_buf *buf;
+		cDrmBuffer *buf;
 
 		EGL_CHECK(eglSwapBuffers(m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface()));
 		m_pNextBo = gbm_surface_lock_front_buffer(m_pDrmDevice->GbmSurface());
@@ -1100,14 +828,14 @@ void cVideoRender::OsdClear(void)
 		m_pOldBo = m_bo;
 		m_bo = m_pNextBo;
 
-		LOGDEBUG2(L_OPENGL, "OsdClear(GL): eglSwapBuffers m_eglDisplay %p eglSurface %p (%i x %i, %i)", m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->width, buf->height, buf->pitch[0]);
+		LOGDEBUG2(L_OPENGL, "OsdClear(GL): eglSwapBuffers m_eglDisplay %p eglSurface %p (%i x %i, %i)", m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->Width(), buf->Height(), buf->Pitch(0));
 	}
 #else
-	memset((void *)m_pBufOsd->plane[0], 0,
-		(size_t)(m_pBufOsd->pitch[0] * m_pBufOsd->height));
+	memset((void *)m_pBufOsd->Plane(0), 0,
+		(size_t)(m_pBufOsd->Pitch(0) * m_pBufOsd->Height()));
 #endif
 
-	m_pBufOsd->dirty = 1;
+	m_pBufOsd->MarkDirty();
 	m_osdShown = 0;
 }
 
@@ -1132,13 +860,13 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
 #ifdef USE_GLES
 	if (m_disableOglOsd) {
 		LOGDEBUG2(L_OSD, "VideoOsdDrawARGB width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d",
-			   width, height, pitch, argb, x, y, m_pBufOsd->pitch[0], xi, yi);
+			   width, height, pitch, argb, x, y, m_pBufOsd->Pitch(0), xi, yi);
 		for (int i = 0; i < height; ++i) {
-			memcpy(m_pBufOsd->plane[0] + x * 4 + (i + y) * m_pBufOsd->pitch[0],
-				argb + i * pitch, MIN((size_t)pitch, m_pBufOsd->pitch[0]));
+			memcpy(m_pBufOsd->Plane(0) + x * 4 + (i + y) * m_pBufOsd->Pitch(0),
+				argb + i * pitch, MIN((size_t)pitch, m_pBufOsd->Pitch(0)));
 		}
 	} else {
-		struct drm_buf *buf;
+		cDrmBuffer *buf;
 
 		EGL_CHECK(eglSwapBuffers(m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface()));
 		m_pNextBo = gbm_surface_lock_front_buffer(m_pDrmDevice->GbmSurface());
@@ -1160,15 +888,15 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
 		m_pOldBo = m_bo;
 		m_bo = m_pNextBo;
 
-		LOGDEBUG2(L_OPENGL, "OsdDrawARGB(GL): eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->width, buf->height, buf->pitch[0]);
+		LOGDEBUG2(L_OPENGL, "OsdDrawARGB(GL): eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->Width(), buf->Height(), buf->Pitch(0));
 	}
 #else
 	for (int i = 0; i < height; ++i) {
-		memcpy(m_pBufOsd->plane[0] + x * 4 + (i + y) * m_pBufOsd->pitch[0],
+		memcpy(m_pBufOsd->Plane(0) + x * 4 + (i + y) * m_pBufOsd->Pitch(0)),
 			argb + i * pitch, (size_t)pitch);
 	}
 #endif
-	m_pBufOsd->dirty = 1;
+	m_pBufOsd->MarkDirty();
 	m_osdShown = 1;
 }
 
@@ -1235,7 +963,7 @@ static void ReleaseFrame( __attribute__ ((unused)) void *opaque, uint8_t *data)
 void cVideoRender::EnqueueFB(AVFrame *inframe)
 {
 	// inframe->format is always NV12!
-	struct drm_buf *buf = 0;
+	cDrmBuffer *buf = nullptr;
 	int fdDrm = m_pDrmDevice->Fd();
 
 	AVDRMFrameDescriptor * primedata;
@@ -1244,29 +972,28 @@ void cVideoRender::EnqueueFB(AVFrame *inframe)
 
 	if (IsTrickspeedFrame(inframe)) {	// if we have trickspeed, always use a free buffer, because its destroyed in DisplayFrame after rendering
 		for (i = 0; i < RENDERBUFFERS; i++) {
-			if (m_buffer[i].dirty == 0)
+			if (!m_buffer[i].IsDirty())
 				break;
 		}
-		if (m_buffer[i].dirty)
+		if (m_buffer[i].IsDirty())
 			LOGFATAL("EnqueueFB: SHOULD NOT HAPPEN! no free buffer available!");
 
 		buf = &m_buffer[i];
-		buf->width = (uint32_t)inframe->width;
-		buf->height = (uint32_t)inframe->height;
-		buf->pix_fmt = DRM_FORMAT_NV12;
-
-		if (SetupFB(buf, NULL)) {
-			LOGERROR("EnqueueFB: SetupFB FB %i x %i failed",
-				buf->width, buf->height);
+		if (buf->Setup(fdDrm, (uint32_t)inframe->width, (uint32_t)inframe->height,
+		               DRM_FORMAT_NV12, NULL)) {
+			LOGERROR("EnqueueFB: SetupFB FB %i x %i failed", buf->Width(), buf->Height());
 		}
-		if (drmPrimeHandleToFD(fdDrm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime[0]))
+
+		int primefd;
+		if (drmPrimeHandleToFD(fdDrm, buf->Handle(0), DRM_CLOEXEC | DRM_RDWR, &primefd))
 			LOGERROR("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+		buf->SetFdPrime(0, primefd);
 	} else {
 		// create some buffers up to VIDEO_SURFACES_MAX + 2
 get_buffer:
 		buf = &m_buffer[m_enqueueBufferIdx];
 		if (m_numBuffers < VIDEO_SURFACES_MAX + 2) {
-			if (buf->dirty) {
+			if (buf->IsDirty()) {
 				// skip the buffer, because it is either referenced by m_pLastFrame or is already setup
 				// this should be safe, because we only have 1 m_pLastFrame, which should be destroyed as soon as
 				// a new buffer arrives in DisplayFrame
@@ -1276,31 +1003,29 @@ get_buffer:
 				goto get_buffer;
 			}
 
-			buf->width = (uint32_t)inframe->width;
-			buf->height = (uint32_t)inframe->height;
-			buf->pix_fmt = DRM_FORMAT_NV12;
-
-			if (SetupFB(buf, NULL)) {
-				LOGERROR("EnqueueFB: SetupFB FB %i x %i failed",
-					buf->width, buf->height);
+			if (buf->Setup(fdDrm, (uint32_t)inframe->width, (uint32_t)inframe->height,
+			               DRM_FORMAT_NV12, NULL)) {
+				LOGERROR("EnqueueFB: SetupFB FB %i x %i failed", buf->Width(), buf->Height());
 			}
 
 			m_numBuffers++;
 
-			if (drmPrimeHandleToFD(fdDrm, buf->handle[0], DRM_CLOEXEC | DRM_RDWR, &buf->fd_prime[0]))
+			int primefd;
+			if (drmPrimeHandleToFD(fdDrm, buf->Handle(0), DRM_CLOEXEC | DRM_RDWR, &primefd))
 				LOGERROR("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+			buf->SetFdPrime(0, primefd);
 		}
 	}
 
 	// mark this buffer as a software decoded buffer
-	buf->swbuffer = 1;
+	buf->MarkAsSwBuffer();
 
 	for (i = 0; i < inframe->height; ++i) {
-		memcpy(buf->plane[0] + i * buf->pitch[0],
+		memcpy(buf->Plane(0) + i * buf->Pitch(0),
 			inframe->data[0] + i * inframe->linesize[0], inframe->linesize[0]);
 	}
 	for (i = 0; i < inframe->height / 2; ++i) {
-		memcpy(buf->plane[1] + i * buf->pitch[1],
+		memcpy(buf->Plane(1) + i * buf->Pitch(1),
 			inframe->data[1] + i * inframe->linesize[1], inframe->linesize[1]);
 	}
 
@@ -1318,7 +1043,7 @@ get_buffer:
 		MarkAsStillpictureFrame(frame);
 
 	primedata = (AVDRMFrameDescriptor *)av_mallocz(sizeof(AVDRMFrameDescriptor));
-	primedata->objects[0].fd = buf->fd_prime[0];
+	primedata->objects[0].fd = buf->FdPrime(0);
 	frame->data[0] = (uint8_t *)primedata;
 	frame->buf[0] = av_buffer_create((uint8_t *)primedata, sizeof(*primedata),
 				ReleaseFrame, NULL, AV_BUFFER_FLAG_READONLY);
@@ -1693,7 +1418,7 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 {
 	int size;
 	cSoftHdGrab *grab = &m_grabVideo;
-	struct drm_buf *buf = grab->GetBuf();
+	cDrmBuffer *buf = grab->GetBuf();
 
 	// early return if buf = NULL
 	if (!buf) {
@@ -1702,9 +1427,9 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 		return;
 	}
 
-	for (int plane = 0; plane < buf->num_planes; plane++) {
+	for (int plane = 0; plane < buf->NumPlanes(); plane++) {
 		LOGDEBUG2(L_GRAB, "ConvertVideoBufToRgb: VIDEO plane %d address %p pitch %d offset %d handle %d size %d",
-			   plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
+			   plane, buf->Plane(plane), buf->Pitch(plane), buf->Offset(plane), buf->Handle(plane), buf->Size(plane));
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
 	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_RGB24);
@@ -1724,7 +1449,7 @@ void cVideoRender::ConvertOsdBufToRgb(void)
 {
 	int size;
 	cSoftHdGrab *grab = &m_grabOsd;
-	struct drm_buf *buf = grab->GetBuf();
+	cDrmBuffer *buf = grab->GetBuf();
 
 	// early return if buf = NULL
 	if (!buf) {
@@ -1733,9 +1458,9 @@ void cVideoRender::ConvertOsdBufToRgb(void)
 		return;
 	}
 
-	for (int plane = 0; plane < buf->num_planes; plane++) {
+	for (int plane = 0; plane < buf->NumPlanes(); plane++) {
 		LOGDEBUG2(L_GRAB, "VideoGrab: OSD plane %d address %p pitch %d offset %d handle %d size %d",
-			   plane, buf->plane[plane], buf->pitch[plane], buf->offset[plane], buf->handle[plane], buf->size[plane]);
+			   plane, buf->Plane(plane), buf->Pitch(plane), buf->Offset(plane), buf->Handle(plane), buf->Size(plane));
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
 	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_BGRA);
@@ -1844,7 +1569,7 @@ static size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 	return character;
 }
 
-void cVideoRender::ReadHWPlatform(void)
+static int ReadHWPlatform(void)
 {
 	char *txt_buf;
 	char *read_ptr;
@@ -1852,12 +1577,12 @@ void cVideoRender::ReadHWPlatform(void)
 	size_t read_size;
 
 	txt_buf = (char *) calloc(bufsize, sizeof(char));
-	m_hardwareQuirks = 0;
+	int hardwareQuirks = 0;
 
 	read_size = ReadLineFromFile(txt_buf, bufsize, "/sys/firmware/devicetree/base/compatible");
 	if (!read_size) {
 		free((void *)txt_buf);
-		return;
+		return 0;
 	}
 
 	read_ptr = txt_buf;
@@ -1880,22 +1605,22 @@ void cVideoRender::ReadHWPlatform(void)
 	while(read_size) {
 		if (strstr(read_ptr, "bcm2837")) {
 			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2837 (Raspberry Pi 2/3) found");
-			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
+			hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "bcm2711")) {
 			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2711 (Raspberry Pi 4 Model B, Compute Module 4, Pi 400) found");
-			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
+			hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "bcm2712")) {
 			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2712 (Raspberry Pi 5, Compute Module 5, Pi 500) found");
-			m_hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
+			hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "amlogic")) {
 			LOGDEBUG2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
-			m_hardwareQuirks |= QUIRK_CODEC_NEEDS_EXT_INIT
+			hardwareQuirks |= QUIRK_CODEC_NEEDS_EXT_INIT
 					   |  QUIRK_CODEC_SKIP_FIRST_FRAMES
 					   |  QUIRK_NO_HW_DEINT;
 			break;
@@ -1905,6 +1630,8 @@ void cVideoRender::ReadHWPlatform(void)
 		read_ptr = (char *)&read_ptr[(strlen(read_ptr) + 1)];
 	}
 	free((void *)txt_buf);
+
+	return hardwareQuirks;
 }
 
 ///
@@ -1912,56 +1639,41 @@ void cVideoRender::ReadHWPlatform(void)
 ///
 void cVideoRender::Init(void)
 {
-	unsigned int i;
 	if (m_pDrmDevice->Init())
 		LOGFATAL("VideoInit: FindDevice() failed");
 
 	cDrmPlane *videoPlane = m_pDrmDevice->VideoPlane();
 	cDrmPlane *osdPlane = m_pDrmDevice->OsdPlane();
 
-	ReadHWPlatform();
+	m_hardwareQuirks = ReadHWPlatform();
 
-	m_buffer[0].width = m_buffer[1].width = 0;
-	m_buffer[0].height = m_buffer[1].height = 0;
-	m_buffer[0].pix_fmt = m_buffer[1].pix_fmt = DRM_FORMAT_NV12;
+//	m_buffer[0]->Init(0, 0, DRM_FORMAT_NV12, m_pDrmDevice->Fd());
+//	m_buffer[1]->Init(0, 0, DRM_FORMAT_NV12, m_pDrmDevice->Fd());
 
 	// osd FB
 #ifndef USE_GLES
 	if (!m_pBufOsd)
-		m_pBufOsd = calloc(1, sizeof(struct drm_buf));
-	m_pBufOsd->pix_fmt = DRM_FORMAT_ARGB8888;
-	m_pBufOsd->width = m_pDrmDevice->DisplayWidth();
-	m_pBufOsd->height = m_pDrmDevice->DisplayHeight();
-	if (SetupFB(m_pBufOsd, NULL)){
+		m_pBufOsd = new cDrmBuffer();
+	
+	if (m_pBufOsd->Setup(m_pDrmDevice->Fd(), m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(), DRM_FORMAT_ARGB8888, NULL)) {
 		LOGFATAL("VideoOsdInit: SetupFB FB OSD failed!");
 	}
 #else
 	if (m_disableOglOsd) {
 		if (!m_pBufOsd)
-			m_pBufOsd = (struct drm_buf *)calloc(1, sizeof(struct drm_buf));
-		m_pBufOsd->pix_fmt = DRM_FORMAT_ARGB8888;
-		m_pBufOsd->width = m_pDrmDevice->DisplayWidth();
-		m_pBufOsd->height = m_pDrmDevice->DisplayHeight();
-		if (SetupFB(m_pBufOsd, NULL)){
+			m_pBufOsd = new cDrmBuffer();
+
+		if (m_pBufOsd->Setup(m_pDrmDevice->Fd(), m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(), DRM_FORMAT_ARGB8888, NULL)) {
 			LOGFATAL("VideoOsdInit: SetupFB FB OSD failed!");
 		}
 	}
 #endif
 
 	// black fb
-	m_bufBlack.pix_fmt = DRM_FORMAT_NV12;
-	m_bufBlack.width = m_pDrmDevice->DisplayWidth();
-	m_bufBlack.height = m_pDrmDevice->DisplayHeight();
 	LOGDEBUG2(L_DRM, "Videoinit: Try to create a black FB");
-	if (SetupFB(&m_bufBlack, NULL))
-		LOGERROR("VideoInit: SetupFB black FB %i x %i failed",
-			m_bufBlack.width, m_bufBlack.height);
-
-	for (i = 0; i < m_bufBlack.width * m_bufBlack.height; ++i) {
-		m_bufBlack.plane[0][i] = 0x10;
-		if (i < m_bufBlack.width * m_bufBlack.height / 2)
-		m_bufBlack.plane[1][i] = 0x80;
-	}
+	if (m_bufBlack.Setup(m_pDrmDevice->Fd(), m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(), DRM_FORMAT_NV12, NULL))
+		LOGERROR("VideoInit: SetupFB black FB %i x %i failed", m_bufBlack.Width(), m_bufBlack.Height());
+	m_bufBlack.FillBlack();
 
 	// save actual modesetting
 	m_pDrmDevice->SaveCrtc();
@@ -1986,16 +1698,16 @@ void cVideoRender::Init(void)
 	// We don't have the m_pBufOsd for OpenGL yet, so we can't set anything. Set src and FbId later when osd was drawn,
 	// but initially move the OSD behind the VIDEO
 #ifndef USE_GLES
-	osdPlane->SetParams(m_pDrmDevice->CrtcId(), m_pBufOsd->fb_id,
+	osdPlane->SetParams(m_pDrmDevice->CrtcId(), m_pBufOsd->Id(),
 		0, 0, m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(),
-		0, 0, m_pBufOsd->width, m_pBufOsd->height);
+		0, 0, m_pBufOsd->Width(), m_pBufOsd->Height());
 
 	osdPlane->SetPlane(ModeReq);
 #else
 	if (m_disableOglOsd) {
-		osdPlane->SetParams(m_pDrmDevice->CrtcId(), m_pBufOsd->fb_id,
+		osdPlane->SetParams(m_pDrmDevice->CrtcId(), m_pBufOsd->Id(),
 			0, 0, m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(),
-			0, 0, m_pBufOsd->width, m_pBufOsd->height);
+			0, 0, m_pBufOsd->Width(), m_pBufOsd->Height());
 
 		osdPlane->SetPlane(ModeReq);
 	}
@@ -2010,9 +1722,9 @@ void cVideoRender::Init(void)
 	}
 
 	// Black Buffer for video plane
-	videoPlane->SetParams(m_pDrmDevice->CrtcId(), m_bufBlack.fb_id,
+	videoPlane->SetParams(m_pDrmDevice->CrtcId(), m_bufBlack.Id(),
 		0, 0, m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(),
-		0, 0, m_bufBlack.width, m_bufBlack.height);
+		0, 0, m_bufBlack.Width(), m_bufBlack.Height());
 
 	videoPlane->SetPlane(ModeReq);
 
@@ -2054,12 +1766,12 @@ void cVideoRender::Exit(void)
 	videoPlane->FreeProperties();
 	osdPlane->FreeProperties();
 
-	DestroyFB(&m_bufBlack);
+	m_bufBlack.Destroy();
 #ifdef USE_GLES
 	if (m_disableOglOsd) {
 		if (m_pBufOsd) {
-			DestroyFB(m_pBufOsd);
-			free(m_pBufOsd);
+			m_pBufOsd->Destroy();
+			delete m_pBufOsd;
 		}
 	} else {
 		if (m_pNextBo)
@@ -2069,8 +1781,8 @@ void cVideoRender::Exit(void)
 	}
 #else
 	if (m_pBufOsd) {
-		DestroyFB(m_pBufOsd);
-		free(m_pBufOsd);
+		m_pBufOsd->Destroy(m_pBufOsd);
+		delete m_pBufOsd;
 	}
 #endif
 

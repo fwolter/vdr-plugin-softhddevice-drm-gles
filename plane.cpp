@@ -20,8 +20,8 @@
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
+#include <cinttypes>
 
-#include "drm_buf.h"
 #include "plane.h"
 #include "logger.h"
 

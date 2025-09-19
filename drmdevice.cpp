@@ -675,10 +675,10 @@ EGLConfig cVideoRender::GetEGLConfig(void)
 static void drm_fb_destroy_callback(struct gbm_bo *bo, void *data)
 {
 	int drm_fd = gbm_device_get_fd(gbm_bo_get_device(bo));
-	struct drm_buf *buf = (struct drm_buf *)data;
+	cDrmBuffer *buf = (cDrmBuffer *)data;
 
-	if (buf->fb_id)
-		drmModeRmFB(drm_fd, buf->fb_id);
+	if (buf->Id())
+		drmModeRmFB(drm_fd, buf->Id());
 
 	free(buf);
 }
@@ -701,9 +701,9 @@ gbm_bo_get_stride_for_plane(struct gbm_bo *bo, int plane);
 __attribute__ ((weak)) uint32_t
 gbm_bo_get_offset(struct gbm_bo *bo, int plane);
 
-struct drm_buf *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
+cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 {
-	struct drm_buf *buf = (struct drm_buf *)gbm_bo_get_user_data(bo);
+	cDrmBuffer *buf = (cDrmBuffer *)gbm_bo_get_user_data(bo);
 	uint32_t mod_flags = 0;
 	int ret = -1;
 
@@ -711,12 +711,7 @@ struct drm_buf *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 	if (buf)
 		return buf;
 
-	buf = (struct drm_buf *)calloc(1, sizeof *buf);
-	buf->bo = bo;
-
-	buf->width = gbm_bo_get_width(bo);
-	buf->height = gbm_bo_get_height(bo);
-	buf->pix_fmt = gbm_bo_get_format(bo);
+	buf = new cDrmBuffer(m_fdDrm, gbm_bo_get_width(bo), gbm_bo_get_height(bo), gbm_bo_get_format(bo), bo);
 
 	if (gbm_bo_get_handle_for_plane && gbm_bo_get_modifier &&
 			gbm_bo_get_plane_count && gbm_bo_get_stride_for_plane &&
@@ -724,18 +719,18 @@ struct drm_buf *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 		uint64_t modifiers[4] = {0};
 		modifiers[0] = gbm_bo_get_modifier(bo);
 		const int num_planes = gbm_bo_get_plane_count(bo);
-		buf->num_planes = num_planes;
+		buf->SetNumPlanes(num_planes);
 		for (int i = 0; i < num_planes; i++) {
-			buf->handle[i] = gbm_bo_get_handle_for_plane(bo, i).u32;
-			buf->pitch[i] = gbm_bo_get_stride_for_plane(bo, i);
-			buf->offset[i] = gbm_bo_get_offset(bo, i);
+			buf->SetHandle(i, gbm_bo_get_handle_for_plane(bo, i).u32);
+			buf->SetPitch(i, gbm_bo_get_stride_for_plane(bo, i));
+			buf->SetOffset(i, gbm_bo_get_offset(bo, i));
 			modifiers[i] = modifiers[0];
-			buf->size[i] = buf->height * buf->pitch[i];
-			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: %d: handle %d pitch %d, offset %d, size %d", i, buf->handle[i], buf->pitch[i], buf->offset[i], buf->size[i]);
+			buf->SetSize(i, buf->Height() * buf->Pitch(i));
+			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: %d: handle %d pitch %d, offset %d, size %d", i, buf->Handle(i), buf->Pitch(i), buf->Offset(i), buf->Size(i));
 		}
-		buf->nb_objects = 1;
-		buf->obj_index[0] = 0;
-		buf->fd_prime[0] = gbm_bo_get_fd(bo);
+		buf->SetNumObjects(1);
+		buf->SetObjIndex(0, 0);
+		buf->SetFdPrime(0, gbm_bo_get_fd(bo));
 
 		if (modifiers[0]) {
 			mod_flags = DRM_MODE_FB_MODIFIERS;
@@ -743,34 +738,35 @@ struct drm_buf *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 		}
 
 		// Add FB
-		ret = drmModeAddFB2WithModifiers(m_fdDrm, buf->width, buf->height, buf->pix_fmt,
-			buf->handle, buf->pitch, buf->offset, modifiers, &buf->fb_id, mod_flags);
+		ret = drmModeAddFB2WithModifiers(m_fdDrm, buf->Width(), buf->Height(), buf->PixFmt(),
+			buf->Handle(), buf->Pitch(), buf->Offset(), modifiers, &buf->Id(), mod_flags);
 	}
 
 	if (ret) {
 		if (mod_flags)
 			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: Modifiers failed!");
 
-		buf->num_planes = 1;
-		memcpy(buf->handle, (uint32_t [4]){ gbm_bo_get_handle(bo).u32, 0, 0, 0}, 16);
-		memcpy(buf->pitch, (uint32_t [4]){ gbm_bo_get_stride(bo), 0, 0, 0}, 16);
-		memset(buf->offset, 0, 16);
-		memcpy(buf->size, (uint32_t [4]){ buf->height * buf->width * buf->pitch[0], 0, 0, 0}, 16);
-		buf->nb_objects = 1;
-		buf->obj_index[0] = 0;
-		buf->fd_prime[0] = gbm_bo_get_fd(bo);
-		ret = drmModeAddFB2(m_fdDrm, buf->width, buf->height, buf->pix_fmt,
-			buf->handle, buf->pitch, buf->offset, &buf->fb_id, 0);
+		buf->SetNumPlanes(1);
+		memcpy(buf->Handle(), (uint32_t [4]){ gbm_bo_get_handle(bo).u32, 0, 0, 0}, 16);
+		memcpy(buf->Pitch(), (uint32_t [4]){ gbm_bo_get_stride(bo), 0, 0, 0}, 16);
+		memset(buf->Offset(), 0, 16);
+		memcpy(buf->Size(), (uint32_t [4]){ buf->Height() * buf->Width() * buf->Pitch(0), 0, 0, 0}, 16);
+		buf->SetNumObjects(1);
+		buf->SetObjIndex(0, 0);
+		buf->SetFdPrime(0, gbm_bo_get_fd(bo));
+
+		ret = drmModeAddFB2(m_fdDrm, buf->Width(), buf->Height(), buf->PixFmt(),
+			buf->Handle(), buf->Pitch(), buf->Offset(), &buf->Id(), 0);
 	}
 
 	if (ret) {
 		LOGFATAL("drm_get_buf_from_bo: cannot create framebuffer (%d): %m", errno);
-		free(buf);
+		delete buf;
 		return NULL;
 	}
 
 	LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: New GL buffer %d x %d pix_fmt %4.4s fb_id %d",
-		buf->width, buf->height, (char *)&buf->pix_fmt, buf->fb_id);
+		buf->Width(), buf->Height(), (char *)&buf->PixFmt(), buf->Id());
 
 	gbm_bo_set_user_data(bo, buf, drm_fb_destroy_callback);
 	return buf;
@@ -868,23 +864,6 @@ static int GetPropertyValue(int fdDrm, uint32_t objectID,
 	}
 
 	return 0;
-}
-
-static const struct format_info format_info_array[] = {
-	{ DRM_FORMAT_NV12, "NV12", 2, { { 8, 1, 1 }, { 16, 2, 2 } }, },
-	{ DRM_FORMAT_YUV420, "YU12", 3, { { 8, 1, 1 }, { 8, 2, 2 }, {8, 2, 2 } }, },
-	{ DRM_FORMAT_ARGB8888, "AR24", 1, { { 32, 1, 1 } }, },
-};
-
-#define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
-
-const struct format_info *cDrmDevice::FindFormat(uint32_t format)
-{
-	for (int i = 0; i < (int)ARRAY_SIZE(format_info_array); i++) {
-		if (format == format_info_array[i].format)
-			return &format_info_array[i];
-	}
-	return NULL;
 }
 
 int cDrmDevice::SetPropertyRequest(drmModeAtomicReqPtr ModeReq,

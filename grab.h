@@ -20,7 +20,7 @@
 #ifndef __GRAB_H
 #define __GRAB_H
 
-#include "drm_buf.h"
+#include "drmbuffer.h"
 
 #include <vdr/osd.h>
 
@@ -40,7 +40,7 @@ public:
 	void SetRect(int x, int y, int width, int height) { m_rect.Set(x, y, width, height); };
 	void SetData(uint8_t *result) { m_pResult = result; };
 	void SetSize(int size) { m_size = size; };
-	void SetBuf(struct drm_buf *buf) { m_pBuf = buf; };
+	void SetBuf(cDrmBuffer *buf) { m_pBuf = buf; };
 
 	int GetX(void) { return m_rect.X(); };
 	int GetY(void) { return m_rect.Y(); };
@@ -48,13 +48,13 @@ public:
 	int GetHeight(void) { return m_rect.Height(); };
 	uint8_t *GetData(void) { return m_pResult; };
 	int GetSize(void) { return m_size; };
-	struct drm_buf *GetBuf(void) { return m_pBuf; };
+	cDrmBuffer *GetBuf(void) { return m_pBuf; };
 
 	void FreeBuf(void);
 
 private:
 	uint8_t *m_pResult;		    ///< pointer to grabbed image
-	struct drm_buf *m_pBuf;	    ///< pointer to original buffer
+	struct cDrmBuffer *m_pBuf;	    ///< pointer to original buffer
 	int m_size;			        ///< size of grabbed data
 	cRect m_rect;				///< rect of the grabbed data
 };

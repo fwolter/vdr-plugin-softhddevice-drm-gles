@@ -27,7 +27,7 @@ extern "C" {
 
 #include "buf2rgb.h"
 #include "logger.h"
-#include "drm_buf.h"
+#include "drmbuffer.h"
 
 #define OPAQUE		0xff
 #define TRANSPARENT	0x00
@@ -41,18 +41,18 @@ extern "C" {
 /**
  * @brief Convert a DRM format to a ffmpeg AV format
  */
-enum AVPixelFormat drmFormatToAVFormat(struct drm_buf *buf)
+enum AVPixelFormat drmFormatToAVFormat(cDrmBuffer *buf)
 {
-	if (buf->pix_fmt == DRM_FORMAT_NV12)
+	if (buf->PixFmt() == DRM_FORMAT_NV12)
 		return AV_PIX_FMT_NV12;
 
-	if (buf->pix_fmt == DRM_FORMAT_YUV420)
+	if (buf->PixFmt() == DRM_FORMAT_YUV420)
 		return AV_PIX_FMT_YUV420P;
 
-	if (buf->pix_fmt == DRM_FORMAT_ARGB8888)
+	if (buf->PixFmt() == DRM_FORMAT_ARGB8888)
 		return AV_PIX_FMT_RGBA;
 
-	if (buf->pix_fmt == DRM_FORMAT_P030)
+	if (buf->PixFmt() == DRM_FORMAT_P030)
 		return AV_PIX_FMT_NONE;
 
 	return AV_PIX_FMT_NONE;
@@ -71,13 +71,13 @@ enum AVPixelFormat drmFormatToAVFormat(struct drm_buf *buf)
  *
  * @returns 			a pointer to the image data
  */
-uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPixelFormat dst_pix_fmt)
+uint8_t *buf2rgb(cDrmBuffer *buf, int *size, int dst_w, int dst_h, enum AVPixelFormat dst_pix_fmt)
 {
 	uint8_t *src_data[4], *dst_data[4];
 	int src_linesize[4], dst_linesize[4];
 
-	int src_w = buf->width;
-	int src_h = buf->height;
+	int src_w = buf->Width();
+	int src_h = buf->Height();
 
 	enum AVPixelFormat src_pix_fmt = drmFormatToAVFormat(buf);
 	if (src_pix_fmt == AV_PIX_FMT_NONE) {
@@ -92,7 +92,7 @@ uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPi
 
 	// planes aren't mmapped, return
 	// this should be done before in VideoCloneBuf
-	if (!buf->plane[0]) {
+	if (!buf->Plane(0)) {
 		LOGERROR("buf2rgb: prime data is not mapped!");
 		return NULL;
 	}
@@ -103,23 +103,23 @@ uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPi
 							 SWS_BILINEAR, NULL, NULL, NULL);
 	if (!sws_ctx) {
 		LOGERROR("buf2rgb: Could not create sws_ctx");
-		munmap(buffer, buf->size[0]);
+		munmap(buffer, buf->Size(0));
 		return NULL;
 	}
 
 	if ((ret = av_image_alloc(dst_data, dst_linesize,
 							  dst_w, dst_h, dst_pix_fmt, 1)) < 0) {
 		LOGERROR("buf2rgb: Could not alloc dst image");
-		munmap(buffer, buf->size[0]);
+		munmap(buffer, buf->Size(0));
 		sws_freeContext(sws_ctx);
 		return NULL;
 	}
 	dst_bufsize = ret;
 
 	// copy src pitches and data
-	for (int i = 0; i < buf->num_planes; i++) {
-		src_linesize[i] = buf->pitch[i];
-		src_data[i] = buf->plane[i] + buf->offset[i];
+	for (int i = 0; i < buf->NumPlanes(); i++) {
+		src_linesize[i] = buf->Pitch(i);
+		src_data[i] = buf->Plane(i) + buf->Offset(i);
 	}
 
 	// scale image
@@ -128,7 +128,7 @@ uint8_t *buf2rgb(struct drm_buf *buf, int *size, int dst_w, int dst_h, enum AVPi
 			  dst_data, dst_linesize);
 
 	if (buffer)
-		munmap(buffer, buf->size[0]);
+		munmap(buffer, buf->Size(0));
 	sws_freeContext(sws_ctx);
 	*size = dst_bufsize;
 

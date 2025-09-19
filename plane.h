@@ -24,8 +24,6 @@
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
-#include "drm_buf.h"
-
 /**
  * @brief cDrmPlane - DRM plane class
  */

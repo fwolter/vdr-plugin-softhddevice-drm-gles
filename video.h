@@ -51,7 +51,7 @@ extern "C" {
 #include "softhddevice.h"
 #include "videostream.h"
 #include "glhelpers.h"
-#include "drm_buf.h"
+#include "drmbuffer.h"
 #include "threads.h"
 #include "grab.h"
 #include "plane.h"
@@ -90,7 +90,7 @@ struct format_info
 
 struct lastFrame {
 	AVFrame *frame;
-	struct drm_buf *buf;
+	cDrmBuffer *buf;
 	int trickspeed;
 };
 
@@ -112,7 +112,6 @@ public:
 	void Exit(void);
 	void CleanUp(void);
 	int FindDevice(void);
-	void ReadHWPlatform(void);
 	int HardwareQuirks(void) { return m_hardwareQuirks; };
 	void DisableDeint(int);
 	void DisableOglOsd(void) { m_disableOglOsd = 1; };
@@ -164,13 +163,11 @@ public:
 	// Frame and buffer
 	int RenderFrame(AVCodecContext *, AVFrame *);
 	int DisplayFrame(void);
-	int Sync(AVFrame *, int *, struct drm_buf **);
+	int Sync(AVFrame *, int *, cDrmBuffer **);
 	void EnqueueFB(AVFrame *);
-	int SetupFB(struct drm_buf *, AVDRMFrameDescriptor *);
-	void DestroyFB(struct drm_buf *);
-	int CommitBuffer(struct drm_buf *, int);
+	int CommitBuffer(cDrmBuffer *, int);
 	int GetFrame(AVFrame **);
-	int GetBuffer(AVFrame *, struct drm_buf **);
+	cDrmBuffer *GetBuffer(AVFrame *);
 	int GetFramesFilled(void) { return atomic_read(&m_framesFilled); };
 	void RbPushFrame(AVFrame *);
 	AVFrame *RbGetFrame(void);
@@ -250,9 +247,9 @@ private:
 	cRect m_videoRect;					///< rect of the currently displayed video
 	int m_videoIsScaled;				///< true, if the currently displayed video is scaled
 
-	struct drm_buf m_buffer[RENDERBUFFERS];	///< array of drm buffer structs
-	struct drm_buf *m_pBufOsd;			///< pointer to osd drm buffer struct
-	struct drm_buf m_bufBlack;			///< black drm buffer
+	cDrmBuffer m_buffer[RENDERBUFFERS];	///< array of video drm buffer objects
+	cDrmBuffer *m_pBufOsd;				///< pointer to osd drm buffer object
+	cDrmBuffer m_bufBlack;				///< black drm buffer object
 	struct lastFrame *m_pLastFrame;		///< pointer to last rendered frame struct (e.g. needed for later free)
 	int m_numBuffers;					///< numer of framebuffers currently set up
 	int m_enqueueBufferIdx;				///< index of the current (sw) framebuffer in the array
