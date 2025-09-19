@@ -1672,7 +1672,7 @@ void cVideoRender::Init(void)
 	// black fb
 	LOGDEBUG2(L_DRM, "Videoinit: Try to create a black FB");
 	if (m_bufBlack.Setup(m_pDrmDevice->Fd(), m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(), DRM_FORMAT_NV12, NULL))
-		LOGERROR("VideoInit: SetupFB black FB %i x %i failed", m_bufBlack.Width(), m_bufBlack.Height());
+		LOGFATAL("VideoInit: SetupFB black FB %i x %i failed", m_bufBlack.Width(), m_bufBlack.Height());
 	m_bufBlack.FillBlack();
 
 	// save actual modesetting
@@ -1683,9 +1683,9 @@ void cVideoRender::Init(void)
 	uint32_t modeID = 0;
 
 	if (m_pDrmDevice->CreatePropertyBlob(&modeID) != 0)
-		LOGERROR("Failed to create mode property blob.");
+		LOGFATAL("Failed to create mode property blob.");
 	if (!(ModeReq = drmModeAtomicAlloc()))
-		LOGERROR("cannot allocate atomic request (%d): %m", errno);
+		LOGFATAL("cannot allocate atomic request (%d): %m", errno);
 
 	m_pDrmDevice->SetPropertyRequest(ModeReq, m_pDrmDevice->CrtcId(),
 						DRM_MODE_OBJECT_CRTC, "MODE_ID", modeID);
