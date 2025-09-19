@@ -35,7 +35,7 @@ extern "C" {
 /**
  * @brief cH264Parser constructor
  *
- * @param	avpkt		video stream AVPacket to analyze
+ * @param avpkt     video stream AVPacket to analyze
  */
 cH264Parser::cH264Parser(AVPacket *avpkt)
 {
@@ -52,8 +52,8 @@ cH264Parser::~cH264Parser(void)
 /**
  * @brief Get width and height from stream
  *
- * @param[out]	width		video stream width
- * @param[out]	height		video stream height
+ * @param[out] width      video stream width
+ * @param[out] height     video stream height
  */
 void cH264Parser::GetDimensions(int *width, int *height)
 {

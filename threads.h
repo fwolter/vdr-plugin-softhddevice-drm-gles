@@ -31,12 +31,14 @@ class cSoftHdDevice;
  */
 class cDecodingThread : public cThread
 {
-private:
-	cSoftHdDevice *m_pDevice;
 public:
 	cDecodingThread(cSoftHdDevice *);
 	virtual ~cDecodingThread(void);
 	void Stop(void);
+
+private:
+	cSoftHdDevice *m_pDevice;
+
 protected:
 	virtual void Action(void);
 };
@@ -48,12 +50,14 @@ class cVideoRender;
  */
 class cDisplayThread : public cThread
 {
-private:
-	cVideoRender *m_pRender;
 public:
 	cDisplayThread(cVideoRender *);
 	virtual ~cDisplayThread(void);
 	void Stop(void);
+
+private:
+	cVideoRender *m_pRender;
+
 protected:
 	virtual void Action(void);
 };
@@ -65,15 +69,17 @@ class cSoftHdAudio;
 
 class cAudioThread : public cThread
 {
-private:
-	cSoftHdAudio *m_pAudio;
-	cMutex m_mutex;
-	cCondVar m_startWait;						///< condition is triggered if audio and video is ready
 public:
 	cAudioThread(cSoftHdAudio *);
 	virtual ~cAudioThread(void);
 	void Stop(void);
 	void SendStartSignal(void);
+
+private:
+	cSoftHdAudio *m_pAudio;
+	cMutex m_mutex;
+	cCondVar m_startWait;          ///< condition is triggered if audio and video is ready
+
 protected:
 	virtual void Action(void);
 };
@@ -83,6 +89,16 @@ protected:
  */
 class cFilterThread : public cThread
 {
+public:
+	cFilterThread(cVideoRender *);
+	virtual ~cFilterThread(void);
+	int Init(const AVCodecContext *, AVFrame *, int);
+	void Stop(void);
+	int GetRbFramesFilled(void);
+	void RbPushFrame(AVFrame *);
+	int IsInterlaceFilter(void) { return m_isInterlaceFilter; };
+	void WaitForIdle(void);
+
 private:
 	cVideoRender *m_pRender;
 
@@ -90,30 +106,20 @@ private:
 	AVFilterContext *m_pBuffersrcCtx;
 	AVFilterContext *m_pBuffersinkCtx;
 
-	int m_filterBug;							///< flag for a ffmpeg bug
-	int m_filterTrick;							///< the current filter handles trickspeed frames
-	int m_filterStill;							///< the current filter handles stillpicture frames
-	int m_isInterlaceFilter;					///< the current filter is an deinterlace filter
+	int m_filterBug;                            ///< flag for a ffmpeg bug
+	int m_filterTrick;                          ///< the current filter handles trickspeed frames
+	int m_filterStill;                          ///< the current filter handles stillpicture frames
+	int m_isInterlaceFilter;                    ///< the current filter is an deinterlace filter
 
-	AVFrame *m_pFramesRb[VIDEO_SURFACES_MAX];	///< ringbuffer for frames to be filtered
-	int m_numFramesFilled;						///< number of frames in the ringbuffer
-	int m_framesWrite;							///< ringbuffer write pointer
-	int m_framesRead;							///< ringbuffer read pointer
+	AVFrame *m_pFramesRb[VIDEO_SURFACES_MAX];   ///< ringbuffer for frames to be filtered
+	int m_numFramesFilled;                      ///< number of frames in the ringbuffer
+	int m_framesWrite;                          ///< ringbuffer write pointer
+	int m_framesRead;                           ///< ringbuffer read pointer
 
-	cCondVar m_waitIdleCondition;				///< condition is triggered, if ringbuffer is empty
+	cCondVar m_waitIdleCondition;               ///< condition is triggered, if ringbuffer is empty
 
 	AVFrame *RbGetFrame(void);
-public:
-	cFilterThread(cVideoRender *);
-	virtual ~cFilterThread(void);
 
-	int Init(const AVCodecContext *, AVFrame *, int);
-	void Stop(void);
-	int GetRbFramesFilled(void);
-	void RbPushFrame(AVFrame *);
-	int IsInterlaceFilter(void) { return m_isInterlaceFilter; };
-
-	void WaitForIdle(void);
 protected:
 	virtual void Action(void);
 };

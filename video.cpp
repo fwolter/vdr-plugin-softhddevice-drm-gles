@@ -65,10 +65,10 @@ extern "C" {
  * cVideoRender class
  ****************************************************************************/
 
- /**
+/**
  * @brief cVideoRender constructor
  *
- * @param device	pointer to cSoftHdDevice
+ * @param device         pointer to cSoftHdDevice
  */
 cVideoRender::cVideoRender(cSoftHdDevice *device)
 {
@@ -77,7 +77,7 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 	m_pDrmDevice = new cDrmDevice(this);
 }
 
- /**
+/**
  * @brief cVideoRender destructor
  */
 cVideoRender::~cVideoRender(void)
@@ -93,7 +93,7 @@ cVideoRender::~cVideoRender(void)
 	LOGDEBUG2(L_DRM, "~cVideoRender deleted");
 }
 
- /**
+/**
  * @brief Prepare the threads and process variables
  */
 void cVideoRender::Prepare(void)
@@ -112,10 +112,10 @@ void cVideoRender::Prepare(void)
 	ResumeVideo();
 }
 
- /**
+/**
  * @brief Set the display resolution and refresh rate based on a user given string
  *
- * @param resolution	string formatted like "1920x1080@50"
+ * @param resolution       string formatted like "1920x1080@50"
  */
 void cVideoRender::SetDisplayResolution(const char* resolution)
 {
@@ -130,9 +130,11 @@ void cVideoRender::SetDisplayResolution(const char* resolution)
 	m_pDrmDevice->SetUserReqDisplayRefreshRate(userReqDisplayRefreshRate);
 }
 
-///
-/// Clean DRM
-///
+/**
+ * @brief Cleanup the renderer
+ *
+ * Stop the filter thread, clean the render ringbuffer and destroy the framebuffers
+ */
 void cVideoRender::CleanUp(void)
 {
 	AVFrame *frame;
@@ -172,6 +174,8 @@ void cVideoRender::CleanUp(void)
 	m_enqueueBufferIdx = 0;
 
 	m_waitCleanCondition.Signal();
+	// m_flushing is set, if we want to keep the last rendered frame during cleanup
+	// m_flushLastFrame signals the rendering thread to clean this frame on the next turn
 	if (m_flushing)
 		m_flushLastFrame = 1;
 	m_flushing = 0;
@@ -181,17 +185,16 @@ void cVideoRender::CleanUp(void)
 	LOGDEBUG("CleanUp: DRM cleaned (m_framesFilled %d m_numFramesToFilter %d)", atomic_read(&m_framesFilled), atomic_read(&m_numFramesToFilter));
 }
 
-///
-///	Commit the frame to the hardware
-///
-//	retval 2	VIDEO and OSD modesetting and commit was done, need to process outstanding DRM events
-//	retval 1	VIDEO only modesetting and commit was done, need to process outstanding DRM events
-//	retval 0	OSD only modesetting and commit was done, need to process outstanding DRM events
-//	retval -1	no modesetting and commit was done
-//	retval -2	something went wrong, no modesetting was done
-//
-///
-int cVideoRender::CommitBuffer(cDrmBuffer *buf, int skip_video)
+/**
+ * @brief Commit the frame to the hardware
+ *
+ * @retval 2     VIDEO and OSD modesetting and commit was done, need to process outstanding DRM events
+ * @retval 1     VIDEO only modesetting and commit was done, need to process outstanding DRM events
+ * @retval 0     OSD only modesetting and commit was done, need to process outstanding DRM events
+ * @retval -1    no modesetting and commit was done
+ * @retval -2    something went wrong, no modesetting was done
+ */
+int cVideoRender::CommitBuffer(cDrmBuffer *buf, int skipVideo)
 {
 	int dirty = 0; // 0: no commit, 1: osd only, 2: video only, 3: both
 	AVFrame *frame = NULL;
@@ -200,21 +203,21 @@ int cVideoRender::CommitBuffer(cDrmBuffer *buf, int skip_video)
 	cDrmPlane *videoPlane = m_pDrmDevice->VideoPlane();
 	cDrmPlane *osdPlane = m_pDrmDevice->OsdPlane();
 
-	uint64_t DispWidth = m_pDrmDevice->DisplayWidth();
-	uint64_t DispHeight = m_pDrmDevice->DisplayHeight();
-	uint64_t DispX = 0;
-	uint64_t DispY = 0;
-	uint64_t PicWidth = 0;
-	uint64_t PicHeight = 0;
+	uint64_t dispWidth = m_pDrmDevice->DisplayWidth();
+	uint64_t dispHeight = m_pDrmDevice->DisplayHeight();
+	uint64_t dispX = 0;
+	uint64_t dispY = 0;
+	uint64_t picWidth = 0;
+	uint64_t picHeight = 0;
 
-	drmModeAtomicReqPtr ModeReq;
+	drmModeAtomicReqPtr modeReq;
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
-	if (!(ModeReq = drmModeAtomicAlloc())) {
+	if (!(modeReq = drmModeAtomicAlloc())) {
 		LOGERROR("DisplayFrame: cannot allocate atomic request (%d): %m", errno);
 		return -2;
 	}
 
-	if (skip_video)
+	if (skipVideo)
 		goto skip_video;
 
 	if (buf)
@@ -223,14 +226,14 @@ int cVideoRender::CommitBuffer(cDrmBuffer *buf, int skip_video)
 	// handle the video plane
 	// Get video size and position and set crtc rect
 	if (m_videoIsScaled) {
-		DispWidth = (uint64_t)m_videoRect.Width();
-		DispHeight = (uint64_t)m_videoRect.Height();
-		DispX = (uint64_t)m_videoRect.X();
-		DispY = (uint64_t)m_videoRect.Y();
+		dispWidth = (uint64_t)m_videoRect.Width();
+		dispHeight = (uint64_t)m_videoRect.Height();
+		dispX = (uint64_t)m_videoRect.X();
+		dispY = (uint64_t)m_videoRect.Y();
 	}
 
-	PicWidth = DispWidth;
-	PicHeight = DispHeight;
+	picWidth = dispWidth;
+	picHeight = dispHeight;
 
 	// resize frame to fit into video area/ screen and keep the aspect ratio
 	if (frame) {
@@ -238,30 +241,30 @@ int cVideoRender::CommitBuffer(cDrmBuffer *buf, int skip_video)
 		double frame_sar = av_q2d(frame->sample_aspect_ratio) ? av_q2d(frame->sample_aspect_ratio) : 1.0f;
 
 		// frame b*h < display b*h, e.g. fit a 4:3 frame into 16:9 display or area
-		if (1000 * DispWidth / DispHeight > 1000 * frame->width / frame->height * frame_sar) {
-			PicWidth = DispHeight * frame->width / frame->height * frame_sar;
-			if (PicWidth <= 0 || PicWidth > DispWidth) {
-				PicWidth = DispWidth;
+		if (1000 * dispWidth / dispHeight > 1000 * frame->width / frame->height * frame_sar) {
+			picWidth = dispHeight * frame->width / frame->height * frame_sar;
+			if (picWidth <= 0 || picWidth > dispWidth) {
+				picWidth = dispWidth;
 			}
 		// frame b*h >= display b*h, e.g. fit a 16:9 frame into 4:3 display or area
 		} else {
-			PicHeight = DispWidth * frame->height / frame->width / frame_sar;
-			if (PicHeight <= 0 || PicHeight > DispHeight) {
-				PicHeight = DispHeight;
+			picHeight = dispWidth * frame->height / frame->width / frame_sar;
+			if (picHeight <= 0 || picHeight > dispHeight) {
+				picHeight = dispHeight;
 			}
 		}
 	}
 
 	videoPlane->SetParams(m_pDrmDevice->CrtcId(), buf->Id(),
-		DispX + (DispWidth - PicWidth) / 2, DispY + (DispHeight - PicHeight) / 2, PicWidth, PicHeight,
+		dispX + (dispWidth - picWidth) / 2, dispY + (dispHeight - picHeight) / 2, picWidth, picHeight,
 		0, 0, buf->Width(), buf->Height());
 
 	// set dimensions for grab early, because we might skip this at the next frame
-	m_lastVideoGrab.Set(DispX + (DispWidth - PicWidth) / 2,
-		DispY + (DispHeight - PicHeight) / 2,
-		PicWidth, PicHeight);
+	m_lastVideoGrab.Set(dispX + (dispWidth - picWidth) / 2,
+		dispY + (dispHeight - picHeight) / 2,
+		picWidth, picHeight);
 
-	videoPlane->SetPlane(ModeReq);
+	videoPlane->SetPlane(modeReq);
 	dirty += 2;
 //	LOGDEBUG2(L_DRM, "DisplayFrame: SetPlane Video (fb = %" PRIu64 ")", videoPlane->GetFbId());
 
@@ -272,8 +275,8 @@ skip_video:
 		if (m_pDrmDevice->UseZpos()) {
 			videoPlane->SetZpos(m_osdShown ? m_pDrmDevice->ZposPrimary() : m_pDrmDevice->ZposOverlay());
 			osdPlane->SetZpos(m_osdShown ? m_pDrmDevice->ZposOverlay() : m_pDrmDevice->ZposPrimary());
-			videoPlane->SetPlaneZpos(ModeReq);
-			osdPlane->SetPlaneZpos(ModeReq);
+			videoPlane->SetPlaneZpos(modeReq);
+			osdPlane->SetPlaneZpos(modeReq);
 
 			LOGDEBUG2(L_DRM, "DisplayFrame: SetPlaneZpos: video->plane_id %d -> zpos %" PRIu64 ", osd->plane_id %d -> zpos %" PRIu64 "",
 				videoPlane->GetId(), videoPlane->GetZpos(),
@@ -284,7 +287,7 @@ skip_video:
 			0, 0, m_osdShown ? m_pBufOsd->Width() : 0, m_osdShown ? m_pBufOsd->Height() : 0,
 			0, 0, m_osdShown ? m_pBufOsd->Width() : 0, m_osdShown ? m_pBufOsd->Height() : 0);
 
-		osdPlane->SetPlane(ModeReq);
+		osdPlane->SetPlane(modeReq);
 		dirty += 1;
 		LOGDEBUG2(L_DRM, "DisplayFrame: SetPlane OSD %d (fb = %" PRIu64 ")", m_osdShown, osdPlane->GetFbId());
 		m_pBufOsd->MarkClean();
@@ -312,46 +315,45 @@ skip_video:
 
 	// return without an atomic commit (no video frame and osd activity)
 	if (!dirty) {
-		drmModeAtomicFree(ModeReq);
+		drmModeAtomicFree(modeReq);
 		return -1;
 	}
 
 	// do the atomic commit
-	if (drmModeAtomicCommit(fdDrm, ModeReq, flags, NULL) != 0) {
+	if (drmModeAtomicCommit(fdDrm, modeReq, flags, NULL) != 0) {
 		osdPlane->DumpParameters();
 		if (dirty > 1)
 			videoPlane->DumpParameters();
 
-		drmModeAtomicFree(ModeReq);
+		drmModeAtomicFree(modeReq);
 		LOGERROR("DisplayFrame: page flip failed (%d): %m", errno);
 		return -2;
 	}
 
-	drmModeAtomicFree(ModeReq);
+	drmModeAtomicFree(modeReq);
 
 	return dirty - 1;
 }
 
-///
-///	Sync the frames
-///
-//	retval 1	close or flush requested, skip video or show black frame
-//	retval 0	nothing to sync or paused
-//	retval -1	drop frame
-//
-///
-int cVideoRender::Sync(AVFrame *frame, int *skip_video, cDrmBuffer **buf)
+/**
+ * @brief Sync the frames
+ *
+ * @retval 1     close or flush requested, skip video or show black frame
+ * @retval 0     nothing to sync or paused
+ * @retval -1    drop frame
+ */
+int cVideoRender::Sync(AVFrame *frame, int *skipVideo, cDrmBuffer **buf)
 {
-	int64_t audio_pts;
-	int64_t video_pts;
+	int64_t audioPts;
+	int64_t videoPts;
 
-	video_pts = frame->pts * 1000 * av_q2d(*m_timebase);
+	videoPts = frame->pts * 1000 * av_q2d(*m_timebase);
 
 	if(!m_startCounter && !m_closing) {
-		LOGDEBUG("Sync: start PTS %s", Timestamp2String(video_pts));
+		LOGDEBUG("Sync: start PTS %s", Timestamp2String(videoPts));
 		m_pAudio->Skip(frame->pts, 0);
 avready:
-		if (m_pAudio->VideoReady(video_pts)) {
+		if (!m_pAudio->VideoReady(videoPts)) {
 			usleep(10000);
 
 			// check for close/flush request or pause
@@ -361,7 +363,7 @@ avready:
 				return 1;
 			} else if (m_flushing) {
 				LOGDEBUG2(L_DRM, "DisplayFrame: flushing while sync, skip video");
-				*skip_video = 1;
+				*skipVideo = 1;
 				return 1;
 			} else if (VideoIsPaused()) {
 				return 0;
@@ -379,34 +381,34 @@ audioclock:
 		return 1;
 	} else if (m_flushing) {
 		LOGDEBUG2(L_DRM, "DisplayFrame: flushing while sync, skip video");
-		*skip_video = 1;
+		*skipVideo = 1;
 		return 1;
 	} else if (VideoIsPaused()) {
 		return 0;
 	}
 
-	audio_pts = m_pAudio->GetClock();
+	audioPts = m_pAudio->GetClock();
 
-	if (audio_pts == (int64_t)AV_NOPTS_VALUE) {
+	if (audioPts == (int64_t)AV_NOPTS_VALUE) {
 		usleep(20000);
 		goto audioclock;
 	}
 
-	int diff = video_pts - audio_pts - m_pDevice->GetVideoAudioDelay();
+	int diff = videoPts - audioPts - m_pDevice->GetVideoAudioDelay();
 
 	if (abs(diff) > 5000) {	// more than 5s
 		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d, Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
-			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audio_pts),
-			Timestamp2String(video_pts), m_pDevice->GetVideoAudioDelay(), diff);
+			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts),
+			Timestamp2String(videoPts), m_pDevice->GetVideoAudioDelay(), diff);
 	}
 
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
 		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			m_framesDropped, m_framesDuped,
 			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
-			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audio_pts),
-			Timestamp2String(video_pts), m_pDevice->GetVideoAudioDelay(), diff);
+			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts),
+			Timestamp2String(videoPts), m_pDevice->GetVideoAudioDelay(), diff);
 
 		if (!m_startCounter)
 			m_startCounter++;
@@ -419,8 +421,8 @@ audioclock:
 		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			m_framesDropped, m_framesDuped,
 			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
-			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audio_pts),
-			Timestamp2String(video_pts), m_pDevice->GetVideoAudioDelay(), diff);
+			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts),
+			Timestamp2String(videoPts), m_pDevice->GetVideoAudioDelay(), diff);
 
 		m_framesDuped++;
 		usleep(20000);
@@ -430,13 +432,12 @@ audioclock:
 	return 0;
 }
 
-///
-///	Get next video frame
-///
-//	retval 0	received frame with PTS value
-//	retval 1	received frame without PTS value
-//
-///
+/**
+ * @brief Get next video frame from ringbuffer
+ *
+ * @retval 0     received frame with PTS value
+ * @retval 1     received frame without PTS value
+ */
 int cVideoRender::GetFrame(AVFrame **frame)
 {
 	AVFrame *pframe = NULL;
@@ -453,45 +454,45 @@ int cVideoRender::GetFrame(AVFrame **frame)
 /**
  * @brief Get frame flags
  *
- * @param frame		AVFrame
+ * @param frame	      AVFrame
  *
- * @returns		FRAME_FLAG_TRICKSPEED or FRAME_FLAG_STILLPICTURE
+ * @returns           FRAME_FLAG_TRICKSPEED or FRAME_FLAG_STILLPICTURE
  */
 int cVideoRender::GetFrameFlags(AVFrame *frame)
 {
 	if (!frame || !frame->opaque_ref)
 		return 0;
 
-	FrameData *fd = (FrameData *)frame->opaque_ref->data;
-	return fd->flags;
+	int *frameFlags = (int *)frame->opaque_ref->data;
+	return *frameFlags;
 }
 
 /**
  * @brief Set frame flags
  *
- * @param frame		AVFrame
- * @param flags		FRAME_FLAG_TRICKSPEED and/or FRAME_FLAG_STILLPICTURE
+ * @param frame     AVFrame
+ * @param flags     FRAME_FLAG_TRICKSPEED and/or FRAME_FLAG_STILLPICTURE
  */
 void cVideoRender::SetFrameFlags(AVFrame *frame, int flags)
 {
-	FrameData *fd;
+	int *frameFlags;
 	if (!frame->opaque_ref) {
-		frame->opaque_ref = av_buffer_allocz(sizeof(*fd));
+		frame->opaque_ref = av_buffer_allocz(sizeof(*frameFlags));
 		if (!frame->opaque_ref) {
 			LOGFATAL("%s: cannot allocate private frame data", __FUNCTION__);
 		}
 	}
 
-	fd = (FrameData *)frame->opaque_ref->data;
-	fd->flags = flags;
+	frameFlags = (int *)frame->opaque_ref->data;
+	*frameFlags = flags;
 }
 
 /**
  * @brief Check, if this is a trickspeed frame
  *
- * @param frame		AVFrame
+ * @param frame    AVFrame
  *
- * @return		true, if this frame is marked as a trickspeed frame
+ * @return         true, if this frame is marked as a trickspeed frame
  */
 int cVideoRender::IsTrickspeedFrame(AVFrame *frame)
 {
@@ -501,9 +502,9 @@ int cVideoRender::IsTrickspeedFrame(AVFrame *frame)
 /**
  * @brief Check, if this is a stillpicture frame
  *
- * @param frame		AVFrame
+ * @param frame    AVFrame
  *
- * @return		true, if this frame is marked as a sillpicture frame
+ * @return         true, if this frame is marked as a sillpicture frame
  */
 int cVideoRender::IsStillpictureFrame(AVFrame *frame)
 {
@@ -513,7 +514,7 @@ int cVideoRender::IsStillpictureFrame(AVFrame *frame)
 /**
  * @brief Mark this frame as a trickspeed frame
  *
- * @param frame		AVFrame
+ * @param frame      AVFrame
  */
 void cVideoRender::MarkAsTrickspeedFrame(AVFrame *frame)
 {
@@ -523,23 +524,26 @@ void cVideoRender::MarkAsTrickspeedFrame(AVFrame *frame)
 /**
  * @brief Mark this frame as a stillpicture frame
  *
- * @param frame		AVFrame
+ * @param frame     AVFrame
  */
 void cVideoRender::MarkAsStillpictureFrame(AVFrame *frame)
 {
 	SetFrameFlags(frame, FRAME_FLAG_STILLPICTURE);
 }
 
-///
-///	Get suitable framebuffer for frame
-///
-//	retval 0	got a buffer
-//	retval 1	sth went wrong
-//
-///
+/**
+ * @brief Get suitable framebuffer for frame
+ * 
+ * First, search for an already created buffer. If there is no such buffer, create one.
+ * 
+ * @param frame  AVFrame which should be associated to the buffer
+ *
+ * @retval 0     got a buffer
+ * @retval 1     sth went wrong
+ */
 cDrmBuffer *cVideoRender::GetBuffer(AVFrame *frame)
 {
-	cDrmBuffer *pbuf = nullptr;
+	cDrmBuffer *buf = nullptr;
 	int i;
 
 	AVDRMFrameDescriptor *primedata = (AVDRMFrameDescriptor *)frame->data[0];
@@ -556,13 +560,13 @@ cDrmBuffer *cVideoRender::GetBuffer(AVFrame *frame)
 			continue;
 
 		if (m_buffer[i].FdPrime(0) == primedata->objects[0].fd) {
-			pbuf = &m_buffer[i];
+			buf = &m_buffer[i];
 			break;
 		}
 	}
 
 	// search for a "free" buffer
-	if (pbuf == nullptr) {
+	if (buf == nullptr) {
 		for (i = 0; i < RENDERBUFFERS; i++) {
 			if (!m_buffer[i].IsDirty())
 				break;
@@ -572,39 +576,37 @@ cDrmBuffer *cVideoRender::GetBuffer(AVFrame *frame)
 			return nullptr;
 		}
 
-		pbuf = &m_buffer[i];
-		if (pbuf->Setup(m_pDrmDevice->Fd(), (uint32_t)frame->width, (uint32_t)frame->height,
+		buf = &m_buffer[i];
+		if (buf->Setup(m_pDrmDevice->Fd(), (uint32_t)frame->width, (uint32_t)frame->height,
 		               0, primedata))
 			return nullptr;
 
 		m_buffer[i].MarkAsHwBuffer();
 	}
 
-	if (pbuf == nullptr) {
+	if (buf == nullptr) {
 		LOGDEBUG("GetBuffer: SHOULD NOT HAPPEN! failed, no buffer found!");
 		return nullptr;
 	}
 
-	pbuf->SetTrickspeed(IsTrickspeedFrame(frame));
+	buf->SetTrickspeed(IsTrickspeedFrame(frame));
 
-	return pbuf;
+	return buf;
 }
 
-
-///
-///	Check if we should wait for audio to come up with video
-///
-///	retval 0	wait for video to sync with audio
-///	retval 1	wait for audio to sync with video
-///
-///
+/**
+ * @brief Check if we should wait for audio to come up with video
+ * 
+ * @retval 0     wait for video to sync with audio
+ * @retval 1     wait for audio to sync with video
+ */
 int cVideoRender::ShouldWaitForAudio(void) {
-	int64_t audio_pts = m_pAudio->GetClock();
-	int64_t video_pts = GetVideoClock() * 1000 * av_q2d(*m_timebase);
-	if (video_pts == AV_NOPTS_VALUE || audio_pts == AV_NOPTS_VALUE)
+	int64_t audioPts = m_pAudio->GetClock();
+	int64_t videoPts = GetVideoClock() * 1000 * av_q2d(*m_timebase);
+	if (videoPts == AV_NOPTS_VALUE || audioPts == AV_NOPTS_VALUE)
 		return 1;
 
-	int diff = video_pts - audio_pts - m_pDevice->GetVideoAudioDelay();
+	int diff = videoPts - audioPts - m_pDevice->GetVideoAudioDelay();
 	// audio is behind video, wait for audio
 	if (diff > 0)
 		return 1;
@@ -613,18 +615,17 @@ int cVideoRender::ShouldWaitForAudio(void) {
 	return 0;
 }
 
-///
-///	Draw a video frame.
-///
-//	retval 0	modesetting and commit was done, need to process outstanding DRM events
-//	retval 1	no new frames or OSD, no modesetting was done, don't process outstanding DRM events
-//
-///
+/**
+ * @brief Display the frame (video and/or osd)
+ * 
+ * @retval 0     modesetting and commit was done, need to process outstanding DRM events
+ * @retval 1     no new frames or OSD, no modesetting was done, don't process outstanding DRM events
+ */
 int cVideoRender::DisplayFrame(void)
 {
 	cDrmBuffer *buf = NULL;
 	AVFrame *frame = NULL;
-	int skip_video = 0;
+	int skipVideo = 0;
 	int timeout; // ms
 	int ret;
 
@@ -636,7 +637,7 @@ int cVideoRender::DisplayFrame(void)
 
 	if (ShouldFlush()) {
 		LOGDEBUG2(L_DRM, "DisplayFrame: flushing, just skip video");
-		skip_video = 1;
+		skipVideo = 1;
 		goto page_flip;
 	}
 
@@ -657,26 +658,26 @@ dequeue:
 
 		if (ShouldFlush()) {
 			LOGDEBUG2(L_DRM, "DisplayFrame: flushing, just skip video");
-			skip_video = 1;
+			skipVideo = 1;
 			goto page_flip;
 		}
 
 		if (VideoIsPaused()) {
 			usleep(10000);
 			// LOGDEBUG2(L_DRM, "DisplayFrame: paused, skip video");
-			skip_video = 1;
+			skipVideo = 1;
 			goto page_flip;
 		}
 
 		// wait max. 15ms in case we have an osd
 		if (m_pBufOsd && m_pBufOsd->IsDirty() && !timeout--) {
-			skip_video = 1;
+			skipVideo = 1;
 			LOGDEBUG2(L_DRM, "DisplayFrame: no video but osd, skip video");
 			goto page_flip;
 		}
 
 		if (m_startgrab) {
-			skip_video = 1;
+			skipVideo = 1;
 			LOGDEBUG2(L_DRM, "DisplayFrame: grab requested, skip video");
 			goto page_flip;
 		}
@@ -688,7 +689,7 @@ dequeue:
 	// this is necessary for a correct Play() after Pause()
 	if (VideoIsPaused() && ShouldWaitForAudio()) {
 		usleep(10000);
-		skip_video = 1;
+		skipVideo = 1;
 		goto page_flip;
 	}
 
@@ -718,7 +719,7 @@ dequeue:
 	}
 
 	// sync audio/video
-	ret = Sync(frame, &skip_video, &buf);
+	ret = Sync(frame, &skipVideo, &buf);
 
 	if (ret < 0) { // drop frame (dup is handled within Sync())
 		av_frame_free(&frame);
@@ -742,14 +743,14 @@ skip_sync:
 
 page_flip:
 	// no modesetting was done
-	if (CommitBuffer(buf, skip_video) < 0) {
+	if (CommitBuffer(buf, skipVideo) < 0) {
 		if (frame)
 			av_frame_free(&frame);
 		return 1;
 	}
 
 	// only osd was set
-	if (skip_video)
+	if (skipVideo)
 		return 0;
 
 	// now, that we had a successful commit, set the STC if we have a frame
@@ -771,7 +772,6 @@ page_flip:
 		av_frame_free(&m_pLastFrame->frame);
 	}
 
-	// TODO: the whole m_pLastFrame handling has to be done better!
 	if (buf && buf->Id() != m_bufBlack.Id()) {
 		m_pLastFrame->frame = buf->Frame();
 		m_pLastFrame->buf = buf;
@@ -786,19 +786,21 @@ page_flip:
 	return 0;
 }
 
+/**
+ * @brief Wrapper for drmHandleEvent()
+ */
 int cVideoRender::DrmHandleEvent(void)
 {
 	return m_pDrmDevice->HandleEvent();
 }
 
-//----------------------------------------------------------------------------
-//	OSD
-//----------------------------------------------------------------------------
+/*****************************************************************************
+ * OSD
+ ****************************************************************************/
 
-///
-///	Clear the OSD.
-///
-///
+/**
+ * @brief Clear the OSD (draw an empty/ transparent OSD)
+ */
 void cVideoRender::OsdClear(void)
 {
 #ifdef USE_GLES
@@ -841,26 +843,26 @@ void cVideoRender::OsdClear(void)
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
-///
-///	Draw an OSD ARGB image.
-///
-///	@param xi	x-coordinate in argb image
-///	@param yi	y-coordinate in argb image
-///	@paran height	height in pixel in argb image
-///	@paran width	width in pixel in argb image
-///	@param pitch	pitch of argb image
-///	@param argb	32bit ARGB image data
-///	@param x	x-coordinate on screen of argb image
-///	@param y	y-coordinate on screen of argb image
-///
+/**
+ * @brief Draw an OSD ARGB image.
+ *
+ * @param xi         x-coordinate in argb image
+ * @param yi         y-coordinate in argb image
+ * @param height     height in pixel in argb image
+ * @param width      width in pixel in argb image
+ * @param pitch      pitch of argb image
+ * @param argb       32bit ARGB image data
+ * @param x          x-coordinate on screen of argb image
+ * @param y          y-coordinate on screen of argb image
+ */
 void cVideoRender::OsdDrawARGB(int xi, int yi,
-		int width, int height, int pitch,
-		const uint8_t * argb, int x, int y)
+                               int width, int height, int pitch,
+                               const uint8_t * argb, int x, int y)
 {
 #ifdef USE_GLES
 	if (m_disableOglOsd) {
 		LOGDEBUG2(L_OSD, "VideoOsdDrawARGB width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d",
-			   width, height, pitch, argb, x, y, m_pBufOsd->Pitch(0), xi, yi);
+			width, height, pitch, argb, x, y, m_pBufOsd->Pitch(0), xi, yi);
 		for (int i = 0; i < height; ++i) {
 			memcpy(m_pBufOsd->Plane(0) + x * 4 + (i + y) * m_pBufOsd->Pitch(0),
 				argb + i * pitch, MIN((size_t)pitch, m_pBufOsd->Pitch(0)));
@@ -900,13 +902,13 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
 	m_osdShown = 1;
 }
 
-//----------------------------------------------------------------------------
-//	Thread
-//----------------------------------------------------------------------------
+/*****************************************************************************
+ * Thread
+ ****************************************************************************/
 
-///
-///
-///
+/**
+ * @brief Stop decoding thread
+ */
 void cVideoRender::ExitDecodingThread(void)
 {
 	LOGDEBUG("%s", __FUNCTION__);
@@ -915,9 +917,19 @@ void cVideoRender::ExitDecodingThread(void)
 		m_pDecodingThread->Stop();
 }
 
-///
-///
-///
+/**
+ * @brief Start decoding thread
+ */
+void cVideoRender::WakeupDecodingThread(void)
+{
+	LOGDEBUG("%s", __FUNCTION__);
+	if (!m_pDecodingThread->Active())
+		m_pDecodingThread->Start();
+}
+
+/**
+ * @brief Stop display thread
+ */
 void cVideoRender::ExitDisplayThread(void)
 {
 	LOGDEBUG("%s", __FUNCTION__);
@@ -929,11 +941,9 @@ void cVideoRender::ExitDisplayThread(void)
 	}
 }
 
-///
-///	Wakeup display thread
-///
-///	New video arrived, wakeup video thread.
-///
+/**
+ * @brief Start display thread
+ */
 void cVideoRender::WakeupDisplayThread(void)
 {
 	LOGDEBUG("%s", __FUNCTION__);
@@ -941,18 +951,9 @@ void cVideoRender::WakeupDisplayThread(void)
 		m_pDisplayThread->Start();
 }
 
-///
-///	Wakeup decoding thread
-///
-///	New video arrived, wakeup video thread.
-///
-void cVideoRender::WakeupDecodingThread(void)
-{
-	LOGDEBUG("%s", __FUNCTION__);
-	if (!m_pDecodingThread->Active())
-		m_pDecodingThread->Start();
-}
-
+/**
+ * @brief Callback free primedata if av_buffer is unreferenced
+ */
 static void ReleaseFrame( __attribute__ ((unused)) void *opaque, uint8_t *data)
 {
 	AVDRMFrameDescriptor *primedata = (AVDRMFrameDescriptor *)data;
@@ -960,6 +961,13 @@ static void ReleaseFrame( __attribute__ ((unused)) void *opaque, uint8_t *data)
 	av_free(primedata);
 }
 
+/**
+ * @brief Enqueue a software decoded frame in the render ringbuffer
+ *
+ * Get a buffer for the frame or prepare it before.
+ *
+ * @param inframe         the AVFrame to enqueue
+ */
 void cVideoRender::EnqueueFB(AVFrame *inframe)
 {
 	// inframe->format is always NV12!
@@ -1064,21 +1072,26 @@ get_buffer:
 	av_frame_free(&inframe);
 }
 
-///
-///	Display a ffmpeg frame
-///
-///	@param render	video render
-///	@param video_ctx	ffmpeg video codec context
-///	@param frame		frame to display
-///	@retval 0	success or error, return (frame is freed or moved to the render ringbuffer)
-///	@retval	-1	ringbuffer full, try again
-///
-int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame)
+/**
+ * @brief Render a frame
+ *
+ * Frames either
+ * - go via the deinterlacer or
+ * - are pushed directly in the render ringbuffer or
+ * - go via EnqueueFB to the render ringbuffer if the buffer has to be prepared before.
+ *
+ * @param videoCtx   ffmpeg video codec context
+ * @param frame       frame to render
+ *
+ * @retval 0          success or error, return (frame is either freed or moved to the render ringbuffer)
+ * @retval -1         ringbuffer full, try again
+ */
+int cVideoRender::RenderFrame(AVCodecContext * videoCtx, AVFrame * frame)
 {
 	int interlaced;
 
 	if (!m_startCounter) {
-		m_timebase = &video_ctx->pkt_timebase;
+		m_timebase = &videoCtx->pkt_timebase;
 	}
 
 	if (frame->decode_error_flags || frame->flags & AV_FRAME_FLAG_CORRUPT) {
@@ -1100,21 +1113,21 @@ int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame)
 	if (!(IsTrickspeedFrame(frame) || IsStillpictureFrame(frame))) {
 
 		// set the interlaced switch depending on the framerate
-		if ((video_ctx->framerate.num > 0) &&
-			(video_ctx->framerate.num / video_ctx->framerate.den > 30))
+		if ((videoCtx->framerate.num > 0) &&
+		    (videoCtx->framerate.num / videoCtx->framerate.den > 30))
 			interlaced = 0;
-		else if (video_ctx->framerate.num > 0)
+		else if (videoCtx->framerate.num > 0)
 			interlaced = 1;
 
 		// set the interlaced switch depending on an active deinterlace filter, if framerate is not available
-		if ((video_ctx->framerate.num == 0) &&
-			 !interlaced && m_pFilterThread->Active() && m_pFilterThread->IsInterlaceFilter()) {
+		if ((videoCtx->framerate.num == 0) &&
+		    !interlaced && m_pFilterThread->Active() && m_pFilterThread->IsInterlaceFilter()) {
 			LOGWARNING("RenderFrame: WARNING!!! frame without interlaced flag arrived while deinterlace filter is active (P %d)!", ++m_numWrongProgressive);
 			interlaced = 1;
 		}
 
 		// hevc is always progressive
-		if (video_ctx->codec_id == AV_CODEC_ID_HEVC)
+		if (videoCtx->codec_id == AV_CODEC_ID_HEVC)
 			interlaced = 0;
 
 		m_pDevice->VideoStream->SetInterlaced(interlaced);
@@ -1129,7 +1142,7 @@ int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame)
 		// -> put the frame into filter Rb
 		if (!m_pFilterThread->Active()) {
 			LOGDEBUG("RenderFrame: wakeup filter thread");
-			if (m_pFilterThread->Init(video_ctx, frame, m_deintDisabled)) {
+			if (m_pFilterThread->Init(videoCtx, frame, m_deintDisabled)) {
 				av_frame_free(&frame);
 				return 0;
 			} else {
@@ -1179,20 +1192,36 @@ int cVideoRender::RenderFrame(AVCodecContext * video_ctx, AVFrame * frame)
 	return 0;
 }
 
+/**
+ * @brief Wrapper to lock the render ringbuffer
+ */
 void cVideoRender::FramesRbLock(void) {
 	m_displayQueue.Lock();
 }
 
+/**
+ * @brief Wrapper to unlock the render ringbuffer
+ */
 void cVideoRender::FramesRbUnlock(void) {
 	m_displayQueue.Unlock();
 }
 
-void cVideoRender::RbPushFrame(AVFrame * frame) {
+/**
+ * @brief Push the frame into the render ringbuffer
+ *
+ * @param frame     AVFrame which should go to the ringbuffer
+ */
+void cVideoRender::RbPushFrame(AVFrame *frame) {
 	m_framesRb[m_framesWrite] = frame;
 	m_framesWrite = (m_framesWrite + 1) % VIDEO_SURFACES_MAX;
 	atomic_inc(&m_framesFilled);
 }
 
+/**
+ * @brief Get a frame from the render ringbuffer
+ *
+ * @returns        next AVFrame from the ringbuffer
+ */
 AVFrame *cVideoRender::RbGetFrame(void) {
 	AVFrame *frame = m_framesRb[m_framesRead];
 	m_framesRead = (m_framesRead + 1) % VIDEO_SURFACES_MAX;
@@ -1201,9 +1230,11 @@ AVFrame *cVideoRender::RbGetFrame(void) {
 	return frame;
 }
 
-///
-///	Set video clock.
-///
+/**
+ * @brief Wrapper to set the video clock (m_pts)
+ *
+ * @param pts      the pts to be set
+ */
 void cVideoRender::SetVideoClock(int64_t pts)
 {
 	m_videoClockMutex.Lock();
@@ -1211,14 +1242,11 @@ void cVideoRender::SetVideoClock(int64_t pts)
 	m_videoClockMutex.Unlock();
 }
 
-///
-///	Get video clock.
-///
-///	@param hw_decoder	video hardware decoder
-///
-///	@note this isn't monoton, decoding reorders frames, setter keeps it
-///	monotonic
-///
+/**
+ * @brief Wrapper to get the video clock (m_pts)
+ *
+ * @returns the current pts
+ */
 int64_t cVideoRender::GetVideoClock(void)
 {
 	int64_t pts;
@@ -1228,11 +1256,9 @@ int64_t cVideoRender::GetVideoClock(void)
 	return pts;
 }
 
-///
-///	send start condition to video thread.
-///
-///	@param hw_render	video hardware render
-///
+/**
+ * @brief Send start condition to video thread
+ */
 void cVideoRender::StartVideo(void)
 {
 	ResumeVideo();
@@ -1241,13 +1267,12 @@ void cVideoRender::StartVideo(void)
 		m_startCounter, m_closing, GetTrickSpeed());
 }
 
-///
-///	Close the renderer and clear frames (and) framebuffers if needed
-///
-///	@param hw_render	video hardware render
-///	@param black		true, if should set a black fb and clear the last framebuffer,
-///				otherwise wait for the clear until the next frame arrives
-///
+/**
+ * @brief Close the renderer wait for the frames and framebuffers to be cleared
+ *
+ * @param black     true, if a black fb should be set and the last rendered buffer should be cleared,
+ *                  otherwise don't set a black fb and wait for the clear until the next frame arrives
+ */
 void cVideoRender::SetClosing(int black)
 {
 	LOGDEBUG("SetClosing: m_startCounter %d%s", m_startCounter, black ? " closing": " flushing");
@@ -1275,9 +1300,9 @@ void cVideoRender::SetClosing(int black)
 		SetTrickSpeed(0, 1);
 }
 
-///
-//	Pause video.
-//
+/**
+ * @brief Pause the renderer
+ */
 void cVideoRender::PauseVideo(void)
 {
 	LOGDEBUG("PauseVideo:");
@@ -1286,9 +1311,9 @@ void cVideoRender::PauseVideo(void)
 	m_playbackMutex.Unlock();
 }
 
-///
-//	Resume video.
-//
+/**
+ * @brief Resume the renderer after pausing
+ */
 void cVideoRender::ResumeVideo(void)
 {
 	LOGDEBUG("ResumeVideo:");
@@ -1297,9 +1322,12 @@ void cVideoRender::ResumeVideo(void)
 	m_playbackMutex.Unlock();
 }
 
-///
-//	Check pause status
-//
+/**
+ * @brief Check the renderers pausing status
+ *
+ * @retval 1     if paused
+ * @retval 0     if rendering
+ */
 int cVideoRender::VideoIsPaused(void)
 {
 	int ret;
@@ -1309,13 +1337,12 @@ int cVideoRender::VideoIsPaused(void)
 	return ret;
 }
 
-///
-///	Simply set trick play speed values
-///
-///	@param hw_render	video hardware render
-///	@param speed		trick speed (0 = normal)
-///	@param forward		1 if forward trick speed
-///
+/**
+ * @brief Set the trickspeed parameters
+ *
+ * @param speed         trick speed value from VDR (0 = normal)
+ * @param forward       1 if forward trick speed, 0 if backward
+ */
 void cVideoRender::SetTrickSpeed(int speed, int forward)
 {
 	LOGDEBUG2(L_TRICK, "SetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
@@ -1326,9 +1353,11 @@ void cVideoRender::SetTrickSpeed(int speed, int forward)
 	m_trickspeedMutex.Unlock();
 }
 
-///
-///	Return the current trick speed mode
-///
+/**
+ * @brief Get the current trickspeed
+ *
+ * @returns current trick speed value set with SetTrickSpeed()
+ */
 int cVideoRender::GetTrickSpeed(void)
 {
 	int speed;
@@ -1338,9 +1367,12 @@ int cVideoRender::GetTrickSpeed(void)
 	return speed;
 }
 
-///
-///	Return the current trick speed direction
-///
+/**
+ * @brief Get the current trickspeed direction
+ *
+ * @retval 1       if forward trickspeed
+ * @retval 0       if backward trickspeed
+ */
 int cVideoRender::GetTrickForward(void)
 {
 	int dir;
@@ -1350,9 +1382,11 @@ int cVideoRender::GetTrickForward(void)
 	return dir;
 }
 
-///
-///	Return the current trick counter
-///
+/**
+ * @brief Get the count of frames, which should still be rendered in trickspeed mode
+ *
+ * @returns       the count of frames still left to be rendered
+ */
 int cVideoRender::GetTrickCounter(void)
 {
 	int counter;
@@ -1362,9 +1396,11 @@ int cVideoRender::GetTrickCounter(void)
 	return counter;
 }
 
-///
-///	Set the trick counter
-///
+/**
+ * @brief Set the count of frames, which should still be rendered in trickspeed mode
+ *
+ * @param counter       the count of frames to be rendered
+ */
 void cVideoRender::SetTrickCounter(int counter)
 {
 	m_trickspeedMutex.Lock();
@@ -1372,9 +1408,11 @@ void cVideoRender::SetTrickCounter(int counter)
 	m_trickspeedMutex.Unlock();
 }
 
-///
-///	Decrease the trick counter
-///
+/**
+ * @brief Decrease the number of frames, which should still be rendered in trickspeed mode
+ *
+ * @returns       the count of frames left to be rendered
+ */
 int cVideoRender::DecTrickCounter(void)
 {
 	int counter;
@@ -1385,10 +1423,16 @@ int cVideoRender::DecTrickCounter(void)
 	return counter;
 }
 
-///
-///	Trigger grabbing in render thread
-///
-///
+/*****************************************************************************
+ * Grabbing
+ ****************************************************************************/
+
+/**
+ * @brief Trigger a screen grab
+ *
+ * @retval 0     on success, grab was triggered
+ * @retval 1     on timeout, grab was not triggered
+ */
 int cVideoRender::TriggerGrab(void)
 {
 	int timeout = 50;
@@ -1406,14 +1450,9 @@ int cVideoRender::TriggerGrab(void)
 	return err;
 }
 
-///
-///	Grab full screen image
-///
-///	@param grabimage[out]	the struct to grab in
-///	@param buf[in]		current video buffer
-///	@param ready[out]	ready is set true if we finished
-///	@param is_osd		is this an osd grab? (just for logs)
-///
+/**
+ * @brief Convert a the video drm buffer to an rgb image
+*/
 void cVideoRender::ConvertVideoBufToRgb(void)
 {
 	int size;
@@ -1432,7 +1471,7 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 			   plane, buf->Plane(plane), buf->Pitch(plane), buf->Offset(plane), buf->Handle(plane), buf->Size(plane));
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
-	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_RGB24);
+	uint8_t * result = BufToRgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_RGB24);
 	if (result) {
 		grab->SetData(result);
 		grab->SetSize(size);
@@ -1445,6 +1484,9 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 	return;
 }
 
+/**
+ * @brief Convert a the osd drm buffer to an rgb image
+*/
 void cVideoRender::ConvertOsdBufToRgb(void)
 {
 	int size;
@@ -1463,7 +1505,7 @@ void cVideoRender::ConvertOsdBufToRgb(void)
 			   plane, buf->Plane(plane), buf->Pitch(plane), buf->Offset(plane), buf->Handle(plane), buf->Size(plane));
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
-	uint8_t * result = buf2rgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_BGRA);
+	uint8_t * result = BufToRgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_BGRA);
 	grab->SetData(result);
 	grab->SetSize(size);
 	grab->FreeBuf();
@@ -1471,10 +1513,9 @@ void cVideoRender::ConvertOsdBufToRgb(void)
 	return;
 }
 
-///
-///	Clear grab buffers
-///
-///
+/**
+ * @brief Clear the grab drm buffers
+*/
 void cVideoRender::ClearGrab(void)
 {
 	if (m_grabOsd.GetBuf())
@@ -1483,26 +1524,25 @@ void cVideoRender::ClearGrab(void)
 		m_grabVideo.FreeBuf();
 }
 
-///
-///	Get the grabbed image
-///
-///	@param hw_render	video hardware render
-///	@param[out] size	returns output size (memory)
-///	@param[out] width	returns output width
-///	@param[out] height	returns output height
-///	@param[in] is_osd	is this an osd grab?
-///
-///	@returns the pointer to the image data
-///
-cSoftHdGrab *cVideoRender::GetGrab(int *size, int *width, int *height, int *x, int *y, int is_osd)
+/**
+ * @brief Get the grabbed image
+ *
+ * @param[out] size       returns output size (memory)
+ * @param[out] width      returns output width
+ * @param[out] height     returns output height
+ * @param[in] isOsd      set, if is this an osd grab, otherwise it's a video grab
+ *
+ * @returns the pointer to the cSoftHdGrab object
+ */
+cSoftHdGrab *cVideoRender::GetGrab(int *size, int *width, int *height, int *x, int *y, int isOsd)
 {
 	cSoftHdGrab *grab;
-	if (is_osd)
+	if (isOsd)
 		grab = &m_grabOsd;
 	else
 		grab = &m_grabVideo;
 
-	LOGDEBUG2(L_GRAB, "GetGrab: %s size %d %dx%d at %d|%d %p", is_osd ? "OSD" : "VIDEO", grab->GetSize(), grab->GetWidth(), grab->GetHeight(), grab->GetX(), grab->GetY(), grab->GetData());
+	LOGDEBUG2(L_GRAB, "GetGrab: %s size %d %dx%d at %d|%d %p", isOsd ? "OSD" : "VIDEO", grab->GetSize(), grab->GetWidth(), grab->GetHeight(), grab->GetX(), grab->GetY(), grab->GetData());
 
 	if (size)
 		*size = grab->GetSize();
@@ -1518,14 +1558,13 @@ cSoftHdGrab *cVideoRender::GetGrab(int *size, int *width, int *height, int *x, i
 	return grab;
 }
 
-///
-///	Get render statistics.
-///
-///	@param hw_render	video hardware render
-///	@param[out] duped	duped frames
-///	@param[out] dropped	dropped frames
-///	@param[out] count	number of decoded frames
-///
+/**
+ * @brief Get some rendering statistics
+ *
+ * @param[out] duped      number of duplicated frames
+ * @param[out] dropped    number of dropped frames
+ * @param[out] counter    number of decoded frames
+ */
 void cVideoRender::GetStats(int *duped, int *dropped, int *counter)
 {
 	*duped = m_framesDuped;
@@ -1533,24 +1572,31 @@ void cVideoRender::GetStats(int *duped, int *dropped, int *counter)
 	*counter = m_startCounter;
 }
 
-//----------------------------------------------------------------------------
-//	Setup
-//----------------------------------------------------------------------------
+/*****************************************************************************
+ * Setup and initialization
+ ****************************************************************************/
 
-
-///
-///	Get screen size.
-///
-///	@param[out] width	video stream width
-///	@param[out] height	video stream height
-///	@param[out] aspect_num	video stream aspect numerator
-///	@param[out] aspect_den	video stream aspect denominator
-///
-void cVideoRender::GetScreenSize(int *width, int *height, double *pixel_aspect)
+/**
+ * @brief Wrapper to get the screen size from the drm device
+ *
+ * @param[out] width           screen width
+ * @param[out] height          screen height
+ * @param[out] pixelAspect     screen aspect ratio
+ */
+void cVideoRender::GetScreenSize(int *width, int *height, double *pixelAspect)
 {
-	m_pDrmDevice->GetScreenSize(width, height, pixel_aspect);
+	m_pDrmDevice->GetScreenSize(width, height, pixelAspect);
 }
 
+/**
+ * @brief Helper function to read a line from a given file
+ *
+ * @param[out] buf           pointer to the data
+ * @param[out] size          size of the data at buf
+ * @param[in] file           the filepointer to be read on
+ *
+ * @returns the number of characters read
+ */
 static size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 {
 	FILE *fd = NULL;
@@ -1569,6 +1615,11 @@ static size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 	return character;
 }
 
+/**
+ * @brief Helper function to find out which platform we are on
+ *
+ * @returns the hardware quirks of the device
+ */
 static int ReadHWPlatform(void)
 {
 	char *txt_buf;
@@ -1634,9 +1685,9 @@ static int ReadHWPlatform(void)
 	return hardwareQuirks;
 }
 
-///
-///	Initialize video output module.
-///
+/**
+ * @brief Initialize the renderer
+ */
 void cVideoRender::Init(void)
 {
 	if (m_pDrmDevice->Init())
@@ -1678,20 +1729,20 @@ void cVideoRender::Init(void)
 	// save actual modesetting
 	m_pDrmDevice->SaveCrtc();
 
-	drmModeAtomicReqPtr ModeReq;
+	drmModeAtomicReqPtr modeReq;
 	const uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
 	uint32_t modeID = 0;
 
 	if (m_pDrmDevice->CreatePropertyBlob(&modeID) != 0)
 		LOGFATAL("Failed to create mode property blob.");
-	if (!(ModeReq = drmModeAtomicAlloc()))
+	if (!(modeReq = drmModeAtomicAlloc()))
 		LOGFATAL("cannot allocate atomic request (%d): %m", errno);
 
-	m_pDrmDevice->SetPropertyRequest(ModeReq, m_pDrmDevice->CrtcId(),
+	m_pDrmDevice->SetPropertyRequest(modeReq, m_pDrmDevice->CrtcId(),
 						DRM_MODE_OBJECT_CRTC, "MODE_ID", modeID);
-	m_pDrmDevice->SetPropertyRequest(ModeReq, m_pDrmDevice->ConnectorId(),
+	m_pDrmDevice->SetPropertyRequest(modeReq, m_pDrmDevice->ConnectorId(),
 						DRM_MODE_OBJECT_CONNECTOR, "CRTC_ID", m_pDrmDevice->CrtcId());
-	m_pDrmDevice->SetPropertyRequest(ModeReq, m_pDrmDevice->CrtcId(),
+	m_pDrmDevice->SetPropertyRequest(modeReq, m_pDrmDevice->CrtcId(),
 						DRM_MODE_OBJECT_CRTC, "ACTIVE", 1);
 
 	// Osd plane
@@ -1702,22 +1753,22 @@ void cVideoRender::Init(void)
 		0, 0, m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(),
 		0, 0, m_pBufOsd->Width(), m_pBufOsd->Height());
 
-	osdPlane->SetPlane(ModeReq);
+	osdPlane->SetPlane(modeReq);
 #else
 	if (m_disableOglOsd) {
 		osdPlane->SetParams(m_pDrmDevice->CrtcId(), m_pBufOsd->Id(),
 			0, 0, m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(),
 			0, 0, m_pBufOsd->Width(), m_pBufOsd->Height());
 
-		osdPlane->SetPlane(ModeReq);
+		osdPlane->SetPlane(modeReq);
 	}
 #endif
 	if (m_pDrmDevice->UseZpos()) {
 		videoPlane->SetZpos(m_pDrmDevice->ZposOverlay());
-		videoPlane->SetPlaneZpos(ModeReq);
+		videoPlane->SetPlaneZpos(modeReq);
 #ifdef USE_GLES
 		osdPlane->SetZpos(m_pDrmDevice->ZposPrimary());
-		osdPlane->SetPlaneZpos(ModeReq);
+		osdPlane->SetPlaneZpos(modeReq);
 #endif
 	}
 
@@ -1726,19 +1777,19 @@ void cVideoRender::Init(void)
 		0, 0, m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(),
 		0, 0, m_bufBlack.Width(), m_bufBlack.Height());
 
-	videoPlane->SetPlane(ModeReq);
+	videoPlane->SetPlane(modeReq);
 
-	if (drmModeAtomicCommit(m_pDrmDevice->Fd(), ModeReq, flags, NULL) != 0) {
+	if (drmModeAtomicCommit(m_pDrmDevice->Fd(), modeReq, flags, NULL) != 0) {
 #ifndef USE_GLES
 		osdPlane->DumpParameters();
 #endif
 		videoPlane->DumpParameters();
 
-		drmModeAtomicFree(ModeReq);
+		drmModeAtomicFree(modeReq);
 		LOGFATAL("VideoInit: cannot set atomic mode (%d): %m", errno);
 	}
 
-	drmModeAtomicFree(ModeReq);
+	drmModeAtomicFree(modeReq);
 
 	m_osdShown = 0;
 
@@ -1749,9 +1800,9 @@ void cVideoRender::Init(void)
 	WakeupDisplayThread();
 }
 
-///
-///	Cleanup video output module.
-///
+/**
+ * @brief Exit and cleanup the renderer
+ */
 void cVideoRender::Exit(void)
 {
 	cDrmPlane *videoPlane = m_pDrmDevice->VideoPlane();
@@ -1790,9 +1841,11 @@ void cVideoRender::Exit(void)
 	delete m_pDrmDevice;
 }
 
-///
-///	Set size and position of the video.
-///
+/**
+ * @brief Set size and position of the video on the screen
+ *
+ * @param rect         a cRect, where the video should be rendered in
+ */
 void cVideoRender::SetVideoOutputPosition(const cRect &rect)
 {
 	m_videoRect.Set(rect.Point(), rect.Size());
@@ -1805,20 +1858,38 @@ void cVideoRender::SetVideoOutputPosition(const cRect &rect)
 	LOGDEBUG("SetVideoOutputPosition %d %d %d %d%s", rect.X(), rect.Y(), rect.Width(), rect.Height(), m_videoIsScaled ? ", video is scaled" : "");
 }
 
+/**
+ * @brief Disable the deinterlacer
+ *
+ * @param disable         1: disable the deinterlacer
+ *                        0: don't disable the deinterlacer, so use it if available
+ */
 void cVideoRender::DisableDeint(int disable)
 {
 	m_configDeintDisabled = disable;
 }
 
+/**
+ * @brief Check the decoding thread status
+ *
+ * @retval     1 if active
+ *             0 if stopped
+ */
 int cVideoRender::DecodingThreadIsActive(void) {
 	return m_pDecodingThread->Active();
 };
 
+/**
+ * @brief Stop the filter thread
+ */
 void cVideoRender::StopFilter(void)
 {
 	m_pFilterThread->Stop();
 }
 
+/**
+ * @brief Let the filter thread run into a state, where no new frames need to be filtered
+ */
 void cVideoRender::WaitForFilterIdle(void)
 {
 	m_pFilterThread->WaitForIdle();

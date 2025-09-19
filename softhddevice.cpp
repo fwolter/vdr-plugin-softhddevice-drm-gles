@@ -1528,7 +1528,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
 	// 7. blit the video into a full black screen if scaled
 	uint8_t *scaledvideo;
 	if (video_width != screenwidth || video_height != screenheight || video_x != 0 || video_y != 0) {
-		scaledvideo = blitvideo(video, screenwidth, screenheight, video_x, video_y, video_width, video_height);
+		scaledvideo = BlitVideo(video, screenwidth, screenheight, video_x, video_y, video_width, video_height);
 		free(video);
 	} else {
 		scaledvideo = video;
@@ -1540,7 +1540,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
 		result = scaledvideo;
 	} else {
 		result = (uint8_t *)malloc(screensize);
-		alphablend(result, osd, scaledvideo, screenwidth, screenheight);
+		AlphaBlend(result, osd, scaledvideo, screenwidth, screenheight);
 		free(scaledvideo);
 		free(osd);
 	}
@@ -1549,7 +1549,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width,
 	int scaledsize = screensize;
 	uint8_t *scaledresult;
 	if (screenwidth != grabwidth || screenheight != grabheight) {
-		scaledresult = scalergb24(result, &scaledsize, screenwidth, screenheight, grabwidth, grabheight);
+		scaledresult = ScaleRgb24(result, &scaledsize, screenwidth, screenheight, grabwidth, grabheight);
 		free(result);
 	} else {
 		scaledresult = result;

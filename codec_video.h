@@ -48,16 +48,16 @@ public:
 	AVCodecContext *GetContext(void) { return m_pVideoCtx; };
 
 private:
-	cVideoRender *m_pRender;				///< video renderer
-	AVCodecContext *m_pVideoCtx = nullptr;	///< video codec context
-	cMutex m_mutex;							///< mutex to lock codec context (TODO: is this needed?)
-	int m_cntPacketsSent;					///< number of packets sent to decoder
-	int m_cntFramesReceived;				///< number of decoded frames received from decoder
-	int m_cntStartKeyFrames;				///< number of keyframes arrived while starting the coded
-											///< (needed for amlogic h264 decoder in order to drop some frames
-											///< in ReceiveFrame() before sending them to the renderer)
-	int m_lastCodedWidth;					///< save coded width while closing for a directly reopen
-	int m_lastCodedHeight;					///< save coded height while closing for a directly reopen
+	cVideoRender *m_pRender;                ///< video renderer
+	AVCodecContext *m_pVideoCtx = nullptr;  ///< video codec context
+	cMutex m_mutex;                         ///< mutex to lock codec context (TODO: is this needed?)
+	int m_cntPacketsSent;                   ///< number of packets sent to decoder
+	int m_cntFramesReceived;                ///< number of decoded frames received from decoder
+	int m_cntStartKeyFrames;                ///< number of keyframes arrived while starting the coded
+	                                        ///< (needed for amlogic h264 decoder in order to drop some frames
+	                                        ///< in ReceiveFrame() before sending them to the renderer)
+	int m_lastCodedWidth;                   ///< save coded width while closing for a directly reopen
+	int m_lastCodedHeight;                  ///< save coded height while closing for a directly reopen
 
 	int GetExtraData(const AVPacket *);
 };

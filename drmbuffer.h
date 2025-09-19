@@ -29,89 +29,104 @@ extern "C" {
 #include <gbm.h>
 #endif
 
+struct format_plane_info
+{
+	uint8_t bitspp;
+	uint8_t xsub;
+	uint8_t ysub;
+};
+
+struct format_info
+{
+	uint32_t format;
+	const char *fourcc;
+	uint8_t num_planes;
+	struct format_plane_info planes[4];
+};
+
 class cDrmBuffer {
 public:
-    cDrmBuffer(void);
-    cDrmBuffer(cDrmBuffer *src);
-    cDrmBuffer(int, uint32_t, uint32_t, uint32_t, struct gbm_bo *);
-    virtual ~cDrmBuffer(void);
+	cDrmBuffer(void);
+	cDrmBuffer(cDrmBuffer *src);
+	cDrmBuffer(int, uint32_t, uint32_t, uint32_t, struct gbm_bo *);
+	virtual ~cDrmBuffer(void);
 
-    int Setup(int, uint32_t, uint32_t, uint32_t, AVDRMFrameDescriptor *);
-    void Destroy(void);
-    void InitBo(int, uint32_t, uint32_t, uint32_t, struct gbm_bo *);
-    void FillBlack(void);
+	int Setup(int, uint32_t, uint32_t, uint32_t, AVDRMFrameDescriptor *);
+	void Destroy(void);
+	void InitBo(int, uint32_t, uint32_t, uint32_t, struct gbm_bo *);
+	void FillBlack(void);
 
-    // setter and getter methods
-    uint32_t Width(void) { return m_width; };
-    void SetWidth(uint32_t width) { m_width = width; };
-    uint32_t Height(void) { return m_height; };
-    void SetHeight(uint32_t height) { m_height = height; };
-    uint32_t PixFmt(void) { return m_pixFmt; };
-    void SetPixFmt(uint32_t pixFmt) { m_pixFmt = pixFmt; };
+	// setter and getter methods
+	uint32_t Width(void) { return m_width; };
+	void SetWidth(uint32_t width) { m_width = width; };
+	uint32_t Height(void) { return m_height; };
+	void SetHeight(uint32_t height) { m_height = height; };
+	uint32_t PixFmt(void) { return m_pixFmt; };
+	void SetPixFmt(uint32_t pixFmt) { m_pixFmt = pixFmt; };
 
-    int IsDirty(void) { return m_dirty; };
-    void MarkClean(void) { m_dirty = 0; };
-    void MarkDirty(void) { m_dirty = 1; };
-    int IsSwBuffer(void) { return m_swbuffer; };
-    void MarkAsHwBuffer(void) { m_swbuffer = 0; };
-    void MarkAsSwBuffer(void) { m_swbuffer = 1; };
+	int IsDirty(void) { return m_dirty; };
+	void MarkClean(void) { m_dirty = 0; };
+	void MarkDirty(void) { m_dirty = 1; };
+	int IsSwBuffer(void) { return m_swbuffer; };
+	void MarkAsHwBuffer(void) { m_swbuffer = 0; };
+	void MarkAsSwBuffer(void) { m_swbuffer = 1; };
 
-    void SetTrickspeed(int trickspeed) { m_trickspeed = trickspeed; };
-    int IsTrickspeedBuffer(void) { return m_trickspeed; };
+	void SetTrickspeed(int trickspeed) { m_trickspeed = trickspeed; };
+	int IsTrickspeedBuffer(void) { return m_trickspeed; };
 
-    int Id(void) { return m_fbId; };
-    void SetFdDrm(int fdDrm) { m_fdDrm = fdDrm; };
-    int NumPlanes(void) { return m_numPlanes; };
-    void SetNumPlanes(int numPlanes) { m_numPlanes = numPlanes; };
-    int FdPrime(int idx) { return m_fdPrime[idx]; };
-    void SetFdPrime(int idx, uint32_t fd) { m_fdPrime[idx] = fd; };
-    void SetNumObjects(int numObjects) { m_numObjects = numObjects; };
-    void SetObjectIndex(int idx, uint32_t objIdx) { m_objIdx[idx] = objIdx; };
-    uint8_t *Plane(int idx) { return m_pPlane[idx]; };
-    uint32_t Handle(int idx) { return m_handle[idx]; };
-    uint32_t *Handle(void) { return m_handle; };
-    void SetHandle(int idx, uint32_t handle) { m_handle[idx] = handle; };
-    uint32_t Offset(int idx) { return m_offset[idx]; };
-    uint32_t *Offset(void) { return m_offset; };
-    void SetOffset(int idx, uint32_t offset) { m_offset[idx] = offset; };
-    uint32_t Pitch(int idx) { return m_pitch[idx]; };
-    uint32_t *Pitch(void) { return m_pitch; };
-    void SetPitch(int idx, uint32_t pitch) { m_pitch[idx] = pitch; };
-    uint32_t Size(int idx) { return m_size[idx]; };
-    uint32_t *Size(void) { return m_size; };
-    void SetSize(int idx, uint32_t size) { m_size[idx] = size; };
+	int Id(void) { return m_fbId; };
+	void SetFdDrm(int fdDrm) { m_fdDrm = fdDrm; };
+	int NumPlanes(void) { return m_numPlanes; };
+	void SetNumPlanes(int numPlanes) { m_numPlanes = numPlanes; };
+	int FdPrime(int idx) { return m_fdPrime[idx]; };
+	void SetFdPrime(int idx, uint32_t fd) { m_fdPrime[idx] = fd; };
+	void SetNumObjects(int numObjects) { m_numObjects = numObjects; };
+	void SetObjectIndex(int idx, uint32_t objIdx) { m_objIdx[idx] = objIdx; };
+	uint8_t *Plane(int idx) { return m_pPlane[idx]; };
+	uint32_t Handle(int idx) { return m_handle[idx]; };
+	uint32_t *Handle(void) { return m_handle; };
+	void SetHandle(int idx, uint32_t handle) { m_handle[idx] = handle; };
+	uint32_t Offset(int idx) { return m_offset[idx]; };
+	uint32_t *Offset(void) { return m_offset; };
+	void SetOffset(int idx, uint32_t offset) { m_offset[idx] = offset; };
+	uint32_t Pitch(int idx) { return m_pitch[idx]; };
+	uint32_t *Pitch(void) { return m_pitch; };
+	void SetPitch(int idx, uint32_t pitch) { m_pitch[idx] = pitch; };
+	uint32_t Size(int idx) { return m_size[idx]; };
+	uint32_t *Size(void) { return m_size; };
+	void SetSize(int idx, uint32_t size) { m_size[idx] = size; };
 
-    AVFrame *Frame(void) { return m_pFrame; };
-    void SetFrame(AVFrame *frame) { m_pFrame = frame; };
+	AVFrame *Frame(void) { return m_pFrame; };
+	void SetFrame(AVFrame *frame) { m_pFrame = frame; };
 
 private:
-    uint32_t m_width;
-    uint32_t m_height;
-    uint32_t m_pixFmt;
+	uint32_t m_width;           ///< buffer width
+	uint32_t m_height;          ///< buffer height
+	uint32_t m_pixFmt;          ///< buffer pixel format
 
-    int m_dirty;
-    int m_swbuffer;
-    int m_trickspeed;
+	int m_dirty;                ///< true, if the buffer is dirty (it was written to)
+	int m_swbuffer;             ///< true, if the buffer is a software buffer
+	int m_trickspeed;           ///< true, if the buffer is a trickspeed buffer
 
-    uint32_t m_fbId;
-    int m_fdDrm;
+	uint32_t m_fbId;            ///< framebuffer id
+	int m_fdDrm;                ///< drm file desriptor
 
-    int m_numPlanes;
+	int m_numPlanes;            ///< number of planes in the buffer
 
-    int m_fdPrime[4];		// prime fds, correspond to obj_index
-    int m_numObjects;
-    int m_objIdx[4];
+	int m_fdPrime[4];           ///< prime file descriptros (corresponding to objIdx)
+	int m_numObjects;           ///< number of prime objects in the buffer
+	int m_objIdx[4];            ///< index of the objects
+	uint32_t m_primehandle[4];  ///< primedata objects prime handles (count is numObjects, index is objIdx)
 
-    uint8_t *m_pPlane[4];	
-    uint32_t m_handle[4];		// prime handle for plane
-    uint32_t m_offset[4];
-    uint32_t m_pitch[4];
-    uint32_t m_size[4];
-    uint32_t m_primehandle[4];	// primedata objects prime handles (count is nb_objects, index is obj_index)
+	uint8_t *m_pPlane[4];       ///< array of the plane data
+	uint32_t m_handle[4];       ///< array of the plane handles
+	uint32_t m_offset[4];       ///< array of the plane offset
+	uint32_t m_pitch[4];        ///< array of the plane pitch
+	uint32_t m_size[4];         ///< array of the plane size
 
-    AVFrame *m_pFrame;
+	AVFrame *m_pFrame;
 #ifdef USE_GLES
-    struct gbm_bo *m_pBo;
+	struct gbm_bo *m_pBo;       ///< pointer to the gbm buffer object
 #endif
 };
 

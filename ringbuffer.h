@@ -33,15 +33,6 @@
 
 class cDeviceRingbuffer
 {
-private:
-	char *m_pBuffer;				///< ring buffer data
-	const char *m_pBufferEnd;		///< end of buffer
-	size_t m_Size;					///< bytes in buffer (for faster calc)
-	const char *m_pReadPointer;		///< only used by reader
-	char *m_pWritePointer;			///< only used by writer
-
-	// The only thing modified by both
-	atomic_t m_filled;				///< how many of the buffer is used
 public:
 	cDeviceRingbuffer(size_t);
 	virtual ~cDeviceRingbuffer(void);
@@ -54,5 +45,15 @@ public:
 	size_t ReadAdvance(size_t);
 	size_t FreeBytes(void);
 	size_t UsedBytes(void);
+
+private:
+	char *m_pBuffer;              ///< ring buffer data
+	const char *m_pBufferEnd;     ///< end of buffer
+	size_t m_Size;                ///< bytes in buffer (for faster calc)
+	const char *m_pReadPointer;   ///< only used by reader
+	char *m_pWritePointer;        ///< only used by writer
+
+	// The only thing modified by both
+	atomic_t m_filled;            ///< how many of the buffer is used
 };
 #endif

@@ -18,6 +18,8 @@
  * GNU Affero General Public License for more details.
  */
 
+// @todo: sort out header includes
+
 #ifndef __DRMDEVICE_H
 #define __DRMDEVICE_H
 
@@ -69,79 +71,81 @@ extern "C" {
 class cDrmDevice
 {
 public:
-    cDrmDevice(cVideoRender *);
-    virtual ~cDrmDevice(void);
+	cDrmDevice(cVideoRender *);
+	virtual ~cDrmDevice(void);
 
-    int Init(void);
-    void GetScreenSize(int *, int *, double *);
-    int Fd(void) { return m_fdDrm; };
-    void Close(void);
+	int Init(void);
+	void GetScreenSize(int *, int *, double *);
+	int Fd(void) { return m_fdDrm; };
+	void Close(void);
 
-    void SetUserReqDisplayWidth(int width) { m_userReqDisplayWidth = width; };
-    void SetUserReqDisplayHeight(int height) { m_userReqDisplayHeight = height; };
-    void SetUserReqDisplayRefreshRate(int refreshRate) { m_userReqDisplayRefreshRate = refreshRate; };
+	// setters and getters
+	void SetUserReqDisplayWidth(int width) { m_userReqDisplayWidth = width; };
+	void SetUserReqDisplayHeight(int height) { m_userReqDisplayHeight = height; };
+	void SetUserReqDisplayRefreshRate(int refreshRate) { m_userReqDisplayRefreshRate = refreshRate; };
+	uint32_t ConnectorId(void) { return m_connectorId; };
 
-    uint64_t DisplayWidth(void) { return m_drmModeInfo.hdisplay; };
-    uint64_t DisplayHeight(void) { return m_drmModeInfo.vdisplay; };
+	uint64_t DisplayWidth(void) { return m_drmModeInfo.hdisplay; };
+	uint64_t DisplayHeight(void) { return m_drmModeInfo.vdisplay; };
 
-    uint32_t CrtcId(void) { return m_crtcId; };
-    int UseZpos(void) { return m_useZpos; };
-    uint64_t ZposOverlay(void) { return m_zposOverlay; };
-    uint64_t ZposPrimary(void) { return m_zposPrimary; };
+	uint32_t CrtcId(void) { return m_crtcId; };
+	int UseZpos(void) { return m_useZpos; };
+	uint64_t ZposOverlay(void) { return m_zposOverlay; };
+	uint64_t ZposPrimary(void) { return m_zposPrimary; };
 
-    cDrmPlane *OsdPlane(void) { return &m_osdPlane; };
-    cDrmPlane *VideoPlane(void) { return &m_videoPlane; };
+	cDrmPlane *OsdPlane(void) { return &m_osdPlane; };
+	cDrmPlane *VideoPlane(void) { return &m_videoPlane; };
 
 #ifdef USE_GLES
-    EGLSurface EglSurface(void) { return m_eglSurface; };
-    EGLDisplay EglDisplay(void) { return m_eglDisplay; };
-    EGLContext EglContext(void) { return m_eglContext; };
+	EGLSurface EglSurface(void) { return m_eglSurface; };
+	EGLDisplay EglDisplay(void) { return m_eglDisplay; };
+	EGLContext EglContext(void) { return m_eglContext; };
 	int GlInitiated(void) { return m_glInitiated; };
-    struct gbm_surface *GbmSurface(void) { return m_pGbmSurface; };
-    cDrmBuffer *GetBufFromBo(struct gbm_bo *);
+	struct gbm_surface *GbmSurface(void) { return m_pGbmSurface; };
+
+	cDrmBuffer *GetBufFromBo(struct gbm_bo *);
 #endif
-    uint32_t ConnectorId(void) { return m_connectorId; };
-    int SetPropertyRequest(drmModeAtomicReqPtr, uint32_t, uint32_t, const char *, uint64_t);
-    void SaveCrtc(void);
-    void RestoreCrtc(void);
-    int HandleEvent(void);
-    int CreatePropertyBlob(uint32_t *);
-    void InitEvent(void);
+	int SetPropertyRequest(drmModeAtomicReqPtr, uint32_t, uint32_t, const char *, uint64_t);
+	void SaveCrtc(void);
+	void RestoreCrtc(void);
+	int HandleEvent(void);
+	int CreatePropertyBlob(uint32_t *);
+	void InitEvent(void);
 
 private:
-    cVideoRender *m_pRender;
+	cVideoRender *m_pRender;               ///< pointer to cVideoRender object
 
-    int m_fdDrm;                        ///< to be renamed in video.cpp + .h
-    uint32_t m_connectorId;             ///< to be renamed in video.cpp + .h
-    drmModeModeInfo m_drmModeInfo;
-    uint32_t m_crtcId;					///< current crtc ID
-	uint32_t m_crtcIndex;				///< current crtc index
-	drmModeCrtc *m_drmModeCrtcSaved;
-	drmEventContext m_drmEventCtx;
+	int m_fdDrm;                           ///< drm file descriptor
+	uint32_t m_connectorId;                ///< connector id
+	drmModeModeInfo m_drmModeInfo;         ///< mode info
+	uint32_t m_crtcId;                     ///< current crtc ID
+	uint32_t m_crtcIndex;                  ///< current crtc index
+	drmModeCrtc *m_drmModeCrtcSaved;       ///< saved CRTC infos
+	drmEventContext m_drmEventCtx;         ///< drm event context
 
-	int m_userReqDisplayWidth;			///< user requested display width
-	int m_userReqDisplayHeight;			///< user requested display height
-	uint32_t m_userReqDisplayRefreshRate;	///< user requested display refresh rate
+	int m_userReqDisplayWidth;             ///< user requested display width
+	int m_userReqDisplayHeight;            ///< user requested display height
+	uint32_t m_userReqDisplayRefreshRate;  ///< user requested display refresh rate
 
-    int m_useZpos;						///< is set, if drm hardware can use zpos
-	uint64_t m_zposOverlay;				///< zpos of overlay plane
-	uint64_t m_zposPrimary;				///< zpos of primary plane
-	cDrmPlane m_videoPlane;				///< the video drm plane
-	cDrmPlane m_osdPlane;				///< the osd drm plane
+	int m_useZpos;                         ///< is set, if drm hardware can use zpos
+	uint64_t m_zposOverlay;                ///< zpos of overlay plane
+	uint64_t m_zposPrimary;                ///< zpos of primary plane
+	cDrmPlane m_videoPlane;                ///< the video drm plane
+	cDrmPlane m_osdPlane;                  ///< the osd drm plane
 
 #ifdef USE_GLES
-	struct gbm_device *m_pGbmDevice;
-	struct gbm_surface *m_pGbmSurface;
+	struct gbm_device *m_pGbmDevice;       ///< pointer to the gbm device
+	struct gbm_surface *m_pGbmSurface;     ///< pointer to the gbm surface
 
-    EGLSurface m_eglSurface;
-	EGLDisplay m_eglDisplay;
-	EGLContext m_eglContext;
-	int m_glInitiated;					///< true, if OpenGL/ES context is initiated
+	EGLSurface m_eglSurface;               ///< EGL surface
+	EGLDisplay m_eglDisplay;               ///< EGL display
+	EGLContext m_eglContext;               ///< EGL context
+	int m_glInitiated;                     ///< true, if OpenGL/ES context is initiated
 
-    int32_t find_crtc_for_connector(const drmModeRes *, const drmModeConnector *);
-    int InitEGL(void);
+	int32_t find_crtc_for_connector(const drmModeRes *, const drmModeConnector *);
+	int InitEGL(void);
 	EGLConfig GetEGLConfig(void);
-    int init_gbm(int, int, uint32_t, uint64_t);
+	int init_gbm(int, int, uint32_t, uint64_t);
 #endif
 };
 

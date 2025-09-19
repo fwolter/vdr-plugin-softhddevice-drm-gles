@@ -36,7 +36,9 @@ class cSoftHdGrab
 public:
 	cSoftHdGrab(void);
 	virtual ~cSoftHdGrab(void);
+	void FreeBuf(void);
 
+	// setters and getters
 	void SetRect(int x, int y, int width, int height) { m_rect.Set(x, y, width, height); };
 	void SetData(uint8_t *result) { m_pResult = result; };
 	void SetSize(int size) { m_size = size; };
@@ -49,14 +51,11 @@ public:
 	uint8_t *GetData(void) { return m_pResult; };
 	int GetSize(void) { return m_size; };
 	cDrmBuffer *GetBuf(void) { return m_pBuf; };
-
-	void FreeBuf(void);
-
 private:
-	uint8_t *m_pResult;		    ///< pointer to grabbed image
-	struct cDrmBuffer *m_pBuf;	    ///< pointer to original buffer
-	int m_size;			        ///< size of grabbed data
-	cRect m_rect;				///< rect of the grabbed data
+	uint8_t *m_pResult;          ///< pointer to grabbed image
+	struct cDrmBuffer *m_pBuf;   ///< pointer to original buffer
+	int m_size;                  ///< size of grabbed data
+	cRect m_rect;                ///< rect of the grabbed data
 };
 
 #endif

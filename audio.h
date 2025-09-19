@@ -30,7 +30,7 @@ extern "C"
 #include "ringbuffer.h"
 #include "threads.h"
 
-#define MIN_AUDIO_BUFFER	450		///< minimal output buffer in ms
+#define MIN_AUDIO_BUFFER    450		///< minimal output buffer in ms
 #define NORMALIZE_MAX_INDEX 128		///< number of average values
 
 class cSoftHdDevice;
@@ -86,75 +86,75 @@ public:
 	char AlsaPlayerRunning(void) { return m_alsaPlayerRunning; };
 
 private:
-	cSoftHdDevice *m_pDevice;				///< pointer to device
+	cSoftHdDevice *m_pDevice;               ///< pointer to device
 
 	// thread
-	cAudioThread *m_pAudioThread;			///< pointer to audio thread
-	volatile char m_running;				///< audio running / stopped
-	void StartAudioThread(AVFrame *);		///< start the audio thread
+	cAudioThread *m_pAudioThread;           ///< pointer to audio thread
+	volatile char m_running;                ///< audio running / stopped
+	void StartAudioThread(AVFrame *);       ///< start the audio thread
 
 	// common audio, alsa
-	const int m_bytesPerSample = 2;			///< number of bytes per sample
-	unsigned int m_hwSampleRate;			///< hardware sample rate in Hz
-	unsigned int m_hwNumChannels;			///< number of hardware channels
-	AVRational *m_pTimebase;				///< pointer to AVCodecContext pkts_timebase
+	const int m_bytesPerSample = 2;         ///< number of bytes per sample
+	unsigned int m_hwSampleRate;            ///< hardware sample rate in Hz
+	unsigned int m_hwNumChannels;           ///< number of hardware channels
+	AVRational *m_pTimebase;                ///< pointer to AVCodecContext pkts_timebase
 
-	int m_downmix;							///< set stereo downmix
+	int m_downmix;                          ///< set stereo downmix
 
-	int64_t m_pts;							///< pts clock (last pts in ringbuffer)
-	int m_skip;								///< skip m_skip audio to sync to video
-	volatile char m_videoIsReady;			///< video audio and video can by synched
-	volatile char m_paused;					///< audio is paused
+	int64_t m_pts;                          ///< pts clock (last pts in ringbuffer)
+	int m_skip;                             ///< skip m_skip audio to sync to video
+	volatile char m_videoIsReady;           ///< video audio and video can by synched
+	volatile char m_paused;                 ///< audio is paused
 
-	char m_softVolume;						///< flag to use soft volume
-	int m_passthrough;						///< passthrough mask
-	const char *m_pPCMDevice;				///< PCM device name
-	const char *m_pPassthroughDevice;		///< passthrough device name
-	char m_appendAES;						///< flag ato utomatic append AES
-	unsigned m_startThreshold;				///< start play, if m_startThreshold is filled
-	int m_bufferTimeInMs;					///< audio buffer time in ms
+	char m_softVolume;                      ///< flag to use soft volume
+	int m_passthrough;                      ///< passthrough mask
+	const char *m_pPCMDevice;               ///< PCM device name
+	const char *m_pPassthroughDevice;       ///< passthrough device name
+	char m_appendAES;                       ///< flag ato utomatic append AES
+	unsigned m_startThreshold;              ///< start play, if m_startThreshold is filled
+	int m_bufferTimeInMs;                   ///< audio buffer time in ms
 
 	// Normalizer
-	char m_normalize;						///< flag to use volume normalize
-	const int m_normalizeSamples = 4096;	///< number of normalize samples
-	int m_normalizeCounter;					///< normalize sample counter
-	uint32_t m_normalizeAverage[NORMALIZE_MAX_INDEX];	/// average of n last normalize sample blocks
-	int m_normalizeIndex;					///< index into normalize average table
-	int m_normalizeReady;					///< index normalize counter
-	int m_normalizeFactor;					///< current normalize factor
-	const int m_normalizeMinFactor = 100;	///< min. normalize factor
-	int m_normalizeMaxFactor;				///< max. normalize factor
+	char m_normalize;                       ///< flag to use volume normalize
+	const int m_normalizeSamples = 4096;    ///< number of normalize samples
+	int m_normalizeCounter;                 ///< normalize sample counter
+	uint32_t m_normalizeAverage[NORMALIZE_MAX_INDEX]; ///< average of n last normalize sample blocks
+	int m_normalizeIndex;                   ///< index into normalize average table
+	int m_normalizeReady;                   ///< index normalize counter
+	int m_normalizeFactor;                  ///< current normalize factor
+	const int m_normalizeMinFactor = 100;   ///< min. normalize factor
+	int m_normalizeMaxFactor;               ///< max. normalize factor
 
 	// Compressor
-	char m_compression;						///< flag to use compress volume
-	int m_compressionFactor;				///< current compression factor
-	int m_compressionMaxFactor;				///< max. compression factor
+	char m_compression;                     ///< flag to use compress volume
+	int m_compressionFactor;                ///< current compression factor
+	int m_compressionMaxFactor;             ///< max. compression factor
 
 	// Amplifier
-	char m_muted;							///< audio is muted
-	int m_amplifier;						///< software volume amplify factor
-	int m_stereoDescent;					///< volume descent for stereo
-	int m_volume;							///< current volume (0 .. 1000)
+	char m_muted;                           ///< audio is muted
+	int m_amplifier;                        ///< software volume amplify factor
+	int m_stereoDescent;                    ///< volume descent for stereo
+	int m_volume;                           ///< current volume (0 .. 1000)
 
 	// Equalizer
-	int m_useEqualizer;						///< flag to use equalizer
-	float m_equalizerBand[18];				///< equalizer band
+	int m_useEqualizer;                     ///< flag to use equalizer
+	float m_equalizerBand[18];              ///< equalizer band
 
 	// mixer
-	const char *m_pMixerDevice;				///< mixer device name (not used)
-	const char *m_pMixerChannel;			///< mixer channel name
+	const char *m_pMixerDevice;             ///< mixer device name (not used)
+	const char *m_pMixerChannel;            ///< mixer channel name
 
 	// filter
-	int m_filterChanged;					///< filter has changed
-	int m_filterReady;						///< filter is ready
+	int m_filterChanged;                    ///< filter has changed
+	int m_filterReady;                      ///< filter is ready
 	AVFilterGraph *m_pFilterGraph;
 	AVFilterContext *m_pBuffersrcCtx;
 	AVFilterContext *m_pBuffersinkCtx;
 
 	// ring buffer variables
-	cDeviceRingbuffer *m_pRingbuffer = nullptr;		///< sample ring buffer
-	const unsigned m_ringBufferSize = 3 * 5 * 7 * 8 * 2 * 1000;    /// default ring buffer size ~2s 8ch 16bit (3 * 5 * 7 * 8)
-	cMutex m_rbMutex;						///< mutex for ringbuffer access
+	cDeviceRingbuffer *m_pRingbuffer = nullptr;                 ///< sample ring buffer
+	const unsigned m_ringBufferSize = 3 * 5 * 7 * 8 * 2 * 1000; ///< default ring buffer size ~2s 8ch 16bit (3 * 5 * 7 * 8)
+	cMutex m_rbMutex;                                           ///< mutex for ringbuffer access
 
 	void Normalize(uint16_t *, int);
 	void Compress(uint16_t *, int);
@@ -168,13 +168,13 @@ private:
 	void Enqueue(uint16_t *, int, AVFrame *);
 
 	// alsa
-	snd_pcm_t *m_pAlsaPCMHandle;			///< alsa pcm handle
-	snd_mixer_t *m_pAlsaMixer;				///< alsa mixer handle
-	snd_mixer_elem_t *m_pAlsaMixerElem;		///< alsa mixer element
-	int m_alsaRatio;						///< internal -> mixer ratio * 1000
-	char m_alsaPlayerRunning;				///< start/ stop audio player thread
-	int m_alsaUseMmap;						///< use mmap
-	char m_alsaCanPause;					///< hw supports pause
+	snd_pcm_t *m_pAlsaPCMHandle;         ///< alsa pcm handle
+	snd_mixer_t *m_pAlsaMixer;           ///< alsa mixer handle
+	snd_mixer_elem_t *m_pAlsaMixerElem;  ///< alsa mixer element
+	int m_alsaRatio;                     ///< internal -> mixer ratio * 1000
+	char m_alsaPlayerRunning;            ///< start/ stop audio player thread
+	int m_alsaUseMmap;                   ///< use mmap
+	char m_alsaCanPause;                 ///< hw supports pause
 
 	void XrunRecovery(void);
 	char *OpenAlsaDevice(const char *, int);

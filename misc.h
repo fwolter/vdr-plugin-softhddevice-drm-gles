@@ -24,7 +24,7 @@
 #include <syslog.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <time.h>			// clock_gettime
+#include <time.h>	// clock_gettime
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <string.h>
@@ -57,7 +57,7 @@ static inline const char* av_err2string(int errnum)
 /**
  * @brief Nice time-stamp string.
  *
- * @param ts	time stamp
+ * @param ts       time stamp
  */
 static inline const char *Timestamp2String(int64_t ts)
 {

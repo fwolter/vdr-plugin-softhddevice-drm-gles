@@ -202,12 +202,12 @@ cFilterThread::~cFilterThread(void)
 /**
  * @brief Init the video filter
  *
- * @param videoCtx		codec context
- * @param frame			AVFrame to take init parameters from
- * @param disabled		true, if deinterlacer is disabled
+ * @param videoCtx      codec context
+ * @param frame         AVFrame to take init parameters from
+ * @param disabled      true, if deinterlacer is disabled
  *
- * @returns 0			on success
- * @return 1			on failure, filter was not initiated
+ * @returns 0           on success
+ * @return 1            on failure, filter was not initiated
  */
 int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disabled)
 {
@@ -281,7 +281,7 @@ int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disa
 #endif
 
 	// if we have a 576i stream without a valid sample_aspect_ratio (0/1) force it to be 64/45
-	// wich "streches" a 576i stream to 1920/1080 size
+	// wich "stretches" a 576i stream to 1920/1080 size
 	int sarNum = videoCtx->sample_aspect_ratio.num != 0 ? videoCtx->sample_aspect_ratio.num : (videoCtx->height == 576 ? 64 : 1);
 	int sarDen = videoCtx->sample_aspect_ratio.num != 0 ? videoCtx->sample_aspect_ratio.den : (videoCtx->height == 576 ? 45 : 1);
 

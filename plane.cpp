@@ -42,15 +42,15 @@ cDrmPlane::~cDrmPlane(void)
 /**
  * @brief Fill the plane properties
  *
- * This "caches" the properties within the class.
+ * This "caches" the properties within the class
  *
- * @param fd		drm file descriptor
+ * @param fd             drm file descriptor
  */
 void cDrmPlane::FillProperties(int fd)
 {
 	drmModeObjectProperties *props = drmModeObjectGetProperties(fd, GetId(), DRM_MODE_OBJECT_PLANE);
 	if (!props) {
-		LOGERROR("could not get %u properties: %s", GetId(), strerror(errno));
+		LOGERROR("%s (plane): could not get %u properties: %s", GetId(), __FUNCTION__, strerror(errno));
 		return;
 	}
 
@@ -87,20 +87,20 @@ void cDrmPlane::FreeProperties(void)
  *
  * These values are used for drm modesetting
  *
- * @param crtcId	Mode object ID of the crtc
- * @param fbId		Mode object ID of the drm framebuffer
- * @param crtcX		X offset of the destination rect
- * @param crtcY		Y offset of the destination rect
- * @param crtcW		width of the destination rect
- * @param crtcH		height of the destination rect
- * @param srcX		X offset of the source rect
- * @param srcY		Y offset of the source rect
- * @param srcW		width of the source rect
- * @param srccH		height of the source rect
+ * @param crtcId       Mode object ID of the crtc
+ * @param fbId         Mode object ID of the drm framebuffer
+ * @param crtcX        X offset of the destination rect
+ * @param crtcY        Y offset of the destination rect
+ * @param crtcW        width of the destination rect
+ * @param crtcH        height of the destination rect
+ * @param srcX         X offset of the source rect
+ * @param srcY         Y offset of the source rect
+ * @param srcW         width of the source rect
+ * @param srccH        height of the source rect
  */
 void cDrmPlane::SetParams(uint64_t crtcId, uint64_t fbId,
-			 uint64_t crtcX, uint64_t crtcY, uint64_t crtcW, uint64_t crtcH,
-			 uint64_t srcX,  uint64_t srcY,  uint64_t srcW,  uint64_t srcH)
+                          uint64_t crtcX, uint64_t crtcY, uint64_t crtcW, uint64_t crtcH,
+                          uint64_t srcX,  uint64_t srcY,  uint64_t srcW,  uint64_t srcH)
 {
 	m_crtcId = crtcId;
 	m_fbId = fbId;
@@ -117,9 +117,9 @@ void cDrmPlane::SetParams(uint64_t crtcId, uint64_t fbId,
 /**
  * @brief Add the properties to the mode setting request
  *
- * @param ModeReq	pointer to the atomic mode request
- * @param propName	name of the property to set
- * @param value		property value
+ * @param ModeReq      pointer to the atomic mode request
+ * @param propName     name of the property to set
+ * @param value        property value
  */
 int cDrmPlane::SetPropertyRequest(drmModeAtomicReqPtr ModeReq, const char *propName, uint64_t value)
 {
@@ -133,8 +133,8 @@ int cDrmPlane::SetPropertyRequest(drmModeAtomicReqPtr ModeReq, const char *propN
 	}
 
 	if (id < 0) {
-		LOGERROR("SetPropertyRequest: Unable to find value for property \'%s\'.",
-			propName);
+		LOGERROR("%s: Unable to find value for property \'%s\'.",
+			__FUNCTION__, propName);
 		return -EINVAL;
 	}
 
@@ -144,7 +144,7 @@ int cDrmPlane::SetPropertyRequest(drmModeAtomicReqPtr ModeReq, const char *propN
 /**
  * @brief Set the plane zpos property
  *
- * @param ModeReq	pointer to the atomic mode request
+ * @param ModeReq       pointer to the atomic mode request
  */
 void cDrmPlane::SetPlaneZpos(drmModeAtomicReqPtr ModeReq)
 {
@@ -154,31 +154,31 @@ void cDrmPlane::SetPlaneZpos(drmModeAtomicReqPtr ModeReq)
 /**
  * @brief Set all other plane properties
  *
- * @param ModeReq	pointer to the atomic mode request
+ * @param ModeReq        pointer to the atomic mode request
  */
 void cDrmPlane::SetPlane(drmModeAtomicReqPtr ModeReq)
 {
 	SetPropertyRequest(ModeReq, "CRTC_ID", GetCrtcId());
-	SetPropertyRequest(ModeReq, "FB_ID", GetFbId());
+	SetPropertyRequest(ModeReq, "FB_ID",   GetFbId());
 
-	SetPropertyRequest(ModeReq, "CRTC_X", GetCrtcX());
-	SetPropertyRequest(ModeReq, "CRTC_Y", GetCrtcY());
-	SetPropertyRequest(ModeReq, "CRTC_W", GetCrtcW());
-	SetPropertyRequest(ModeReq, "CRTC_H", GetCrtcH());
+	SetPropertyRequest(ModeReq, "CRTC_X",  GetCrtcX());
+	SetPropertyRequest(ModeReq, "CRTC_Y",  GetCrtcY());
+	SetPropertyRequest(ModeReq, "CRTC_W",  GetCrtcW());
+	SetPropertyRequest(ModeReq, "CRTC_H",  GetCrtcH());
 
-	SetPropertyRequest(ModeReq, "SRC_X", GetSrcX());
-	SetPropertyRequest(ModeReq, "SRC_Y", GetSrcY());
-	SetPropertyRequest(ModeReq, "SRC_W", GetSrcW() << 16);
-	SetPropertyRequest(ModeReq, "SRC_H", GetSrcH() << 16);
+	SetPropertyRequest(ModeReq, "SRC_X",   GetSrcX());
+	SetPropertyRequest(ModeReq, "SRC_Y",   GetSrcY());
+	SetPropertyRequest(ModeReq, "SRC_W",   GetSrcW() << 16);
+	SetPropertyRequest(ModeReq, "SRC_H",   GetSrcH() << 16);
 }
 
 /**
  * @brief Check, if the plane is able to set the zpos property
  *
- * @param fdDrm		drm file descriptor
+ * @param fdDrm     drm file descriptor
  * 
- * @returns 1		plane can use zpos
- * @returns 0		plane can't use zpos
+ * @returns 1       plane can use zpos
+ * @returns 0       plane can't use zpos
  */
 int cDrmPlane::HasZpos(int fdDrm)
 {
@@ -186,14 +186,15 @@ int cDrmPlane::HasZpos(int fdDrm)
 	const uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
 
 	if (!(ModeReq = drmModeAtomicAlloc())) {
-		LOGERROR("HasZpos: cannot allocate atomic request (%d): %m", errno);
+		LOGERROR("%s: cannot allocate atomic request (%d): %m", __FUNCTION__, errno);
 		return 0;
 	}
 
 	SetPlaneZpos(ModeReq);
 
 	if (drmModeAtomicCommit(fdDrm, ModeReq, flags, NULL) != 0) {
-		LOGDEBUG2(L_DRM, "HasZpos: cannot set atomic mode (%d), don't use zpos change: %m", errno);
+		LOGDEBUG2(L_DRM, "%s: cannot set atomic mode (%d), don't use zpos change: %m",
+			__FUNCTION__, errno);
 		drmModeAtomicFree(ModeReq);
 		return 0;
 	}
@@ -209,15 +210,15 @@ int cDrmPlane::HasZpos(int fdDrm)
 void cDrmPlane::DumpParameters(void)
 {
 	LOGINFO("DumpParameters (plane_id = %d):", GetId());
-	LOGINFO("  CRTC ID: %" PRIu64 "", GetCrtcId());
-	LOGINFO("  FB ID  : %" PRIu64 "", GetFbId());
-	LOGINFO("  CRTC X : %" PRIu64 "", GetCrtcX());
-	LOGINFO("  CRTC Y : %" PRIu64 "", GetCrtcY());
-	LOGINFO("  CRTC W : %" PRIu64 "", GetCrtcW());
-	LOGINFO("  CRTC H : %" PRIu64 "", GetCrtcH());
-	LOGINFO("  SRC X  : %" PRIu64 "", GetSrcX());
-	LOGINFO("  SRC Y  : %" PRIu64 "", GetSrcY());
-	LOGINFO("  SRC W  : %" PRIu64 "", GetSrcW());
-	LOGINFO("  SRC H  : %" PRIu64 "", GetSrcH());
-	LOGINFO("  ZPOS   : %" PRIu64 "", GetZpos());
+	LOGINFO("  CRTC ID: %" PRIu64 "",          GetCrtcId());
+	LOGINFO("  FB ID  : %" PRIu64 "",          GetFbId());
+	LOGINFO("  CRTC X : %" PRIu64 "",          GetCrtcX());
+	LOGINFO("  CRTC Y : %" PRIu64 "",          GetCrtcY());
+	LOGINFO("  CRTC W : %" PRIu64 "",          GetCrtcW());
+	LOGINFO("  CRTC H : %" PRIu64 "",          GetCrtcH());
+	LOGINFO("  SRC X  : %" PRIu64 "",          GetSrcX());
+	LOGINFO("  SRC Y  : %" PRIu64 "",          GetSrcY());
+	LOGINFO("  SRC W  : %" PRIu64 "",          GetSrcW());
+	LOGINFO("  SRC H  : %" PRIu64 "",          GetSrcH());
+	LOGINFO("  ZPOS   : %" PRIu64 "",          GetZpos());
 }

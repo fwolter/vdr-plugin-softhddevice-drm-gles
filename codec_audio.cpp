@@ -40,7 +40,7 @@ extern "C" {
 /**
  * @brief Audio decoder class constructor
  *
- * @param audio		audio module
+ * @param audio           audio module
  */
 cAudioDecoder::cAudioDecoder(cSoftHdAudio *audio)
 {
@@ -68,9 +68,9 @@ cAudioDecoder::~cAudioDecoder(void)
 /**
  * @brief Open and initiate the audio decoder
  *
- * @param codecId		audio codec id
- * @param par			audio codec parameters
- * @param timebase		timebase
+ * @param codecId       audio codec id
+ * @param par           audio codec parameters
+ * @param timebase      timebase
  */
 void cAudioDecoder::Open(enum AVCodecID codecId, AVCodecParameters *par, AVRational *timebase)
 {
@@ -130,13 +130,13 @@ void cAudioDecoder::Close(void)
  * data to the audio device.
  * Currently supported: AC3, EAC3, DTS
  *
- * @param avpkt		undecoded audio packet
- * @param frame		decoded audio frame
+ * @param avpkt         undecoded audio packet
+ * @param frame         decoded audio frame
  *
- * @returns 0			codec is not supported for passthrough, use Filter to handle the data
- * @returns -1			sth went wrong, data will be discarded
- * @returns 1			data accepted
- *						if finished, spdif header was created and data was sent to passthrough device
+ * @returns 0           codec is not supported for passthrough, use Filter to handle the data
+ * @returns -1          sth went wrong, data will be discarded
+ * @returns 1           data accepted
+ *                      if finished, spdif header was created and data was sent to passthrough device
  */
 int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 {
@@ -231,7 +231,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		int burstSz;
 
 		nbs = (uint8_t)((avpkt->data[4] & 0x01) << 6) |
-					   ((avpkt->data[5] >> 2) & 0x3f);
+		               ((avpkt->data[5] >> 2) & 0x3f);
 		switch(nbs) {
 		case 0x07:
 			bsid = 0x0a;	// MPEG-2 layer 3 is used when?
@@ -284,8 +284,8 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
  *
  * Setup audio, if format changed
  *
- * @return 		0 if new audio was correctly set up,
- *				otherwise return value of cSoftHdAudio::Setup()
+ * @return     0 if new audio was correctly set up,
+ *               otherwise return value of cSoftHdAudio::Setup()
  */
 int cAudioDecoder::UpdateFormat(void)
 {
@@ -340,7 +340,7 @@ int cAudioDecoder::UpdateFormat(void)
 /**
  * @brief Decode an audio packet
  *
- * @param avpkt		audio packet to decode
+ * @param avpkt        audio packet to decode
  */
 void cAudioDecoder::Decode(const AVPacket * avpkt)
 {
@@ -385,9 +385,7 @@ void cAudioDecoder::Decode(const AVPacket * avpkt)
 				m_lastPts = frame->pts;
 			} else if (m_lastPts != (int64_t) AV_NOPTS_VALUE) {
 				frame->pts = m_lastPts +
-					(int64_t)(frame->nb_samples /
-					av_q2d(m_pAudioCtx->pkt_timebase) /
-					frame->sample_rate);
+					(int64_t)(frame->nb_samples / av_q2d(m_pAudioCtx->pkt_timebase) / frame->sample_rate);
 				m_lastPts = frame->pts;
 			}
 
@@ -429,7 +427,7 @@ void cAudioDecoder::FlushBuffers(void)
 /**
  * Set audio pass-through mask
  *
- * @param mask		codec to enable (PCM, AC-3, E-AC-3, DTS)
+ * @param mask         codec to enable (PCM, AC-3, E-AC-3, DTS)
  */
 void cAudioDecoder::SetPassthrough(int mask)
 {

@@ -35,7 +35,7 @@ cSoftHdLogger::cSoftHdLogger(void)
 /**
  * Get an instance to the global logger
  *
- * @returns 	pointer to the logger instance
+ * @returns pointer to the logger instance
  */
 std::shared_ptr<cSoftHdLogger> cSoftHdLogger::GetLogger()
 {
@@ -48,7 +48,7 @@ std::shared_ptr<cSoftHdLogger> cSoftHdLogger::GetLogger()
 /**
  * Set the loglevel
  *
- * @param level	new loglevel
+ * @param level       new loglevel
  */
 void cSoftHdLogger::SetLogLevel(int level)
 {
@@ -151,8 +151,6 @@ void cSoftHdLogger::LogDebug(const char *format, ...)
 
 /**
  * Log to LOG_DEBUG and add logging category to output
- *
- * TODO: rename to LogDebugCat or sth. else
  */
 void cSoftHdLogger::LogDebug2(const int cat, const char *format, ...)
 {

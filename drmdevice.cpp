@@ -18,6 +18,8 @@
  * GNU Affero General Public License for more details.
  */
 
+// @todo: sort out header includes
+
 #ifndef __USE_GNU
 #define __USE_GNU
 #endif
@@ -64,15 +66,17 @@ extern "C" {
  * cDrmDevice class
  ****************************************************************************/
 
- /**
+/**
  * @brief cDrmDevice constructor
+ *
+ * @param render         pointer to cVideoRender object
  */
 cDrmDevice::cDrmDevice(cVideoRender *render)
 {
-    m_pRender = render;
+	m_pRender = render;
 }
 
- /**
+/**
  * @brief cDrmDevice destructor
  */
 cDrmDevice::~cDrmDevice(void)
@@ -83,12 +87,17 @@ static int get_resources(int fd, drmModeRes **resources)
 {
 	*resources = drmModeGetResources(fd);
 	if (*resources == NULL) {
-		LOGERROR("FindDevice: cannot retrieve DRM resources (%d): %m", errno);
+		LOGERROR("cDrmDevice Init (%s): cannot retrieve DRM resources (%d): %m", __FUNCTION__, errno);
 		return -1;
 	}
 	return 0;
 }
 
+/**
+ * @brief Test drm capabilities
+ *
+ * @returns 0 if all caps match, 1 on mismatch
+ */
 static int TestCaps(int fd)
 {
 	uint64_t test;
@@ -115,6 +124,11 @@ static int TestCaps(int fd)
 }
 
 #define MAX_DRM_DEVICES 64
+/**
+ * @brief Find and open a suitable device with the wanted capabilities
+ *
+ * @returns the file descriptor of the opened device
+ */
 static int find_drm_device(drmModeRes **resources)
 {
 	drmDevicePtr devices[MAX_DRM_DEVICES] = { NULL };
@@ -122,7 +136,7 @@ static int find_drm_device(drmModeRes **resources)
 
 	num_devices = drmGetDevices2(0, devices,MAX_DRM_DEVICES);
 	if (num_devices < 0) {
-		LOGERROR("FindDevice: drmGetDevices2 failed: %s", strerror(-num_devices));
+		LOGERROR("cDrmDevice Init (%s): drmGetDevices2 failed: %s", __FUNCTION__, strerror(-num_devices));
 		return fd;
 	}
 
@@ -151,13 +165,13 @@ static int find_drm_device(drmModeRes **resources)
 	drmFreeDevices(devices, num_devices);
 
 	if (fd < 0)
-		LOGERROR("FindDevice: no drm device found!");
+		LOGERROR("cDrmDevice Init (%s): no drm device found!", __FUNCTION__);
 
 	return fd;
 }
 
- /**
- * @brief Finds a suitable connector, preferably a connected one
+/**
+ * @brief Find a suitable connector, preferably a connected one
  */
 static drmModeConnector *find_drm_connector(int fd, drmModeRes *resources)
 {
@@ -189,6 +203,11 @@ static drmModeConnector *find_drm_connector(int fd, drmModeRes *resources)
 	return connector;
 }
 
+/**
+ * @brief Initiate the drm device
+ *
+ * @returns 0 on success, a negative value on error
+ */
 int cDrmDevice::Init(void)
 {
 	drmModeRes *resources;
@@ -203,18 +222,18 @@ int cDrmDevice::Init(void)
 	// find a drm device
 	m_fdDrm = find_drm_device(&resources);
 	if (m_fdDrm < 0) {
-		LOGERROR("FindDevice: Could not open device!");
+		LOGERROR("cDrmDevice Init: Could not open device!");
 		return -1;
 	}
 
-	LOGDEBUG2(L_DRM, "FindDevice: DRM have %i connectors, %i crtcs, %i encoders",
+	LOGDEBUG2(L_DRM, "cDrmDevice Init: DRM have %i connectors, %i crtcs, %i encoders",
 		resources->count_connectors, resources->count_crtcs,
 		resources->count_encoders);
 
 	// find a connector
 	connector = find_drm_connector(m_fdDrm, resources);
 	if (!connector) {
-		LOGERROR("FindDevice: cannot retrieve DRM connector (%d): %m", errno);
+		LOGERROR("cDrmDevice Init: cannot retrieve DRM connector (%d): %m", errno);
 		return -errno;
 	}
 	m_connectorId = connector->connector_id;
@@ -226,12 +245,12 @@ int cDrmDevice::Init(void)
 			if(current_mode->hdisplay == m_userReqDisplayWidth && current_mode->vdisplay == m_userReqDisplayHeight &&
 			   current_mode->vrefresh == m_userReqDisplayRefreshRate && !(current_mode->flags & DRM_MODE_FLAG_INTERLACE)) {
 				drmmode = current_mode;
-				LOGDEBUG2(L_DRM, "FindDevice: Use user requested mode: %dx%d@%d", drmmode->hdisplay, drmmode->vdisplay, drmmode->vrefresh);
+				LOGDEBUG2(L_DRM, "cDrmDevice Init: Use user requested mode: %dx%d@%d", drmmode->hdisplay, drmmode->vdisplay, drmmode->vrefresh);
 				break;
 			}
 		}
 		if (!drmmode)
-			LOGWARNING("FindDevice: User requested mode not found, try default modes");
+			LOGWARNING("cDrmDevice Init: User requested mode not found, try default modes");
 	}
 
 	uint32_t preferred_hz[3] = {50, 60, 0};
@@ -259,12 +278,12 @@ find_mode:
 		}
 
 		if (drmmode)
-			LOGDEBUG2(L_DRM, "FindDevice: Use mode with the biggest width: %dx%d@%d",
+			LOGDEBUG2(L_DRM, "cDrmDevice Init: Use mode with the biggest width: %dx%d@%d",
 				drmmode->hdisplay, drmmode->vdisplay, drmmode->vrefresh);
 	}
 
 	if (!drmmode) {
-		LOGERROR("FindDevice: No monitor mode found! Probably no monitor connected, giving up!");
+		LOGERROR("cDrmDevice Init: No monitor mode found! Probably no monitor connected, giving up!");
 		return -1;
 	}
 
@@ -281,16 +300,16 @@ find_mode:
 
 	if (encoder) {
 		m_crtcId = encoder->crtc_id;
-		LOGDEBUG2(L_DRM, "FindDevice: have encoder, m_crtcId %d", m_crtcId);
+		LOGDEBUG2(L_DRM, "cDrmDevice Init: have encoder, m_crtcId %d", m_crtcId);
 	} else {
 		int32_t crtc_id = find_crtc_for_connector(resources, connector);
 		if (crtc_id == -1) {
-			LOGERROR("FindDevice: No crtc found!");
+			LOGERROR("cDrmDevice Init: No crtc found!");
 			return -errno;
 		}
 
 		m_crtcId = crtc_id;
-		LOGDEBUG2(L_DRM, "FindDevice: have no encoder, m_crtcId %d", m_crtcId);
+		LOGDEBUG2(L_DRM, "cDrmDevice Init: have no encoder, m_crtcId %d", m_crtcId);
 	}
 
 	for (i = 0; i < resources->count_crtcs; i++) {
@@ -300,7 +319,7 @@ find_mode:
 		}
 	}
 
-	LOGINFO("FindDevice: Using Monitor Mode %dx%d@%d, m_crtcId %d crtc_idx %d",
+	LOGINFO("cDrmDevice Init: Using Monitor Mode %dx%d@%d, m_crtcId %d crtc_idx %d",
 		m_drmModeInfo.hdisplay, m_drmModeInfo.vdisplay, m_drmModeInfo.vrefresh, m_crtcId, m_crtcIndex);
 
 	drmModeFreeConnector(connector);
@@ -308,7 +327,7 @@ find_mode:
 
 	// find planes
 	if ((plane_res = drmModeGetPlaneResources(m_fdDrm)) == NULL) {
-		LOGERROR("FindDevice: cannot retrieve PlaneResources (%d): %m", errno);
+		LOGERROR("cDrmDevice Init: cannot retrieve PlaneResources (%d): %m", errno);
 		return -1;
 	}
 
@@ -322,7 +341,7 @@ find_mode:
 		plane = drmModeGetPlane(m_fdDrm, plane_res->planes[j]);
 
 		if (plane == NULL) {
-			LOGERROR("FindDevice: cannot query DRM-KMS plane %d", j);
+			LOGERROR("cDrmDevice Init: cannot query DRM-KMS plane %d", j);
 			continue;
 		}
 
@@ -333,16 +352,16 @@ find_mode:
 		if (plane->possible_crtcs & (1 << m_crtcIndex)) {
 			if (GetPropertyValue(m_fdDrm, plane_res->planes[j],
 						 DRM_MODE_OBJECT_PLANE, "type", &type)) {
-				LOGDEBUG2(L_DRM, "FindDevice: Failed to get property 'type'");
+				LOGDEBUG2(L_DRM, "cDrmDevice Init: Failed to get property 'type'");
 			}
 			if (GetPropertyValue(m_fdDrm, plane_res->planes[j],
 						 DRM_MODE_OBJECT_PLANE, "zpos", &zpos)) {
-				LOGDEBUG2(L_DRM, "FindDevice: Failed to get property 'zpos'");
+				LOGDEBUG2(L_DRM, "cDrmDevice Init: Failed to get property 'zpos'");
 			} else {
 				m_useZpos = 1;
 			}
 
-			LOGDEBUG2(L_DRM, "FindDevice: %s: id %i possible_crtcs %i",
+			LOGDEBUG2(L_DRM, "cDrmDevice Init: %s: id %i possible_crtcs %i",
 				(type == DRM_PLANE_TYPE_PRIMARY) ? "PRIMARY " :
 				(type == DRM_PLANE_TYPE_OVERLAY) ? "OVERLAY " :
 				(type == DRM_PLANE_TYPE_CURSOR) ? "CURSOR " : "UNKNOWN",
@@ -398,19 +417,19 @@ find_mode:
 
 	// debug output
 	if (best_primary_video_plane.GetId()) {
-		LOGDEBUG2(L_DRM, "FindDevice: best_primary_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
+		LOGDEBUG2(L_DRM, "cDrmDevice Init: best_primary_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_primary_video_plane.GetId(), best_primary_video_plane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_video_plane.GetZpos());
 	}
 	if (best_overlay_video_plane.GetId()) {
-		LOGDEBUG2(L_DRM, "FindDevice: best_overlay_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
+		LOGDEBUG2(L_DRM, "cDrmDevice Init: best_overlay_video_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_overlay_video_plane.GetId(), best_overlay_video_plane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_video_plane.GetZpos());
 	}
 	if (best_primary_osd_plane.GetId()) {
-		LOGDEBUG2(L_DRM, "FindDevice: best_primary_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
+		LOGDEBUG2(L_DRM, "cDrmDevice Init: best_primary_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_primary_osd_plane.GetId(), best_primary_osd_plane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_primary_osd_plane.GetZpos());
 	}
 	if (best_overlay_osd_plane.GetId()) {
-		LOGDEBUG2(L_DRM, "FindDevice: best_overlay_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
+		LOGDEBUG2(L_DRM, "cDrmDevice Init: best_overlay_osd_plane: plane_id %d, type %s, zpos %" PRIu64 "",
 			best_overlay_osd_plane.GetId(), best_overlay_osd_plane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY", best_overlay_osd_plane.GetZpos());
 	}
 
@@ -435,7 +454,7 @@ find_mode:
 		m_osdPlane.SetZpos(m_zposPrimary);
 		m_useZpos = 1;
 	} else {
-		LOGERROR("FindDevice: No suitable planes found!");
+		LOGERROR("cDrmDevice Init: No suitable planes found!");
 		return -1;
 	}
 
@@ -451,14 +470,14 @@ find_mode:
 		m_useZpos = 0;
 	}
 
-	// m_useZpos was set, if Video is on OVERLAY, and Osd is on PRIMARY
+	// m_useZpos was set, if video is on OVERLAY, and osd is on PRIMARY
 	// Check if the OVERLAY plane really got a higher zpos than the PRIMARY plane
 	// If not, change their zpos values or hardcode them to
 	// 1 OVERLAY (Video)
 	// 0 PRIMARY (Osd)
 	if (m_useZpos && m_zposOverlay <= m_zposPrimary) {
 		char str_zpos[256];
-		strcpy(str_zpos, "FindDevice: zpos values are wrong, so ");
+		strcpy(str_zpos, "cDrmDevice Init: zpos values are wrong, so ");
 		if (m_zposOverlay == m_zposPrimary) {
 			// is this possible?
 			strcat(str_zpos, "hardcode them to 0 and 1, because they are equal");
@@ -476,7 +495,7 @@ find_mode:
 	drmModeFreeEncoder(encoder);
 	drmModeFreeResources(resources);
 
-	LOGINFO("FindDevice: DRM setup - CRTC: %i video_plane: %i (%s %" PRIu64 ") osd_plane: %i (%s %" PRIu64 ") m_useZpos: %d",
+	LOGINFO("cDrmDevice Init: DRM setup - CRTC: %i video_plane: %i (%s %" PRIu64 ") osd_plane: %i (%s %" PRIu64 ") m_useZpos: %d",
 		m_crtcId,
 		m_videoPlane.GetId(),
 		m_videoPlane.GetType() == DRM_PLANE_TYPE_PRIMARY ? "PRIMARY" : "OVERLAY",
@@ -496,13 +515,13 @@ find_mode:
 	GetScreenSize(&w, &h, &pixel_aspect);
 
 	if (init_gbm(w, h, DRM_FORMAT_ARGB8888, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING)) {
-		LOGERROR("FindDevice: failed to init gbm device and surface!");
+		LOGERROR("cDrmDevice Init: failed to init gbm device and surface!");
 		return -1;
 	}
 
 	// init egl
 	if (InitEGL()) {
-		LOGERROR("FindDevice: failed to init egl!");
+		LOGERROR("cDrmDevice Init: failed to init egl!");
 		return -1;
 	}
 #endif
@@ -510,14 +529,14 @@ find_mode:
 	return 0;
 }
 
-///
-///	Get screen size.
-///
-///	@param[out] width	video stream width
-///	@param[out] height	video stream height
-///	@param[out] aspect_num	video stream aspect numerator
-///	@param[out] aspect_den	video stream aspect denominator
-///
+/**
+ * @brief Get the display size
+ *
+ * @param[out] width           display width
+ * @param[out] height          display height
+ * @param[out] pixelAspect     display aspect ratio
+ *                             (currently hardcoded to 16/9)
+ */
 void cDrmDevice::GetScreenSize(int *width, int *height, double *pixel_aspect)
 {
 	*width = m_drmModeInfo.hdisplay;
@@ -526,28 +545,28 @@ void cDrmDevice::GetScreenSize(int *width, int *height, double *pixel_aspect)
 }
 
 #ifdef USE_GLES
- /**
+/**
  * @brief Init gbm device and surface
  *
- * @param w			gbm surface width
- * @param h			gbm surface height
- * @param format	gbm pixel format
- * @param modifier	gbm buffer modifier
+ * @param w            gbm surface width
+ * @param h            gbm surface height
+ * @param format       gbm pixel format
+ * @param modifier     gbm buffer modifier
  *
- * @returns 0		on success
- * @returns -1		on error
+ * @returns 0          on success
+ * @returns -1         on error
  */
 int cDrmDevice::init_gbm(int w, int h, uint32_t format, uint64_t modifier)
 {
 	m_pGbmDevice = gbm_create_device(m_fdDrm);
 	if (!m_pGbmDevice) {
-		LOGERROR("FindDevice: failed to create gbm device!");
+		LOGERROR("cDrmDevice Init (gbm): failed to create gbm device!");
 		return -1;
 	}
 
 	m_pGbmSurface = gbm_surface_create(m_pGbmDevice, w, h, format, modifier);
 	if (!m_pGbmSurface) {
-		LOGERROR("FindDevice: failed to create %d x %d surface bo", w, h);
+		LOGERROR("cDrmDevice Init (gbm): failed to create %d x %d surface bo", w, h);
 		return -1;
 	}
 
@@ -563,67 +582,7 @@ static const EGLint context_attribute_list[] =
 	EGL_NONE
 };
 
- /**
- * @brief Init EGL
- *
- * @returns 0		on success
- * @returns -1		on error
- */
-int cVideoRender::InitEGL(void)
-{
-	EGLint iMajorVersion, iMinorVersion;
-
-	PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
-	assert(get_platform_display != NULL);
-	PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC get_platform_surface = (PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC)eglGetProcAddress("eglCreatePlatformWindowSurfaceEXT");
-	assert(get_platform_surface != NULL);
-
-	m_eglDisplay = get_platform_display(EGL_PLATFORM_GBM_KHR, m_pGbmDevice, NULL);
-//	EGL_CHECK(m_eglDisplay = get_platform_display(EGL_PLATFORM_GBM_KHR, m_pGbmDevice, NULL));
-	if (!m_eglDisplay) {
-		LOGERROR("FindDevice: failed to get eglDisplay");
-		return -1;
-	}
-
-	if (!eglInitialize(m_eglDisplay, &iMajorVersion, &iMinorVersion)) {
-		LOGERROR("FindDevice: eglInitialize failed");
-		return -1;
-	}
-
-	LOGDEBUG2(L_OPENGL, "FindDevice: Using display %p with EGL version %d.%d", m_eglDisplay, iMajorVersion, iMinorVersion);
-	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Version: \"%s\"", eglQueryString(m_eglDisplay, EGL_VERSION)));
-	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Vendor: \"%s\"", eglQueryString(m_eglDisplay, EGL_VENDOR)));
-	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Extensions: \"%s\"", eglQueryString(m_eglDisplay, EGL_EXTENSIONS)));
-	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL APIs: \"%s\"", eglQueryString(m_eglDisplay, EGL_CLIENT_APIS)));
-
-	EGLConfig eglConfig = GetEGLConfig();
-
-	EGL_CHECK(eglBindAPI(EGL_OPENGL_ES_API));
-	EGL_CHECK(m_eglContext = eglCreateContext(m_eglDisplay, eglConfig, EGL_NO_CONTEXT, context_attribute_list));
-	if (!m_eglContext) {
-		LOGERROR("FindDevice: failed to create eglContext");
-		return -1;
-	}
-
-	EGL_CHECK(m_eglSurface = get_platform_surface(m_eglDisplay, eglConfig, m_pGbmSurface, NULL));
-	if (m_eglSurface == EGL_NO_SURFACE) {
-		LOGERROR("FindDevice: failed to create eglSurface");
-		return -1;
-	}
-
-	EGLint s_width, s_height;
-	EGL_CHECK(eglQuerySurface(m_eglDisplay, m_eglSurface, EGL_WIDTH, &s_width));
-	EGL_CHECK(eglQuerySurface(m_eglDisplay, m_eglSurface, EGL_HEIGHT, &s_height));
-
-	LOGDEBUG2(L_OPENGL, "FindDevice: EGLSurface %p on EGLDisplay %p for %d x %d BO created", m_eglSurface, m_eglDisplay, s_width, s_height);
-
-	m_glInitiated = 1;
-	LOGINFO("EGL context initialized");
-
-	return 0;
-}
-
- /**
+/**
  * @brief Get a suitable EGLConfig
  */
 EGLConfig cVideoRender::GetEGLConfig(void)
@@ -640,36 +599,94 @@ EGLConfig cVideoRender::GetEGLConfig(void)
 	EGLint matched;
 	EGLint count;
 	eglGetConfigs(m_eglDisplay, NULL, 0, &count);
-//    EGL_CHECK(eglGetConfigs(m_eglDisplay, NULL, 0, &count));
-	if (count < 1) {
-		LOGFATAL("no EGL configs to choose from");
-	}
+//	EGL_CHECK(eglGetConfigs(m_eglDisplay, NULL, 0, &count));
+	if (count < 1)
+		LOGFATAL("cDrmDevice Init (EGL): no EGL configs to choose from");
 
-	LOGDEBUG2(L_OPENGL, "%d EGL configs found", count);
+	LOGDEBUG2(L_OPENGL, "cDrmDevice Init (EGL): %d EGL configs found", count);
 
 	configs = (EGLConfig *)malloc(count * sizeof(*configs));
 	if (!configs)
-		LOGFATAL("can't allocate space for EGL configs");
+		LOGFATAL("cDrmDevice Init (EGL): can't allocate space for EGL configs");
 
 	eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched);
-//    EGL_CHECK(eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched));
-	if (!matched) {
-		LOGFATAL("no EGL configs with appropriate attributes");
-	}
+//	EGL_CHECK(eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched));
+	if (!matched)
+		LOGFATAL("cDrmDevice Init (EGL): no EGL configs with appropriate attributes");
 
-	LOGDEBUG2(L_OPENGL, "%d appropriate EGL configs found, which match attributes", matched);
+	LOGDEBUG2(L_OPENGL, "cDrmDevice Init (EGL): %d appropriate EGL configs found, which match attributes", matched);
 
 	for (int i = 0; i < matched; ++i) {
 		EGLint gbm_format;
 		eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format);
-//        EGL_CHECK(eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format));
+//		EGL_CHECK(eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format));
 
 		if (gbm_format == GBM_FORMAT_ARGB8888)
 			return configs[i];
 	}
 
-	LOGFATAL("no matching gbm config found");
+	LOGFATAL("cDrmDevice Init (EGL): no matching gbm config found");
 	return NULL;
+}
+
+/**
+ * @brief Init EGL
+ *
+ * @returns 0       on success
+ * @returns -1      on error
+ */
+int cVideoRender::InitEGL(void)
+{
+	EGLint iMajorVersion, iMinorVersion;
+
+	PFNEGLGETPLATFORMDISPLAYEXTPROC get_platform_display = (PFNEGLGETPLATFORMDISPLAYEXTPROC)eglGetProcAddress("eglGetPlatformDisplayEXT");
+	assert(get_platform_display != NULL);
+	PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC get_platform_surface = (PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC)eglGetProcAddress("eglCreatePlatformWindowSurfaceEXT");
+	assert(get_platform_surface != NULL);
+
+	m_eglDisplay = get_platform_display(EGL_PLATFORM_GBM_KHR, m_pGbmDevice, NULL);
+//	EGL_CHECK(m_eglDisplay = get_platform_display(EGL_PLATFORM_GBM_KHR, m_pGbmDevice, NULL));
+	if (!m_eglDisplay) {
+		LOGERROR("cDrmDevice Init (EGL): failed to get eglDisplay");
+		return -1;
+	}
+
+	if (!eglInitialize(m_eglDisplay, &iMajorVersion, &iMinorVersion)) {
+		LOGERROR("cDrmDevice Init (EGL): eglInitialize failed");
+		return -1;
+	}
+
+	LOGDEBUG2(L_OPENGL, "cDrmDevice Init (EGL): Using display %p with EGL version %d.%d", m_eglDisplay, iMajorVersion, iMinorVersion);
+	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Version: \"%s\"", eglQueryString(m_eglDisplay, EGL_VERSION)));
+	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Vendor: \"%s\"", eglQueryString(m_eglDisplay, EGL_VENDOR)));
+	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL Extensions: \"%s\"", eglQueryString(m_eglDisplay, EGL_EXTENSIONS)));
+	EGL_CHECK(LOGDEBUG2(L_OPENGL, "  EGL APIs: \"%s\"", eglQueryString(m_eglDisplay, EGL_CLIENT_APIS)));
+
+	EGLConfig eglConfig = GetEGLConfig();
+
+	EGL_CHECK(eglBindAPI(EGL_OPENGL_ES_API));
+	EGL_CHECK(m_eglContext = eglCreateContext(m_eglDisplay, eglConfig, EGL_NO_CONTEXT, context_attribute_list));
+	if (!m_eglContext) {
+		LOGERROR("cDrmDevice Init (EGL): failed to create eglContext");
+		return -1;
+	}
+
+	EGL_CHECK(m_eglSurface = get_platform_surface(m_eglDisplay, eglConfig, m_pGbmSurface, NULL));
+	if (m_eglSurface == EGL_NO_SURFACE) {
+		LOGERROR("cDrmDevice Init (EGL): failed to create eglSurface");
+		return -1;
+	}
+
+	EGLint s_width, s_height;
+	EGL_CHECK(eglQuerySurface(m_eglDisplay, m_eglSurface, EGL_WIDTH, &s_width));
+	EGL_CHECK(eglQuerySurface(m_eglDisplay, m_eglSurface, EGL_HEIGHT, &s_height));
+
+	LOGDEBUG2(L_OPENGL, "cDrmDevice Init (EGL): EGLSurface %p on EGLDisplay %p for %d x %d BO created", m_eglSurface, m_eglDisplay, s_width, s_height);
+
+	m_glInitiated = 1;
+	LOGINFO("EGL context initialized");
+
+	return 0;
 }
 
 static void drm_fb_destroy_callback(struct gbm_bo *bo, void *data)
@@ -701,6 +718,13 @@ gbm_bo_get_stride_for_plane(struct gbm_bo *bo, int plane);
 __attribute__ ((weak)) uint32_t
 gbm_bo_get_offset(struct gbm_bo *bo, int plane);
 
+/**
+ * @brief Get a buffer from a gbm buffer object
+ *
+ * @param bo        gbm buffer object
+ *
+ * @returns         a gbm buffer corresponding to the gbm buffer object
+ */
 cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 {
 	cDrmBuffer *buf = (cDrmBuffer *)gbm_bo_get_user_data(bo);
@@ -714,8 +738,8 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 	buf = new cDrmBuffer(m_fdDrm, gbm_bo_get_width(bo), gbm_bo_get_height(bo), gbm_bo_get_format(bo), bo);
 
 	if (gbm_bo_get_handle_for_plane && gbm_bo_get_modifier &&
-			gbm_bo_get_plane_count && gbm_bo_get_stride_for_plane &&
-			gbm_bo_get_offset) {
+	    gbm_bo_get_plane_count && gbm_bo_get_stride_for_plane &&
+	    gbm_bo_get_offset) {
 		uint64_t modifiers[4] = {0};
 		modifiers[0] = gbm_bo_get_modifier(bo);
 		const int num_planes = gbm_bo_get_plane_count(bo);
@@ -726,7 +750,7 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 			buf->SetOffset(i, gbm_bo_get_offset(bo, i));
 			modifiers[i] = modifiers[0];
 			buf->SetSize(i, buf->Height() * buf->Pitch(i));
-			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: %d: handle %d pitch %d, offset %d, size %d", i, buf->Handle(i), buf->Pitch(i), buf->Offset(i), buf->Size(i));
+			LOGDEBUG2(L_DRM, "%s: %d: handle %d pitch %d, offset %d, size %d", __FUNCTION__, i, buf->Handle(i), buf->Pitch(i), buf->Offset(i), buf->Size(i));
 		}
 		buf->SetNumObjects(1);
 		buf->SetObjIndex(0, 0);
@@ -734,7 +758,7 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 
 		if (modifiers[0]) {
 			mod_flags = DRM_MODE_FB_MODIFIERS;
-			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: Using modifier %" PRIx64 "", modifiers[0]);
+			LOGDEBUG2(L_DRM, "%s: Using modifier %" PRIx64 "", __FUNCTION__, modifiers[0]);
 		}
 
 		// Add FB
@@ -744,7 +768,7 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 
 	if (ret) {
 		if (mod_flags)
-			LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: Modifiers failed!");
+			LOGDEBUG2(L_DRM, "%s: Modifiers failed!", __FUNCTION__);
 
 		buf->SetNumPlanes(1);
 		memcpy(buf->Handle(), (uint32_t [4]){ gbm_bo_get_handle(bo).u32, 0, 0, 0}, 16);
@@ -760,21 +784,20 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 	}
 
 	if (ret) {
-		LOGFATAL("drm_get_buf_from_bo: cannot create framebuffer (%d): %m", errno);
+		LOGFATAL("%s: cannot create framebuffer (%d): %m", __FUNCTION__, errno);
 		delete buf;
 		return NULL;
 	}
 
-	LOGDEBUG2(L_DRM, "drm_get_buf_from_bo: New GL buffer %d x %d pix_fmt %4.4s fb_id %d",
+	LOGDEBUG2(L_DRM, "%s: New GL buffer %d x %d pix_fmt %4.4s fb_id %d", __FUNCTION__,
 		buf->Width(), buf->Height(), (char *)&buf->PixFmt(), buf->Id());
 
 	gbm_bo_set_user_data(bo, buf, drm_fb_destroy_callback);
 	return buf;
 }
-
 #endif
 
- /**
+/**
  * @brief Finds the CRTC_ID for the given encoder
  */
 static int32_t find_crtc_for_encoder(const drmModeRes *resources, const drmModeEncoder *encoder)
@@ -792,7 +815,7 @@ static int32_t find_crtc_for_encoder(const drmModeRes *resources, const drmModeE
 	return -1;
 }
 
- /**
+/**
  * @brief Finds the CRTC_ID for the given connector
  */
 int32_t cVideoRender::find_crtc_for_connector(const drmModeRes *resources, const drmModeConnector *connector)
@@ -815,24 +838,27 @@ int32_t cVideoRender::find_crtc_for_connector(const drmModeRes *resources, const
 	return -1;
 }
 
- /**
- * @brief Close file handle
+/**
+ * @brief Close drm file handle
  */
 void cDrmDevice::Close(void)
 {
 	close(m_fdDrm);
 }
 
+/**
+ * @brief Creates a property blob
+ */
 int cDrmDevice::CreatePropertyBlob(&modeID)
 {
 	return drmModeCreatePropertyBlob(m_fdDrm, &m_drmModeInfo, sizeof(m_drmModeInfo), &modeID);
 }
 
- /**
- * @brief Finds a suitable connector, preferably a connected one
+/**
+ * @brief Gets a property value
  */
 static int GetPropertyValue(int fdDrm, uint32_t objectID,
-			 uint32_t objectType, const char *propName, uint64_t *value)
+                            uint32_t objectType, const char *propName, uint64_t *value)
 {
 	uint32_t i;
 	int found = 0;
@@ -842,7 +868,7 @@ static int GetPropertyValue(int fdDrm, uint32_t objectID,
 
 	for (i = 0; i < objectProps->count_props; i++) {
 		if ((Prop = drmModeGetProperty(fdDrm, objectProps->props[i])) == NULL)
-			LOGDEBUG2(L_DRM, "GetPropertyValue: Unable to query property.");
+			LOGDEBUG2(L_DRM, "%s: Unable to query property", __FUNCTION__);
 
 		if (strcmp(propName, Prop->name) == 0) {
 			*value = objectProps->prop_values[i];
@@ -858,14 +884,16 @@ static int GetPropertyValue(int fdDrm, uint32_t objectID,
 	drmModeFreeObjectProperties(objectProps);
 
 	if (!found) {
-		LOGDEBUG2(L_DRM, "GetPropertyValue: Unable to find value for property \'%s\'.",
-			propName);
+		LOGDEBUG2(L_DRM, "%s: Unable to find value for property \'%s\'.", __FUNCTION__, propName);
 		return -1;
 	}
 
 	return 0;
 }
 
+/**
+ * @brief Add a property to a request
+ */
 int cDrmDevice::SetPropertyRequest(drmModeAtomicReqPtr ModeReq,
 					uint32_t objectID, uint32_t objectType,
 					const char *propName, uint64_t value)
@@ -878,7 +906,7 @@ int cDrmDevice::SetPropertyRequest(drmModeAtomicReqPtr ModeReq,
 
 	for (i = 0; i < objectProps->count_props; i++) {
 		if ((Prop = drmModeGetProperty(m_fdDrm, objectProps->props[i])) == NULL)
-			LOGDEBUG2(L_DRM, "SetPropertyRequest: Unable to query property.");
+			LOGDEBUG2(L_DRM, "%s: Unable to query property", __FUNCTION__);
 
 		if (strcmp(propName, Prop->name) == 0) {
 			id = Prop->prop_id;
@@ -892,17 +920,22 @@ int cDrmDevice::SetPropertyRequest(drmModeAtomicReqPtr ModeReq,
 	drmModeFreeObjectProperties(objectProps);
 
 	if (id == 0)
-		LOGDEBUG2(L_DRM, "SetPropertyRequest: Unable to find value for property \'%s\'.",
-			propName);
+		LOGDEBUG2(L_DRM, "%s Unable to find value for property \'%s\'.", __FUNCTION__, propName);
 
 	return drmModeAtomicAddProperty(ModeReq, objectID, id, value);
 }
 
+/**
+ * @brief Saves information of a CRTC
+ */
 void cDrmDevice::SaveCrtc(void)
 {
 	m_drmModeCrtcSaved = drmModeGetCrtc(m_fdDrm, m_crtcId);
 }
 
+/**
+ * @brief Restore information of a CRTC
+ */
 void cDrmDevice::RestoreCrtc(void)
 {
 	if (m_drmModeCrtcSaved) {
@@ -912,11 +945,17 @@ void cDrmDevice::RestoreCrtc(void)
 	}
 }
 
+/**
+ * @brief Polls for a drm event
+ */
 int cDrmDevice::HandleEvent(void)
 {
 	return drmHandleEvent(m_fdDrm, &m_drmEventCtx);
 }
 
+/**
+ * @brief Init the event context
+ */
 void cDrmDevice::InitEvent(void)
 {
 	memset(&m_drmEventCtx, 0, sizeof(m_drmEventCtx));

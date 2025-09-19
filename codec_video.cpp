@@ -19,7 +19,6 @@
  * GNU Affero General Public License for more details.
  */
 
-
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,10 +52,10 @@ extern "C" {
  * Logging callback, used for ffmpeg logging
  */
 #ifdef FFMPEG_DEBUG
-static void CodecLogCallback( __attribute__ ((unused)) void *ptr,
-					  __attribute__ ((unused)) int level,
-					  __attribute__ ((unused)) const char *fmt,
-					  va_list vl)
+static void CodecLogCallback(__attribute__ ((unused)) void *ptr,
+                             __attribute__ ((unused)) int level,
+                             __attribute__ ((unused)) const char *fmt,
+                             va_list vl)
 {
 	av_log_set_level(AV_LOG_INFO);
 
@@ -73,10 +72,10 @@ static void CodecLogCallback( __attribute__ ((unused)) void *ptr,
 	vsyslog(LOG_INFO, format, vl);
 }
 #else
-static void CodecLogCallback( __attribute__ ((unused)) void *ptr,
-					  __attribute__ ((unused)) int level,
-					  __attribute__ ((unused)) const char *fmt,
-					  __attribute__ ((unused)) va_list vl)
+static void CodecLogCallback(__attribute__ ((unused)) void *ptr,
+                             __attribute__ ((unused)) int level,
+                             __attribute__ ((unused)) const char *fmt,
+                             __attribute__ ((unused)) va_list vl)
 {
 }
 #endif
@@ -84,13 +83,13 @@ static void CodecLogCallback( __attribute__ ((unused)) void *ptr,
 /**
  * Callback to negotiate the PixelFormat
  *
- * @param videoCtx	video codec context
- * @param fmt		the list of formats which are supported by
- *					the codec, it is terminated by -1 as 0 is a
- *					valid format, the formats are ordered by quality
+ * @param videoCtx      video codec context
+ * @param fmt           the list of formats which are supported by
+ *                      the codec, it is terminated by -1 as 0 is a
+ *                      valid format, the formats are ordered by quality
  */
 static enum AVPixelFormat GetFormat(AVCodecContext * videoCtx,
-		const enum AVPixelFormat *fmt)
+                                    const enum AVPixelFormat *fmt)
 {
 	while (*fmt != AV_PIX_FMT_NONE) {
 		LOGDEBUG2(L_CODEC, "%s: PixelFormat: %s videoCtx->pix_fmt: %s sw_pix_fmt: %s Codecname: %s",
@@ -114,9 +113,9 @@ static enum AVPixelFormat GetFormat(AVCodecContext * videoCtx,
 /**
  * Find a hardware based video decoder config
  *
- * @param codec	codec for which we should find a hw config
+ * @param codec    codec for which we should find a hw config
  *
- * @return			AVCodecHWConfig if found, NULL otherwise
+ * @return         AVCodecHWConfig if found, NULL otherwise
  */
 static const AVCodecHWConfig *FindHWConfig(const AVCodec *codec)
 {
@@ -138,10 +137,10 @@ static const AVCodecHWConfig *FindHWConfig(const AVCodec *codec)
 /**
  * Find a suitable video codec
  *
- * @param codecId				video codec id
- * @param forceSoftwareDecoder	force software decoding is set, otherwise prefer hardware decoder if available
+ * @param codecId                 video codec id
+ * @param forceSoftwareDecoder    force software decoding is set, otherwise prefer hardware decoder if available
  *
- * @return						AVCodec if found, NULL otherwise
+ * @return                        AVCodec if found, NULL otherwise
  */
 
 static const AVCodec *FindDecoder(enum AVCodecID codecId, int forceSoftwareDecoder)
@@ -177,7 +176,7 @@ static const AVCodec *FindDecoder(enum AVCodecID codecId, int forceSoftwareDecod
 /**
  * cVideoDecoder constructor
  *
- * @param render	pointer to cVideoRender object
+ * @param render     pointer to cVideoRender object
  */
 cVideoDecoder::cVideoDecoder(cVideoRender *render)
 {
@@ -201,19 +200,19 @@ cVideoDecoder::~cVideoDecoder(void)
 /**
  * Open the video decoder
  *
- * @param codecId				video codec id
- * @param par					codec parameters
- * @param timebase				timebase
- * @param forceSoftwareDecoder	force software decoding
- * @param width					force width (only for H264 and if par is not set)
- * @param height				force height (only for H264 and if par is not set)
+ * @param codecId                  video codec id
+ * @param par                      codec parameters
+ * @param timebase                 timebase
+ * @param forceSoftwareDecoder     force software decoding
+ * @param width                    force width (only for H264 and if par is not set)
+ * @param height                   force height (only for H264 and if par is not set)
  *
- * @returns 0					decoder successfully opend
- * @returns -1					opening the decoder failed
+ * @returns 0                      decoder successfully opend
+ * @returns -1                     opening the decoder failed
  */
 int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
-						AVRational * timebase, int forceSoftwareDecoder,
-						int width, int height)
+                        AVRational * timebase, int forceSoftwareDecoder,
+                        int width, int height)
 {
 	int swcodec = forceSoftwareDecoder;
 
@@ -232,8 +231,8 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 	}
 
 	LOGDEBUG2(L_CODEC, "%s: Codec %s for CodecID %s found%s", __FUNCTION__,
-			  codec->long_name ? codec->long_name : codec->name,
-			  avcodec_get_name(codecId), swcodec ? " (sw decoding forced)" : "");
+		codec->long_name ? codec->long_name : codec->name,
+		avcodec_get_name(codecId), swcodec ? " (sw decoding forced)" : "");
 
 	m_pVideoCtx = avcodec_alloc_context3(codec);
 	if (!m_pVideoCtx) {
@@ -249,11 +248,11 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 		if (av_hwdevice_ctx_create(&hwDeviceCtx, config->device_type, NULL, NULL, 0) < 0) {
 			avcodec_free_context(&m_pVideoCtx);
 			LOGERROR("%s: Error creating HW context %s",__FUNCTION__,
-					  type_name ? type_name : "unknown");
+				type_name ? type_name : "unknown");
 			return -1;
 		}
 		LOGDEBUG2(L_CODEC, "%s: Using %s HW codec", __FUNCTION__,
-				  type_name ? type_name : "unknown");
+			type_name ? type_name : "unknown");
 		m_pVideoCtx->hw_device_ctx = av_buffer_ref(hwDeviceCtx);
 		m_pVideoCtx->pix_fmt = AV_PIX_FMT_DRM_PRIME;
 	}
@@ -319,17 +318,17 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 			return -1;
 		}
 		LOGDEBUG2(L_CODEC, "%s: Could not open %s decoder, try opening software decoder",
-				  __FUNCTION__, codec->long_name ? codec->long_name : codec->name);
+			__FUNCTION__, codec->long_name ? codec->long_name : codec->name);
 
 		return Open(codecId, par, timebase, 1, 0, 0);
 	}
 
 	LOGDEBUG2(L_CODEC, "%s: Codec %s for CodecID %s opened%s, using %d threads",
-		   __FUNCTION__,
-		   codec->long_name ? codec->long_name : codec->name,
-		   avcodec_get_name(codecId),
-		   swcodec ? " (sw decoding forced)" : "",
-		   m_pVideoCtx->thread_count);
+		__FUNCTION__,
+		codec->long_name ? codec->long_name : codec->name,
+		avcodec_get_name(codecId),
+		swcodec ? " (sw decoding forced)" : "",
+		m_pVideoCtx->thread_count);
 
 	m_cntPacketsSent = m_cntFramesReceived = 0;
 	m_cntStartKeyFrames = 1;
@@ -358,8 +357,8 @@ void cVideoDecoder::Close(void)
  *
  * @param avpkt	video packet
  *
- * @returns 0 		extradata set
- * @returns -1 	something went wrong
+ * @returns 0      extradata set
+ * @returns -1     something went wrong
  */
 int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
 {
@@ -440,12 +439,12 @@ int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
 /**
  * Send a video packet to be decoded
  *
- * @param avpkt				video packet
+ * @param avpkt                  video packet
  *
- * @returns 0					packet was sent
- * @returns AVERROR(EAGAIN)	packet was not accepted, first receive frame and send packet again
- * @returns AVERROR(EINVAL)	invalid input or missing m_pVideoCtx
- * @returns ret				other ffmpeg error
+ * @returns 0                    packet was sent
+ * @returns AVERROR(EAGAIN)      packet was not accepted, first receive frame and send packet again
+ * @returns AVERROR(EINVAL)      invalid input or missing m_pVideoCtx
+ * @returns ret                  other ffmpeg error
  */
 int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 {
@@ -489,13 +488,13 @@ int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 /**
  * Receive a decoded a video frame
  *
- * @param noDeint				if set, force decoded frame to be progressive
+ * @param noDeint               if set, force decoded frame to be progressive
  *
- * @returns 0					received frame
- * @returns AVERROR(EAGAIN)	get no frame, send avpkt again
- * @returns AVERROR_EOF		EOF, needs flushing
- * @returns AVERROR(EINVAL)	get no frame, something went wrong
- * @returns ret				return other ffmpeg error
+ * @returns 0                   received frame
+ * @returns AVERROR(EAGAIN)     get no frame, send avpkt again
+ * @returns AVERROR_EOF         EOF, needs flushing
+ * @returns AVERROR(EINVAL)     get no frame, something went wrong
+ * @returns ret                 return other ffmpeg error
  */
 int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 {
@@ -540,11 +539,11 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 #if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
 		if (pFrame->key_frame) {
 			LOGDEBUG2(L_CODEC, "%s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,
-				   pFrame->interlaced_frame ? "interlaced" : "progressive", m_cntStartKeyFrames);
+				pFrame->interlaced_frame ? "interlaced" : "progressive", m_cntStartKeyFrames);
 #else
 		if (pFrame->flags & AV_FRAME_FLAG_KEY) {
 			LOGDEBUG2(L_CODEC, "%s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,
-				   pFrame->flags & AV_FRAME_FLAG_INTERLACED ? "interlaced" : "progressive", m_cntStartKeyFrames);
+				pFrame->flags & AV_FRAME_FLAG_INTERLACED ? "interlaced" : "progressive", m_cntStartKeyFrames);
 #endif
 			if (m_cntStartKeyFrames++ > QUIRK_CODEC_SKIP_NUM_FRAMES - 1)
 				m_cntStartKeyFrames = 0;
@@ -558,22 +557,22 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 
 	m_cntFramesReceived++;
 	LOGDEBUG2(L_PACKET, "%s: %6d PTS %s --->> (%2d)", __FUNCTION__,
-			  m_cntFramesReceived, Timestamp2String(pFrame->pts / 90), m_cntPacketsSent - m_cntFramesReceived);
+		m_cntFramesReceived, Timestamp2String(pFrame->pts / 90), m_cntPacketsSent - m_cntFramesReceived);
 	return 0;
 }
 
 /**
  * Reopen the video decoder
  *
- * @param codecId					video codec id
- * @param par						codec parameters
- * @param timebase					timebase
- * @param forceSoftwareDecoding	force software decoding
+ * @param codecId                 video codec id
+ * @param par                     codec parameters
+ * @param timebase                timebase
+ * @param forceSoftwareDecoding   force software decoding
  *
- * @returns 0						success
- * @returns -1						reopen decoder failed
+ * @returns 0                     success
+ * @returns -1                    reopen decoder failed
  *
- * TODO:
+ * @todo:
  * This is just a temporary implementation
  * RPi's ffmpeg decoder is broken. In order to get the same result if
  * we want to flush the decoder, we need to close and reopen it.
@@ -582,7 +581,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
  * remove, once ffmpeg is fixed
  */
 int cVideoDecoder::ReopenCodec(enum AVCodecID codecId, AVCodecParameters *par,
-		AVRational *timebase, int forceSoftwareDecoding)
+                               AVRational *timebase, int forceSoftwareDecoding)
 {
 	LOGDEBUG2(L_CODEC, "%s: m_pVideoCtx %p", __FUNCTION__, m_pVideoCtx);
 	if (m_pVideoCtx) {
@@ -612,9 +611,9 @@ void cVideoDecoder::FlushBuffers(void)
 /**
  * Get video size and aspect ratio
  *
- * @param[out] width			video stream width
- * @param[out] height			video stream height
- * @param[out] aspect_ratio	video stream aspect ratio (is currently width/ height)
+ * @param[out] width            video stream width
+ * @param[out] height           video stream height
+ * @param[out] aspect_ratio     video stream aspect ratio (is currently width/ height)
  */
 void cVideoDecoder::GetVideoSize(int *width, int *height, double *aspect_ratio)
 {

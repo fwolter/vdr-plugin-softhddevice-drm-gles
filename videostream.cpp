@@ -109,9 +109,9 @@ void cVideoStream::CleanupPacketRb(void)
 /**
  * @brief Place video data in packet ringbuffer
  *
- * @param pts		presentation timestamp of pes packet
- * @param data		data of pes packet
- * @param size		size of pes packet
+ * @param pts       presentation timestamp of pes packet
+ * @param data      data of pes packet
+ * @param size      size of pes packet
  */
 void cVideoStream::EnqueueInRb(int64_t pts, const void *data, int size)
 {
@@ -210,9 +210,9 @@ void cVideoStream::FlushDecoder(void)
  *
  * @param stream	video stream
  *
- * @retval 0		packet was decoded or more data is needed
- * @retval 1		stream is paused
- * @retval -1		stream is empty or closed
+ * @retval 0        packet was decoded or more data is needed
+ * @retval 1        stream is paused
+ * @retval -1       stream is empty or closed
  */
 int cVideoStream::DecodeInput(void)
 {
@@ -352,7 +352,7 @@ receive_trickspeed:
 /**
  * @brief Get pointer to avpkt in ringbuffer, where we can write to
  *
- * @return	avpkt to write data in
+ * @return     avpkt to write data in
  */
 AVPacket *cVideoStream::GetPacketToWrite(void)
 {
@@ -380,7 +380,7 @@ void cVideoStream::IncreasePacketsFilled(void)
 /**
  * @brief Get number of video buffers.
  *
- * @param stream	video stream
+ * @param stream            video stream
  */
 int cVideoStream::GetPacketsFilled(void)
 {
@@ -390,7 +390,7 @@ int cVideoStream::GetPacketsFilled(void)
 /**
  * @brief Set the interlaced flag for the stream
  *
- * @param interlaced		true, if interlaced
+ * @param interlaced        true, if interlaced
  */
 void cVideoStream::SetInterlaced(int interlaced)
 {
@@ -401,8 +401,8 @@ void cVideoStream::SetInterlaced(int interlaced)
 /**
  * @brief Set the timebase for the stream
  *
- * @param num		timbase numerator
- * @param den		timebase denumerator
+ * @param num       timbase numerator
+ * @param den       timebase denumerator
  */
 void cVideoStream::SetTimebase(int num, int den)
 {

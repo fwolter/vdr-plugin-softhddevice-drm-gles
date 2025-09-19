@@ -27,8 +27,8 @@ extern "C" {
 
 #include "codec_video.h"
 
-#define VIDEO_BUFFER_SIZE (512 * 1024)	///< video PES buffer default size
-#define VIDEO_PACKET_MAX 192			///< max number of video packets held in ringbuffer
+#define VIDEO_BUFFER_SIZE (512 * 1024)  ///< video PES buffer default size
+#define VIDEO_PACKET_MAX 192            ///< max number of video packets held in ringbuffer
 
 class cVideoDecoder;
 class cVideoRender;
@@ -42,28 +42,24 @@ public:
 	cVideoStream(cSoftHdDevice *);
 	virtual ~cVideoStream(void);
 
-	cVideoDecoder *Decoder(void) { return m_pDecoder; };
-	void SetDecoder(cVideoDecoder *decoder) { m_pDecoder = decoder; };
-	int DecodeInput(void);
-
-	void InitPacketRb(void);
-	void EnqueueInRb(int64_t, const void *, int);
-
 	void Open(void) { m_newStream = 1; };
 	void Exit(void);
 	void Clear(void);
 	void FlushDecoder(void);
 	void CloseDecoder(void);
-
-
+	int DecodeInput(void);
 	void Start(void) { m_closing = 0; };
 	void Stop(void);
 	int IsClosing(void) { return m_closing; };
 	void Resume(void) { m_paused = 0; };
 	void Pause(void);
 	int IsPaused(void) { return m_paused; };
+	void InitPacketRb(void);
+	void EnqueueInRb(int64_t, const void *, int);
 
-
+	// getters and setters
+	cVideoDecoder *Decoder(void) { return m_pDecoder; };
+	void SetDecoder(cVideoDecoder *decoder) { m_pDecoder = decoder; };
 	void SetCodecId(enum AVCodecID id) { m_codecId = id; };
 	void SetParameters(AVCodecParameters *par) { m_pPar = par; };
 	void SetTimebase(int, int);
@@ -76,27 +72,27 @@ public:
 	enum AVCodecID GetCodecId(void) { return m_codecId; };
 
 private:
-	cVideoDecoder *m_pDecoder;		///< video decoder
-	cVideoRender *m_pRender;		///< video renderer
+	cVideoDecoder *m_pDecoder;             ///< video decoder
+	cVideoRender *m_pRender;               ///< video renderer
 
 	// TODO: move ringbuffer to a separate class
-	AVPacket m_packetRb[VIDEO_PACKET_MAX];	///< PES packet ring buffer
-	int m_packetWrite;				///< ring buffer write pointer
-	int m_packetRead;				///< ring buffer read pointer
-	atomic_t m_packetsFilled;		///< how many of the ring buffer is used
+	AVPacket m_packetRb[VIDEO_PACKET_MAX]; ///< PES packet ring buffer
+	int m_packetWrite;                     ///< ring buffer write pointer
+	int m_packetRead;                      ///< ring buffer read pointer
+	atomic_t m_packetsFilled;              ///< how many of the ring buffer is used
 
-	enum AVCodecID m_codecId;		///< current codec id
-	AVCodecParameters *m_pPar;		///< current codec parameters
-	struct AVRational m_timebase;	///< current codec timepase
-	int m_trickpkts;				///< how many avpkt does the decoder need in trickspeed mode?
+	enum AVCodecID m_codecId;              ///< current codec id
+	AVCodecParameters *m_pPar;             ///< current codec parameters
+	struct AVRational m_timebase;          ///< current codec timepase
+	int m_trickpkts;                       ///< how many avpkt does the decoder need in trickspeed mode?
 
-	volatile char m_newStream;		///< flag for new stream
-	volatile char m_closing;		///< flag for closing request
-	volatile char m_paused;			///< flag for paused stream
-	int m_interlaced;				///< flag for interlaced stream
-	cMutex m_pktsMutex;				///< mutex for accessing the packet ringbuffer
-	cCondWait m_closeCondition;		///< condition object to wait for finishing jobs while closing
-	cCondVar m_pauseCondition;		///< condition object to wait for pausing the stream
+	volatile char m_newStream;             ///< flag for new stream
+	volatile char m_closing;               ///< flag for closing request
+	volatile char m_paused;                ///< flag for paused stream
+	int m_interlaced;                      ///< flag for interlaced stream
+	cMutex m_pktsMutex;                    ///< mutex for accessing the packet ringbuffer
+	cCondWait m_closeCondition;            ///< condition object to wait for finishing jobs while closing
+	cCondVar m_pauseCondition;             ///< condition object to wait for pausing the stream
 
 	void CleanupPacketRb(void);
 };

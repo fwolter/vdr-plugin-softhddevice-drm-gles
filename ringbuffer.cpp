@@ -38,12 +38,12 @@
  *
  * Init a new ring buffer
  *
- * @param size  Size of the ring buffer
+ * @param size    Size of the ring buffer
  */
 cDeviceRingbuffer::cDeviceRingbuffer(size_t size)
 {
 	if (!(m_pBuffer = (char *)malloc(size)))	// allocate buffer
-	LOGFATAL("cDeviceRinbuffer::cDeviceRingbuffer: can't allocate memory for ringbuffer");
+	LOGFATAL("%s: can't allocate memory for ringbuffer", __FUNCTION__);
 
 	m_Size = size;
 	m_pBufferEnd = m_pBuffer + size;
@@ -73,29 +73,29 @@ void cDeviceRingbuffer::Reset(void)
 /**
  * @brief Advance write pointer in ring buffer
  *
- * @param cnt	Number of bytes to be adavanced
+ * @param cnt        Number of bytes to be adavanced
  *
- * @returns	    Number of bytes that could be advanced in ring buffer
+ * @returns          Number of bytes that could be advanced in ring buffer
  */
 size_t cDeviceRingbuffer::WriteAdvance(size_t cnt)
 {
 	size_t n;
 
 	n = m_Size - atomic_read(&m_filled);
-	if (cnt > n) {			// not enough space
+	if (cnt > n) {		// not enough space
 		cnt = n;
 	}
 	//
 	//	Hitting end of buffer?
 	//
 	n = m_pBufferEnd - m_pWritePointer;
-	if (n > cnt) {			// don't cross the end
+	if (n > cnt) {		// don't cross the end
 		m_pWritePointer += cnt;
-	} else {				// reached or cross the end
+	} else {		// reached or cross the end
 		m_pWritePointer = m_pBuffer;
 		if (n < cnt) {
-		  n = cnt - n;
-		  m_pWritePointer += n;
+			n = cnt - n;
+			m_pWritePointer += n;
 		}
 	}
 
@@ -109,11 +109,10 @@ size_t cDeviceRingbuffer::WriteAdvance(size_t cnt)
 /**
  * @brief Write to a ring buffer
  *
- * @param buf	buffer of @p cnt bytes to be written
- * @param cnt	Number of bytes in buffer
+ * @param buf   buffer of @p cnt bytes to be written
+ * @param cnt   Number of bytes in buffer
  *
- * @returns 	The number of bytes that could be placed in the ring
- *				buffer
+ * @returns     The number of bytes that could be placed in the ring buffer
  */
 size_t cDeviceRingbuffer::Write(const void *buf, size_t cnt)
 {
@@ -151,10 +150,10 @@ size_t cDeviceRingbuffer::Write(const void *buf, size_t cnt)
 /**
  * @brief Get write pointer and free bytes at this position of ring buffer
  *
- * @param[out] wp		Write pointer is placed here
+ * @param[out] wp         Write pointer is placed here
  *
- * @returns			The number of bytes that could be placed in the ring
- *						buffer at the write pointer.
+ * @returns               The number of bytes that could be placed in the ring
+ *                        buffer at the write pointer.
  */
 size_t cDeviceRingbuffer::GetWritePointer(void **wp)
 {
@@ -179,9 +178,9 @@ size_t cDeviceRingbuffer::GetWritePointer(void **wp)
 /**
  * @brief Advance read pointer in ring buffer
  *
- * @param cnt	Number of bytes to be advanced
+ * @param cnt       Number of bytes to be advanced
  *
- * @returns		Number of bytes that could be advanced in ring buffer
+ * @returns         Number of bytes that could be advanced in ring buffer
  */
 size_t cDeviceRingbuffer::ReadAdvance(size_t cnt)
 {
@@ -215,10 +214,10 @@ size_t cDeviceRingbuffer::ReadAdvance(size_t cnt)
 /**
  * @brief Read from a ring buffer.
  *
- * @param buf	buffer of @p cnt bytes to be read
- * @param cnt	Number of bytes to be read
+ * @param buf   buffer of @p cnt bytes to be read
+ * @param cnt   Number of bytes to be read
  *
- * @returns		Number of bytes that could be read from ring buffer
+ * @returns     Number of bytes that could be read from ring buffer
  */
 size_t cDeviceRingbuffer::Read(void *buf, size_t cnt)
 {
@@ -256,10 +255,10 @@ size_t cDeviceRingbuffer::Read(void *buf, size_t cnt)
 /**
  * @brief Get read pointer and used bytes at this position of ring buffer
  *
- * @param[out] rp	Read pointer is placed here
+ * @param[out] rp    Read pointer is placed here
  *
- * @returns			The number of bytes that could be read from the ring
- *					buffer at the read pointer
+ * @returns          The number of bytes that could be read from the ring
+ *                   buffer at the read pointer
  */
 size_t cDeviceRingbuffer::GetReadPointer(const void **rp)
 {
@@ -284,7 +283,7 @@ size_t cDeviceRingbuffer::GetReadPointer(const void **rp)
 /**
  * @brief Get free bytes in ring buffer
  *
- * @returns		Number of bytes free in buffer
+ * @returns        Number of bytes free in buffer
  */
 size_t cDeviceRingbuffer::FreeBytes(void)
 {
@@ -294,7 +293,7 @@ size_t cDeviceRingbuffer::FreeBytes(void)
 /**
  * @brief Get used bytes in ring buffer.
  *
- * @returns		Number of bytes used in buffer.
+ * @returns        Number of bytes used in buffer.
  */
 size_t cDeviceRingbuffer::UsedBytes(void)
 {

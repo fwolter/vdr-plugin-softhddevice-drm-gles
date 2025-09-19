@@ -29,8 +29,8 @@ extern "C" {
 #include "logger.h"
 #include "drmbuffer.h"
 
-#define OPAQUE		0xff
-#define TRANSPARENT	0x00
+#define OPAQUE      0xff
+#define TRANSPARENT 0x00
 #define UNMULTIPLY(color, alpha) ((0xff * color) / alpha)
 #define BLEND(back, front, alpha) ((front * alpha) + (back * (255 - alpha))) / 255
 
@@ -41,7 +41,7 @@ extern "C" {
 /**
  * @brief Convert a DRM format to a ffmpeg AV format
  */
-enum AVPixelFormat drmFormatToAVFormat(cDrmBuffer *buf)
+enum AVPixelFormat DrmFormatToAVFormat(cDrmBuffer *buf)
 {
 	if (buf->PixFmt() == DRM_FORMAT_NV12)
 		return AV_PIX_FMT_NV12;
@@ -63,77 +63,76 @@ enum AVPixelFormat drmFormatToAVFormat(cDrmBuffer *buf)
  *
  * Conversion is done with ffmpegs swscale
  *
- * @param[in] buf		pointer to the source drm buffer struct
- * @param[out] size		size of the return data
- * @param[in] dst_w		width of the returned image
- * @param[in] dst_h		height of the returned image
- * @param[in] dst_pix_fmt	pixel format of the returned image
+ * @param[in] buf             pointer to the source drm buffer struct
+ * @param[out] size           size of the return data
+ * @param[in] dstW            width of the returned image
+ * @param[in] dstH            height of the returned image
+ * @param[in] dstPixFmt       pixel format of the returned image
  *
- * @returns 			a pointer to the image data
+ * @returns                   a pointer to the image data
  */
-uint8_t *buf2rgb(cDrmBuffer *buf, int *size, int dst_w, int dst_h, enum AVPixelFormat dst_pix_fmt)
+uint8_t *BufToRgb(cDrmBuffer *buf, int *size, int dstW, int dstH, enum AVPixelFormat dstPixFmt)
 {
-	uint8_t *src_data[4], *dst_data[4];
-	int src_linesize[4], dst_linesize[4];
+	uint8_t *srcData[4], *dstData[4];
+	int srcLinesize[4], dstLinesize[4];
 
-	int src_w = buf->Width();
-	int src_h = buf->Height();
+	int srcW = buf->Width();
+	int srcH = buf->Height();
 
-	enum AVPixelFormat src_pix_fmt = drmFormatToAVFormat(buf);
+	enum AVPixelFormat src_pix_fmt = DrmFormatToAVFormat(buf);
 	if (src_pix_fmt == AV_PIX_FMT_NONE) {
-		LOGERROR("buf2rgb: pixel format is not supported!");
+		LOGERROR("%s: pixel format is not supported!", __FUNCTION__);
 		return NULL;
 	}
 
-	int dst_bufsize = 0;
-	struct SwsContext *sws_ctx;
+	int dstBufsize = 0;
+	struct SwsContext *swsCtx;
 	int ret;
 	void *buffer = NULL;
 
 	// planes aren't mmapped, return
 	// this should be done before in VideoCloneBuf
 	if (!buf->Plane(0)) {
-		LOGERROR("buf2rgb: prime data is not mapped!");
+		LOGERROR("%s: prime data is not mapped!", __FUNCTION__);
 		return NULL;
 	}
 
 	// convert yuv to rgb
-	sws_ctx = sws_getContext(src_w, src_h, src_pix_fmt,
-							 dst_w, dst_h, dst_pix_fmt,
-							 SWS_BILINEAR, NULL, NULL, NULL);
-	if (!sws_ctx) {
-		LOGERROR("buf2rgb: Could not create sws_ctx");
+	swsCtx = sws_getContext(srcW, srcH, src_pix_fmt,
+	                        dstW, dstH, dstPixFmt,
+	                        SWS_BILINEAR, NULL, NULL, NULL);
+	if (!swsCtx) {
+		LOGERROR("%s: Could not create swsCtx", __FUNCTION__);
 		munmap(buffer, buf->Size(0));
 		return NULL;
 	}
 
-	if ((ret = av_image_alloc(dst_data, dst_linesize,
-							  dst_w, dst_h, dst_pix_fmt, 1)) < 0) {
-		LOGERROR("buf2rgb: Could not alloc dst image");
+	if ((ret = av_image_alloc(dstData, dstLinesize, dstW, dstH, dstPixFmt, 1)) < 0) {
+		LOGERROR("%s: Could not alloc dst image", __FUNCTION__);
 		munmap(buffer, buf->Size(0));
-		sws_freeContext(sws_ctx);
+		sws_freeContext(swsCtx);
 		return NULL;
 	}
-	dst_bufsize = ret;
+	dstBufsize = ret;
 
 	// copy src pitches and data
 	for (int i = 0; i < buf->NumPlanes(); i++) {
-		src_linesize[i] = buf->Pitch(i);
-		src_data[i] = buf->Plane(i) + buf->Offset(i);
+		srcLinesize[i] = buf->Pitch(i);
+		srcData[i] = buf->Plane(i) + buf->Offset(i);
 	}
 
 	// scale image
-	sws_scale(sws_ctx,
-			  (const uint8_t * const*)src_data, src_linesize, 0, src_h,
-			  dst_data, dst_linesize);
+	sws_scale(swsCtx,
+	          (const uint8_t * const*)srcData, srcLinesize, 0, srcH,
+	          dstData, dstLinesize);
 
 	if (buffer)
 		munmap(buffer, buf->Size(0));
-	sws_freeContext(sws_ctx);
-	*size = dst_bufsize;
+	sws_freeContext(swsCtx);
+	*size = dstBufsize;
 
-	LOGDEBUG2(L_GRAB, "buf2rgb: return image at %p size %d", dst_data[0], dst_bufsize);
-	return dst_data[0];
+	LOGDEBUG2(L_GRAB, "%s: return image at %p size %d", __FUNCTION__, dstData[0], dstBufsize);
+	return dstData[0];
 }
 
 /**
@@ -141,51 +140,50 @@ uint8_t *buf2rgb(cDrmBuffer *buf, int *size, int dst_w, int dst_h, enum AVPixelF
  *
  * Conversion is done with ffmpegs swscale
  *
- * @param[in] src		pointer to the source data
- * @param[out] size		size of the return data
- * @param[in] src_w		source width
- * @param[in] src_h		source height
- * @param[in] dst_w		width of the returned image
- * @param[in] dst_h		height of the returned image
+ * @param[in] src               pointer to the source data
+ * @param[out] size             size of the return data
+ * @param[in] srcW              source width
+ * @param[in] srcH              source height
+ * @param[in] dstW              width of the returned image
+ * @param[in] dstH              height of the returned image
  *
- * @returns 			a pointer to the converted image data
+ * @returns                     a pointer to the converted image data
  */
-uint8_t *scalergb24(uint8_t *src, int *size, int src_w, int src_h, int dst_w, int dst_h)
+uint8_t *ScaleRgb24(uint8_t *src, int *size, int srcW, int srcH, int dstW, int dstH)
 {
-	struct SwsContext *sws_ctx;
-	int dst_bufsize = 0;
+	struct SwsContext *swsCtx;
+	int dstBufsize = 0;
 	int ret;
 
-	uint8_t *dst_data[4];
-	int dst_linesize[4];
-	uint8_t *src_data[4] = {src, NULL, NULL, NULL};
-	int src_linesize[4] = {3 * src_w, 0, 0, 0};
+	uint8_t *dstData[4];
+	int dstLinesize[4];
+	uint8_t *srcData[4] = {src, NULL, NULL, NULL};
+	int srcLinesize[4] = {3 * srcW, 0, 0, 0};
 
-	sws_ctx = sws_getContext(src_w, src_h, AV_PIX_FMT_RGB24,
-							 dst_w, dst_h, AV_PIX_FMT_RGB24,
-							 SWS_BILINEAR, NULL, NULL, NULL);
-	if (!sws_ctx) {
-		LOGERROR("scalergb: Could not create sws_ctx");
+	swsCtx = sws_getContext(srcW, srcH, AV_PIX_FMT_RGB24,
+	                        dstW, dstH, AV_PIX_FMT_RGB24,
+	                        SWS_BILINEAR, NULL, NULL, NULL);
+	if (!swsCtx) {
+		LOGERROR("%s: Could not create swsCtx", __FUNCTION__);
 		return NULL;
 	}
 
-	if ((ret = av_image_alloc(dst_data, dst_linesize,
-							  dst_w, dst_h, AV_PIX_FMT_RGB24, 1)) < 0) {
-		LOGERROR("scalergb: Could not alloc dst image");
-		sws_freeContext(sws_ctx);
+	if ((ret = av_image_alloc(dstData, dstLinesize, dstW, dstH, AV_PIX_FMT_RGB24, 1)) < 0) {
+		LOGERROR("%s: Could not alloc dst image", __FUNCTION__);
+		sws_freeContext(swsCtx);
 		return NULL;
 	}
-	dst_bufsize = ret;
+	dstBufsize = ret;
 
-	sws_scale(sws_ctx,
-			  (const uint8_t * const*)src_data, src_linesize, 0, src_h,
-			  dst_data, dst_linesize);
+	sws_scale(swsCtx,
+	          (const uint8_t * const*)srcData, srcLinesize, 0, srcH,
+	          dstData, dstLinesize);
 
-	sws_freeContext(sws_ctx);
-	*size = dst_bufsize;
+	sws_freeContext(swsCtx);
+	*size = dstBufsize;
 
-	LOGDEBUG2(L_GRAB, "scalergb: return scaled image at %p size %d", dst_data[0], dst_bufsize);
-	return dst_data[0];
+	LOGDEBUG2(L_GRAB, "%s: return scaled image at %p size %d", __FUNCTION__, dstData[0], dstBufsize);
+	return dstData[0];
 }
 
 /**
@@ -196,13 +194,13 @@ uint8_t *scalergb24(uint8_t *src, int *size, int src_w, int src_h, int dst_w, in
  * back is the video (RGB)
  * result is RGB
  *
- * @param[out] result	pointer to the resulting image data
- * @param[in] front		pointer to the upper image data
- * @param[in] back		pointer to the lower image data
- * @param[in] width		image width
- * @param[in] height	image height
+ * @param[out] result   pointer to the resulting image data
+ * @param[in] front     pointer to the upper image data
+ * @param[in] back      pointer to the lower image data
+ * @param[in] width     image width
+ * @param[in] height    image height
  */
-void alphablend(uint8_t *result, uint8_t *front, uint8_t *back, const unsigned int width, const unsigned int height)
+void AlphaBlend(uint8_t *result, uint8_t *front, uint8_t *back, const unsigned int width, const unsigned int height)
 {
 	for (unsigned long index = 0; index < width * height; index++) {
 		const uint8_t frontAlpha = front[3];
@@ -252,27 +250,27 @@ void alphablend(uint8_t *result, uint8_t *front, uint8_t *back, const unsigned i
 /**
  * @brief Blit the video on black background
  *
- * @param[in] src		pointer to the source video
- * @param[in] dst_w		destination width of the image
- * @param[in] dst_h		destination height of the image
- * @param[in] dst_x		x offset of the (already scaled) video on the image
- * @param[in] dst_y		y offset of the (already scaled) video on the image
- * @param[in] src_w		source video width
- * @param[in] src_h		source video height
+ * @param[in] src      pointer to the source video
+ * @param[in] dstW     destination width of the image
+ * @param[in] dstH     destination height of the image
+ * @param[in] dstX     x offset of the (already scaled) video on the image
+ * @param[in] dstY     y offset of the (already scaled) video on the image
+ * @param[in] srcW     source video width
+ * @param[in] srcH     source video height
  *
- * @returns 			a pointer to the blitted image data
+ * @returns            a pointer to the blitted image data
  */
-uint8_t *blitvideo(uint8_t *src, int dst_w, int dst_h, int dst_x, int dst_y, int src_w, int src_h)
+uint8_t *BlitVideo(uint8_t *src, int dstW, int dstH, int dstX, int dstY, int srcW, int srcH)
 {
-	int src_stride = src_w * 3;
-	int dst_stride = dst_w * 3;
+	int srcStride = srcW * 3;
+	int dstStride = dstW * 3;
 
-	// create a black screen
-	uint8_t *result = (uint8_t *)calloc(1, dst_stride * dst_h);
+	// create a black screen first
+	uint8_t *result = (uint8_t *)calloc(1, dstStride * dstH);
 
 	// blit the scaled image into the black one
-	for (int y = 0; y < src_h; y++) {
-		memcpy(&result[((dst_y + y) * dst_stride + dst_x * 3)], &src[y * src_stride], src_stride);
+	for (int y = 0; y < srcH; y++) {
+		memcpy(&result[((dstY + y) * dstStride + dstX * 3)], &src[y * srcStride], srcStride);
 	}
 
 	return result;
@@ -281,16 +279,16 @@ uint8_t *blitvideo(uint8_t *src, int dst_w, int dst_h, int dst_x, int dst_y, int
 /**
  * @brief Print raw stream data
  *
- * @param data		pointer to stream data
- * @param size		data size
+ * @param data        pointer to stream data
+ * @param size        data size
  */
 void PrintStreamData(const uint8_t *data, int size)
 {
-	LOGDEBUG("Data: %02x %02x %02x %02x %02x %02x %02x %02x %02x "
-		"%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x "
-		"%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x size %d",
-		data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
-		data[9], data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17],
-		data[18], data[19], data[20], data[21], data[22], data[23], data[24], data[25], data[26],
-		data[27], data[28], data[29], data[30], data[31], data[32], data[33], data[34], size);
+	LOGDEBUG("%s: %02x %02x %02x %02x %02x %02x %02x %02x %02x "
+	         "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x "
+	         "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x size %d", __FUNCTION__,
+	         data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
+	         data[9], data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17],
+	         data[18], data[19], data[20], data[21], data[22], data[23], data[24], data[25], data[26],
+	         data[27], data[28], data[29], data[30], data[31], data[32], data[33], data[34], size);
 }
