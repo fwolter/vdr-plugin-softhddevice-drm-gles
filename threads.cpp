@@ -52,7 +52,7 @@ void cDecodingThread::Action(void)
 {
 	LOGDEBUG("decoding thread started");
 	while(Running()) {
-		if (m_pDevice->VideoStream->DecodeInput()) {
+		if (m_pDevice->VideoStream()->DecodeInput()) {
 			usleep(10000);
 		}
 	}

@@ -60,7 +60,7 @@ cVideoStream::cVideoStream(cSoftHdDevice *device)
 {
 	LOGDEBUG("%s:", __FUNCTION__);
 
-	m_pRender = device->Render;
+	m_pRender = device->Render();
 	m_pDecoder = nullptr;
 
 	Start();

@@ -1247,7 +1247,7 @@ bool cOglCmdRenderFbToBufferFb::Execute(void) {
 
 #ifdef WRITE_PNG
     // Read back bFb framebuffer
-//    if (Device->GetConfigWritePngs())
+//    if (Device->WritePngs())
 //       writePng(0, 0, buffer->Width(), buffer->Height(), false);
 #endif
     if (!alphablending)
@@ -1312,7 +1312,7 @@ bool cOglCmdCopyBufferToOutputFb::Execute(void) {
 
 #ifdef WRITE_PNG
     // Read back oFb framebuffer
-    if (Device->GetConfigWritePngs())
+    if (Device->WritePngs())
         writePng(0, 0, oFb->Width(), oFb->Height(), true);
 #endif
     oFb->Unbind();
@@ -2010,7 +2010,7 @@ cOglThread::cOglThread(cCondWait *startWait, int maxCacheSize, cSoftHdDevice *de
     memCached = 0;
     this->maxCacheSize = maxCacheSize * 1024 * 1024;
     this->startWait = startWait;
-    this->Render = device->Render;
+    this->Render = device->Render();
     wait = new cCondWait();
     maxTextureSize = 0;
     for (int i = 0; i < OGL_MAX_OSDIMAGES; i++) {
@@ -2701,7 +2701,7 @@ cOglOutputFb *cOglOsd::oFb = NULL;
 cOglOsd::cOglOsd(int Left, int Top, uint Level, std::shared_ptr<cOglThread> oglThread, cSoftHdDevice *device) : cOsd(Left, Top, Level) {
     this->Device = device;
     this->oglThread = oglThread;
-    this->Render = Device->Render;
+    this->Render = Device->Render();
     bFb = NULL;
     if (Level == 10)
         isSubtitleOsd = true;

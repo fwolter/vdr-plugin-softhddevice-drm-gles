@@ -73,7 +73,7 @@ extern "C" {
 cVideoRender::cVideoRender(cSoftHdDevice *device)
 {
 	m_pDevice = device;
-	m_pAudio = m_pDevice->Audio;
+	m_pAudio = m_pDevice->Audio();
 	m_pDrmDevice = new cDrmDevice(this);
 }
 
@@ -398,7 +398,7 @@ audioclock:
 
 	if (abs(diff) > 5000) {	// more than 5s
 		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d, Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
-			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
+			m_pDevice->VideoStream()->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
 			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts),
 			Timestamp2String(videoPts), m_pDevice->GetVideoAudioDelay(), diff);
 	}
@@ -406,7 +406,7 @@ audioclock:
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
 		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			m_framesDropped, m_framesDuped,
-			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
+			m_pDevice->VideoStream()->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
 			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts),
 			Timestamp2String(videoPts), m_pDevice->GetVideoAudioDelay(), diff);
 
@@ -420,7 +420,7 @@ audioclock:
 	if (diff > 35 && !(abs(diff) > 5000)) {	// audio is more than 35ms behind video, duplicate video frame
 		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			m_framesDropped, m_framesDuped,
-			m_pDevice->VideoStream->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
+			m_pDevice->VideoStream()->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
 			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts),
 			Timestamp2String(videoPts), m_pDevice->GetVideoAudioDelay(), diff);
 
@@ -1130,7 +1130,7 @@ int cVideoRender::RenderFrame(AVCodecContext * videoCtx, AVFrame * frame)
 		if (videoCtx->codec_id == AV_CODEC_ID_HEVC)
 			interlaced = 0;
 
-		m_pDevice->VideoStream->SetInterlaced(interlaced);
+		m_pDevice->VideoStream()->SetInterlaced(interlaced);
 	}
 
 	if (frame->format == AV_PIX_FMT_YUV420P ||

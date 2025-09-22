@@ -129,7 +129,7 @@ static int TestCaps(int fd)
  *
  * @returns the file descriptor of the opened device
  */
-static int find_drm_device(drmModeRes **resources)
+static int FindDrmDevice(drmModeRes **resources)
 {
 	drmDevicePtr devices[MAX_DRM_DEVICES] = { NULL };
 	int num_devices, fd = -1;
@@ -173,7 +173,7 @@ static int find_drm_device(drmModeRes **resources)
 /**
  * @brief Find a suitable connector, preferably a connected one
  */
-static drmModeConnector *find_drm_connector(int fd, drmModeRes *resources)
+static drmModeConnector *FindDrmConnector(int fd, drmModeRes *resources)
 {
 	drmModeConnector *connector = NULL;
 	int i;
@@ -215,12 +215,12 @@ int cDrmDevice::Init(void)
 	drmModeEncoder *encoder = NULL;
 	drmModeModeInfo *drmmode = NULL;
 	drmModePlane *plane;
-	drmModePlaneRes *plane_res;
+	drmModePlaneRes *planeRes;
 	int i;
 	uint32_t j, k;
 
 	// find a drm device
-	m_fdDrm = find_drm_device(&resources);
+	m_fdDrm = FindDrmDevice(&resources);
 	if (m_fdDrm < 0) {
 		LOGERROR("cDrmDevice Init: Could not open device!");
 		return -1;
@@ -231,7 +231,7 @@ int cDrmDevice::Init(void)
 		resources->count_encoders);
 
 	// find a connector
-	connector = find_drm_connector(m_fdDrm, resources);
+	connector = FindDrmConnector(m_fdDrm, resources);
 	if (!connector) {
 		LOGERROR("cDrmDevice Init: cannot retrieve DRM connector (%d): %m", errno);
 		return -errno;
@@ -326,7 +326,7 @@ find_mode:
 
 
 	// find planes
-	if ((plane_res = drmModeGetPlaneResources(m_fdDrm)) == NULL) {
+	if ((planeRes = drmModeGetPlaneResources(m_fdDrm)) == NULL) {
 		LOGERROR("cDrmDevice Init: cannot retrieve PlaneResources (%d): %m", errno);
 		return -1;
 	}
@@ -337,8 +337,8 @@ find_mode:
 	cDrmPlane best_primary_osd_plane;   // is the AR24 capable primary plane with the highest plane_id
 	cDrmPlane best_overlay_osd_plane;   // is the AR24 capable overlay plane with the highest plane_id
 
-	for (j = 0; j < plane_res->count_planes; j++) {
-		plane = drmModeGetPlane(m_fdDrm, plane_res->planes[j]);
+	for (j = 0; j < planeRes->count_planes; j++) {
+		plane = drmModeGetPlane(m_fdDrm, planeRes->planes[j]);
 
 		if (plane == NULL) {
 			LOGERROR("cDrmDevice Init: cannot query DRM-KMS plane %d", j);
@@ -350,11 +350,11 @@ find_mode:
 		char pixelformats[256];
 
 		if (plane->possible_crtcs & (1 << m_crtcIndex)) {
-			if (GetPropertyValue(m_fdDrm, plane_res->planes[j],
+			if (GetPropertyValue(m_fdDrm, planeRes->planes[j],
 						 DRM_MODE_OBJECT_PLANE, "type", &type)) {
 				LOGDEBUG2(L_DRM, "cDrmDevice Init: Failed to get property 'type'");
 			}
-			if (GetPropertyValue(m_fdDrm, plane_res->planes[j],
+			if (GetPropertyValue(m_fdDrm, planeRes->planes[j],
 						 DRM_MODE_OBJECT_PLANE, "zpos", &zpos)) {
 				LOGDEBUG2(L_DRM, "cDrmDevice Init: Failed to get property 'zpos'");
 			} else {
@@ -491,7 +491,7 @@ find_mode:
 		}
 		LOGDEBUG2(L_DRM, "%s", str_zpos);
 	}
-	drmModeFreePlaneResources(plane_res);
+	drmModeFreePlaneResources(planeRes);
 	drmModeFreeEncoder(encoder);
 	drmModeFreeResources(resources);
 

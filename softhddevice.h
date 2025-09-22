@@ -1,23 +1,22 @@
-///
-///	@file softhddev.h	@brief software HD device plugin header file.
-///
-///	Copyright (c) 2011 - 2015 by Johns.  All Rights Reserved.
-///
-///	Contributor(s):
-///
-///	License: AGPLv3
-///
-///	This program is free software: you can redistribute it and/or modify
-///	it under the terms of the GNU Affero General Public License as
-///	published by the Free Software Foundation, either version 3 of the
-///	License.
-///
-///	This program is distributed in the hope that it will be useful,
-///	but WITHOUT ANY WARRANTY; without even the implied warranty of
-///	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-///	GNU Affero General Public License for more details.
-///
-//////////////////////////////////////////////////////////////////////////////
+/**
+ * @file softhddevice.h
+ * @brief Softhddevice device header file
+ *
+ * Copyright: (c) 2011 - 2015 by Johns.  All Rights Reserved.
+ * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * License: AGPLv3
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ */
 
 #ifndef __SOFTHDDEVICE_H
 #define __SOFTHDDEVICE_H
@@ -29,11 +28,18 @@ extern "C"
 #include <libavcodec/avcodec.h>
 }
 
+#include "softhdconfig.h"
+#include "codec_audio.h"
+#include "videostream.h"
+#include "audio.h"
+#include "video.h"
+
 class cAudioDecoder;
 
-//////////////////////////////////////////////////////////////////////////////
-//	cDevice
-//////////////////////////////////////////////////////////////////////////////
+
+/*****************************************************************************
+ * cSoftHdDevice - cDevice class
+ ****************************************************************************/
 
 class cVideoStream;
 class cVideoRender;
@@ -41,144 +47,126 @@ class cSoftHdAudio;
 
 class cSoftHdDevice:public cDevice
 {
-	public:
-		cSoftHdDevice(void);
-		virtual ~ cSoftHdDevice(void);
+public:
+	cSoftHdDevice(cSoftHdConfig *);
+	virtual ~cSoftHdDevice(void);
 
-		virtual cString DeviceName(void) const { return "softhddevice-drm-gles"; }
-
-		virtual bool HasDecoder(void) const;
-		virtual bool HasIBPTrickSpeed(void) const;
-		virtual bool CanReplay(void) const;
-		virtual bool SetPlayMode(ePlayMode);
-		virtual void TrickSpeed(int, bool);
-		virtual void Clear(void);
-		virtual void Play(void);
-		virtual void Freeze(void);
-		virtual void Mute(void);
-		virtual void StillPicture(const uchar *, int);
-		virtual bool Poll(cPoller &, int = 0);
-		virtual bool Flush(int = 0);
-		virtual int64_t GetSTC(void);
-		virtual cRect CanScaleVideo(const cRect &, int taCenter);
-		virtual void ScaleVideo(const cRect & = cRect::Null);
-		virtual void SetVideoDisplayFormat(eVideoDisplayFormat);
-		virtual void SetVideoFormat(bool);
-		virtual void GetVideoSize(int &, int &, double &);
-		virtual void GetOsdSize(int &, int &, double &);
-		virtual int PlayVideo(const uchar *, int);
-		virtual int PlayAudio(const uchar *, int, uchar);
-		virtual void SetAudioChannelDevice(int);
-		virtual int GetAudioChannelDevice(void);
-		virtual void SetDigitalAudioDevice(bool);
-		virtual void SetAudioTrackDevice(eTrackType);
-		virtual void SetVolumeDevice(int);
-private:
-		int PesHeadLength(const uint8_t *);
+	//
+	// virtual cDevice
+	//
+protected:
+	virtual void MakePrimaryDevice(bool);
 
 public:
+	virtual cString DeviceName(void) const { return "softhddevice-drm-gles"; }
+	virtual bool HasDecoder(void) const;
 
-// Image Grab facilities
+	// SPU facilities
+	virtual cSpuDecoder * GetSpuDecoder(void);
 
-		virtual uchar *GrabImage(int &, bool, int, int, int);
+	// player facilities
+	virtual bool CanReplay(void) const;
+	virtual bool SetPlayMode(ePlayMode);
+	virtual int PlayVideo(const uchar *, int);
+	virtual int PlayAudio(const uchar *, int, uchar);
+	virtual int64_t GetSTC(void);
+	virtual cRect CanScaleVideo(const cRect &, int taCenter);
+	virtual void ScaleVideo(const cRect & = cRect::Null);
+	virtual bool HasIBPTrickSpeed(void) const;
+	virtual void TrickSpeed(int, bool);
+	virtual void Clear(void);
+	virtual void Play(void);
+	virtual void Freeze(void);
+	virtual void Mute(void);
+	virtual void StillPicture(const uchar *, int);
+	virtual bool Poll(cPoller &, int = 0);
+	virtual bool Flush(int = 0);
 
-// SPU facilities
-	private:
-		cDvbSpuDecoder * spuDecoder;
-	public:
-		virtual cSpuDecoder * GetSpuDecoder(void);
+	// Image Grab facilities
+	virtual uchar *GrabImage(int &, bool, int, int, int);
 
-	protected:
-		virtual void MakePrimaryDevice(bool);
+	// video format facilities
+	virtual void SetVideoDisplayFormat(eVideoDisplayFormat);
+	virtual void SetVideoFormat(bool);
+	virtual void GetVideoSize(int &, int &, double &);
+	virtual void GetOsdSize(int &, int &, double &);
 
-	public:
-		void Start(void);
-		void Stop(void);
-		void Exit(void);
-		const char *CommandLineHelp(void);
-		int ProcessArgs(int, char *[]);
+	// track facilities
+	virtual void SetAudioTrackDevice(eTrackType);
 
-// config
+	// audio facilities
+	virtual int GetAudioChannelDevice(void);
+	virtual void SetAudioChannelDevice(int);
+	virtual void SetVolumeDevice(int);
+	virtual void SetDigitalAudioDevice(bool);
+
+	//
+	// wrapped by cPluginSoftHdDevice
+	//
+	void Start(void);                   // wrapped by cPluginSoftHdDevice::Start()
+	void Stop(void);                    // wrapped by cPluginSoftHdDevice::Stop()
+	const char *CommandLineHelp(void);  // wrapped by cPluginSoftHdDevice::CommandLineHelp()
+	int ProcessArgs(int, char *[]);     // wrapped by cPluginSoftHdDevice::ProcessArgs()
+
+	//
+	// cSoftHdDevice public methods
+	//
+	void Init(void);
+	cSoftHdConfig *Config(void) { return m_pConfig; };
+	cVideoStream *VideoStream(void) { return m_pVideoStream; };
+	cVideoRender *Render(void) { return m_pRender; };
+	cSoftHdAudio *Audio(void) { return m_pAudio; };
+
+	// osd
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-	private:
-		char ConfigWritePngs;		///< config write pngs from OSD
-	public:
-		void SetConfigWritePngs(char value) { ConfigWritePngs = value; };
-		char GetConfigWritePngs(void) { return ConfigWritePngs; };
+	char WritePngs(void) { return m_pConfig->ConfigWritePngs; };
 #endif
+	int MaxSizeGPUImageCache(void) { return m_pConfig->ConfigMaxSizeGPUImageCache; };
+	int OglOsdIsDisabled(void) { return m_pConfig->ConfigDisableOglOsd; };
+	void SetDisableOglOsd(void);
 #endif
+	void SetDisableDeint(void);
+	void OsdClose(void);
+	void OsdDrawARGB(int, int, int, int, int, const uint8_t *, int, int);
 
-// Menu config variables
-	public:
-		int ConfigVideoAudioDelay;		///< config audio delay
-		char ConfigAudioPassthrough;	///< config audio pass-through mask
-		char AudioPassthroughState;		///< flag audio-passthrough on/off
-		char ConfigAudioDownmix;		///< config ffmpeg audio downmix
-		char ConfigAudioSoftvol;		///< config use software volume
-		char ConfigAudioNormalize;		///< config use normalize volume
-		int ConfigAudioMaxNormalize;	///< config max normalize factor
-		char ConfigAudioCompression;	///< config use volume compression
-		int ConfigAudioMaxCompression;	///< config max volume compression
-		int ConfigAudioStereoDescent;	///< config reduce stereo loudness
-		int ConfigAudioBufferTime;			///< config size ms of audio buffer
-		int ConfigAudioAutoAES;		///< config automatic AES handling
-		int ConfigAudioEq;			///< config equalizer filter 
-		int SetupAudioEqBand[18];		///< config equalizer filter bands
+	// audio
+	void SetVideoAudioDelay(int delay) { m_videoAudioDelay = delay; };
+	int GetVideoAudioDelay(void) { return m_videoAudioDelay; };
+	void SetPassthrough(int);
+	void ResetChannelId(void);
 
-		char ConfigMakePrimary;		///< config primary wanted
-		char ConfigHideMainMenuEntry;	///< config hide main menu entry
-		char LogState;			///< flag logging on/off
-		int ConfigLog;			///< loglevel config
+	// Logging, statistics
+	void SetLogLevel(int);
+	void GetStats(int *, int *, int *);
 
-		int ConfigDisableDeint;		///< disable deinterlacer
-		void SetDisableDeint(void);
-#ifdef USE_GLES
-		int ConfigMaxSizeGPUImageCache = 128;
-		int ConfigDisableOglOsd;
-		void SetDisableOglOsd(void);
-#endif
+	// Mediaplayer
+	void SetAudioCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
+	void SetVideoCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
+	int PlayAudioPkts(AVPacket *);
+	int PlayVideoPkts(AVPacket *);
 
-// OSD
-		void OsdClose(void);
-		void OsdDrawARGB(int, int, int, int, int, const uint8_t *, int, int);
+private:
+	cDvbSpuDecoder *m_pSpuDecoder;   ///< pointer to spu decoder
+	cSoftHdConfig *m_pConfig;        ///< pointer to cSoftHdConfig object
+	cVideoRender *m_pRender;         ///< pointer to cVideoRender object
+	cVideoStream *m_pVideoStream;    ///< pointer to cVideoStream object
+	cSoftHdAudio *m_pAudio;          ///< pointer to cSoftHdAudio object
+	cAudioDecoder *m_pAudioDecoder;  ///< pointer to cAudioDecoder object
 
-// Audio
-		cSoftHdAudio *Audio;
-		cAudioDecoder *AudioDecoder;
-		AVPacket *AudioAvPkt;
-		enum AVCodecID AudioCodecID;
-		int AudioChannelID;
-		void ClearAudio(void);
-		volatile char NewAudioStream;
-		volatile char SkipAudio;
+	AVPacket *m_pAudioAvPkt;         ///< pointer to current audio AVPacket
 
-		int VideoAudioDelay;
-		void SetVideoAudioDelay(int);
-		int GetVideoAudioDelay(void);
+	enum AVCodecID m_audioCodecID;   ///< pointer to current audio AVPacket
+	int m_audioChannelID;            ///< current audio channel ID
+	volatile char m_newAudioStream;  ///< set, if we a new audio stream arrived
+	volatile char m_skipAudio;       ///< set, if audio should be skipped (mute)
+	int m_videoAudioDelay;           ///< audio/video delay set via setup menu
+	int m_grabActive;                ///< simple lock variable
+	                                 ///< skips a new grab request if the last one is still active
 
-		void SetPassthrough(int);	///< Set audio passthrough mask
-		void ResetChannelId(void);
-
-// Stream
-		cVideoStream *VideoStream;
-		void Init(void);
-
-// Render
-		cVideoRender *Render;
-
-// Logging, statistics
-		void SetLogLevel(int);
-		void GetStats(int *, int *, int *);
-
-// Mediaplayer
-		void SetAudioCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
-		void SetVideoCodec(enum AVCodecID, AVCodecParameters *, AVRational *);
-		int PlayAudioPkts(AVPacket *);
-		int PlayVideoPkts(AVPacket *);
-
-// Grabbing
-		int m_grabActive;
+	void ClearAudio(void);
+	void Exit(void);
+	int PesHeadLength(const uint8_t *);
 };
 
 #endif

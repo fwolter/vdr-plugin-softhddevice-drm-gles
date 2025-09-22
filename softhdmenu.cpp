@@ -1,0 +1,514 @@
+/**
+ * @file softhdmenu.cpp
+ * @brief Softhddevice setup menu class
+ *
+ * Copyright: (c) 2011, 2015 by Johns.  All Rights Reserved.
+ * Copyright (c) 2018 zille.  All Rights Reserved.
+ * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * License: AGPLv3
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ */
+
+#define __STDC_CONSTANT_MACROS      ///< needed for ffmpeg UINT64_C
+
+#include <string>
+using std::string;
+#include <fstream>
+using std::ifstream;
+
+#include <vdr/player.h>
+#include <vdr/plugin.h>
+
+#include "logger.h"
+
+#include "softhddevice-drm-gles.h"
+#include "softhddevice.h"
+#include "mediaplayer.h"
+
+#ifdef USE_GLES
+#include "openglosd.h"
+#endif
+
+extern "C"
+{
+#include <libavcodec/avcodec.h>
+}
+
+#include "videostream.h"
+#include "video.h"
+#include "audio.h"
+#include "codec_audio.h"
+#include "softhdmenu.h"
+
+/*****************************************************************************
+ * cMenuSetupSoft - Setup menu
+ ****************************************************************************/
+
+/**
+ * @brief Create a seperator item
+ *
+ * @param label       text inside separator
+ */
+static inline cOsdItem *SeparatorItem(const char *label)
+{
+	cOsdItem *item;
+
+	item = new cOsdItem(cString::sprintf("* %s: ", label));
+	item->SetSelectable(false);
+
+	return item;
+}
+
+/**
+ * @brief Create a collapsed item
+ *
+ * @param label     text inside collapsed
+ * @param flag      flag handling collapsed or opened
+ * @param msg       open message
+ */
+inline cOsdItem *cMenuSetupSoft::CollapsedItem(const char *label, int &flag, const char *msg)
+{
+	cOsdItem *item;
+
+	item = new cMenuEditBoolItem(cString::sprintf("* %s", label), &flag,
+		msg ? msg : tr("show"), tr("hide"));
+
+	return item;
+}
+
+/**
+ * @brief Create setup menu.
+ */
+void cMenuSetupSoft::Create(void)
+{
+	int current;
+
+	current = Current();	// get current menu item index
+	Clear();            	// clear the menu
+#ifdef USE_GLES
+#ifdef WRITE_PNG
+//    m_cPngVariant[0] = tr("none");
+//    m_cPngVariant[1] = tr("output fb");
+//    m_cPngVariant[2] = tr("render fb");
+//    m_cPngVariant[3] = tr("both");
+#endif
+#endif
+
+	//
+	// General
+	//
+	Add(CollapsedItem(tr("General"), m_cGeneral));
+	if (m_cGeneral) {
+		Add(new cMenuEditBoolItem(tr("Make primary device"), &m_cMakePrimary, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("Hide main menu entry"), &m_cHideMainMenuEntry, trVDR("no"), trVDR("yes")));
+#ifdef USE_GLES
+		if (!m_pConfig->ConfigDisableOglOsd) {
+			Add(new cMenuEditIntItem(tr("GPU mem used for image caching (MB)"), &m_cMaxSizeGPUImageCache, 0, 4000));
+		}
+#endif
+	}
+
+	//
+	// Statistics
+	//
+	Add(CollapsedItem(tr("Statistics"), m_cStatistics));
+	if (m_cStatistics) {
+		int duped;
+		int dropped;
+		int counter;
+		m_pDevice->GetStats(&duped, &dropped, &counter);
+		Add(new cOsdItem(cString::sprintf(tr(" Frames duped(%d) dropped(%d) total(%d)"), duped, dropped, counter), osUnknown, false));
+#ifdef USE_GLES
+		Add(new cOsdItem(cString::sprintf(tr(" OSD: Using %s rendering"), m_pConfig->ConfigDisableOglOsd ? "software" : "hardware"), osUnknown, false));
+#else
+		Add(new cOsdItem(cString::sprintf(tr(" OSD: Using software rendering")), osUnknown, false));
+#endif
+	}
+
+#ifdef USE_GLES
+#ifdef WRITE_PNG
+	//
+	//	debug
+	//
+	if (!m_pConfig->ConfigDisableOglOsd) {
+		Add(CollapsedItem(tr("Debug"), m_cDebugMenu));
+		if (m_cDebugMenu) {
+			Add(new cMenuEditBoolItem(tr("Write OSD to file"), &m_cWritePngs, trVDR("no"), trVDR("yes")));
+//			Add(new cMenuEditStraItem(tr("Write OSD to file"), &m_cWritePngs, 4, m_cPngVariant));
+		}
+	}
+#endif
+#endif
+
+	//
+	// Logging
+	//
+	Add(CollapsedItem(tr("Logging"), m_cLogging));
+	if (m_cLogging) {
+		Add(new cMenuEditBoolItem(tr("Logging default"), &m_cLogDefault, trVDR("off"), trVDR("on")));
+		if (m_cLogDefault) {
+			Add(new cMenuEditBoolItem(tr("\040\040Standard debug logs"), &m_cLogDebug_, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040AV Sync debug logs"), &m_cLogAVSync, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040Sound debug logs"), &m_cLogSound, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040OSD debug logs"), &m_cLogOSD, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040DRM debug logs"), &m_cLogDRM, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040Codec debug logs"), &m_cLogCodec, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040Stillpicture debug logs"), &m_cLogStill, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040Trickspeed debug logs"), &m_cLogTrick, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040Mediaplayer debug logs"), &m_cLogMedia, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040OpenGL OSD debug logs"), &m_cLogGL, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040OpenGL OSD time measurement"), &m_cLogGLTime, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040OpenGL OSD time measurement (extensive)"), &m_cLogGLTimeAll, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040Packet tracking logs"), &m_cLogPacket, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040Grabbing debug logs"), &m_cLogGrab, trVDR("no"), trVDR("yes")));
+		}
+	}
+
+	//
+	// Video
+	//
+	Add(CollapsedItem(tr("Video"), m_cVideoMenu));
+	if (m_cVideoMenu) {
+		Add(new cMenuEditBoolItem(tr("Disable Deinterlacer"), &m_cDisableDeint, trVDR("no"), trVDR("yes")));
+	}
+
+	//
+	// Audio
+	//
+	Add(CollapsedItem(tr("Audio"), m_cAudio));
+	if (m_cAudio) {
+		Add(new cMenuEditIntItem(tr("Audio/Video delay (ms)"), &m_cAudioDelay, -1000, 1000));
+		Add(new cMenuEditBoolItem(tr("Volume control"), &m_cAudioSoftvol, tr("Hardware"), tr("Software")));
+		Add(new cMenuEditIntItem(tr("Audio buffer size (ms)"), &m_cAudioBufferTime, 0, 1000));
+		Add(new cMenuEditBoolItem(tr("Enable normalize volume"), &m_cAudioNormalize, trVDR("no"), trVDR("yes")));
+		if (m_cAudioNormalize)
+			Add(new cMenuEditIntItem(tr("  Max normalize factor (/1000)"), &m_cAudioMaxNormalize, 0, 10000));
+		Add(new cMenuEditBoolItem(tr("Enable volume compression"), &m_cAudioCompression, trVDR("no"), trVDR("yes")));
+		if (m_cAudioCompression)
+			Add(new cMenuEditIntItem(tr("  Max compression factor (/1000)"), &m_cAudioMaxCompression, 0, 10000));
+		Add(new cMenuEditIntItem(tr("Reduce stereo volume (/1000)"), &m_cAudioStereoDescent, 0, 1000));
+		Add(new cMenuEditBoolItem(tr("Enable Stereo downmix"), &m_cAudioDownmix, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("Pass-through default"), &m_cAudioPassthroughDefault, trVDR("off"), trVDR("on")));
+		if (m_cAudioPassthroughDefault) {
+			Add(new cMenuEditBoolItem(tr("\040\040PCM pass-through"), &m_cAudioPassthroughPCM, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040AC-3 pass-through"), &m_cAudioPassthroughAC3, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040E-AC-3 pass-through"), &m_cAudioPassthroughEAC3, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("\040\040DTS pass-through"), &m_cAudioPassthroughDTS, trVDR("no"), trVDR("yes")));
+			Add(new cMenuEditBoolItem(tr("Enable automatic AES"), &m_cAudioAutoAES, trVDR("no"), trVDR("yes")));
+		}
+	}
+
+	//
+	// Audio filter
+	//
+	Add(CollapsedItem(tr("Audio Filter"), m_cAudioFilter));
+	if (m_cAudioFilter) {
+		Add(new cMenuEditBoolItem(tr(" Enable Audio Equalizer"), &m_cAudioEq, trVDR("no"), trVDR("yes")));
+		if (m_cAudioEq) {
+			Add(new cMenuEditIntItem(tr("  60 Hz band gain"),   &m_cAudioEqBand[0], -15, 1));
+			Add(new cMenuEditIntItem(tr("  72 Hz band gain"),   &m_cAudioEqBand[1], -15, 1));
+			Add(new cMenuEditIntItem(tr("  107 Hz band gain"),   &m_cAudioEqBand[2], -15, 1));
+			Add(new cMenuEditIntItem(tr("  150 Hz band gain"),   &m_cAudioEqBand[3], -15, 1));
+			Add(new cMenuEditIntItem(tr("  220 Hz band gain"),   &m_cAudioEqBand[4], -15, 1));
+			Add(new cMenuEditIntItem(tr("  310 Hz band gain"),   &m_cAudioEqBand[5], -15, 1));
+			Add(new cMenuEditIntItem(tr("  430 Hz band gain"),   &m_cAudioEqBand[6], -15, 1));
+			Add(new cMenuEditIntItem(tr("  620 Hz band gain"),   &m_cAudioEqBand[7], -15, 1));
+			Add(new cMenuEditIntItem(tr("  860 Hz band gain"),   &m_cAudioEqBand[8], -15, 1));
+			Add(new cMenuEditIntItem(tr("  1200 Hz band gain"),  &m_cAudioEqBand[9], -15, 1));
+			Add(new cMenuEditIntItem(tr("  1700 Hz band gain"),  &m_cAudioEqBand[10], -15, 1));
+			Add(new cMenuEditIntItem(tr("  2500 Hz band gain"),  &m_cAudioEqBand[11], -15, 1));
+			Add(new cMenuEditIntItem(tr("  3500 Hz band gain"),  &m_cAudioEqBand[12], -15, 1));
+			Add(new cMenuEditIntItem(tr("  4800 Hz band gain"),  &m_cAudioEqBand[13], -15, 1));
+			Add(new cMenuEditIntItem(tr("  7000 Hz band gain"),  &m_cAudioEqBand[14], -15, 1));
+			Add(new cMenuEditIntItem(tr("  9500 Hz band gain"),  &m_cAudioEqBand[15], -15, 1));
+			Add(new cMenuEditIntItem(tr("  13500 Hz band gain"), &m_cAudioEqBand[16], -15, 1));
+			Add(new cMenuEditIntItem(tr("  17200 Hz band gain"), &m_cAudioEqBand[17], -15, 1));
+		}
+	}
+
+	SetCurrent(Get(current));	// restore selected menu entry
+	Display();               	// display build menu
+}
+
+/**
+ * @brief Process key for setup menu.
+ *
+ * @param key          pressed key
+ */
+eOSState cMenuSetupSoft::ProcessKey(eKeys key)
+{
+	int old_cGeneral = m_cGeneral;
+#ifdef USE_GLES
+#ifdef WRITE_PNG
+	int old_cDebugMenu = m_cDebugMenu;
+#endif
+#endif
+	int old_cStatistics = m_cStatistics;
+	int old_cLogging = m_cLogging;
+	int old_cLogDefault = m_cLogDefault;
+	int old_cVideoMenu = m_cVideoMenu;
+	int old_cAudio = m_cAudio;
+	int old_cAudioNormalize = m_cAudioNormalize;
+	int old_cAudioCompression = m_cAudioCompression;
+	int old_cAudioPassthroughDefault = m_cAudioPassthroughDefault;
+	int old_cAudioFilter = m_cAudioFilter;
+	int old_cAudioEq = m_cAudioEq;
+
+	eOSState state = cMenuSetupPage::ProcessKey(key);
+
+	if (key != kNone) {
+		// update menu only, if something on the structure has changed
+		// this is needed because VDR menus are evil slow
+		if (old_cGeneral                 != m_cGeneral ||
+#ifdef USE_GLES
+#ifdef WRITE_PNG
+		    old_cDebugMenu               != m_cDebugMenu ||
+#endif
+#endif
+		    old_cStatistics              != m_cStatistics ||
+		    old_cLogging                 != m_cLogging ||
+		    old_cLogDefault              != m_cLogDefault ||
+		    old_cVideoMenu               != m_cVideoMenu ||
+		    old_cAudio                   != m_cAudio ||
+		    old_cAudioFilter             != m_cAudioFilter ||
+		    old_cAudioEq                 != m_cAudioEq ||
+		    old_cAudioNormalize          != m_cAudioNormalize ||
+		    old_cAudioCompression        != m_cAudioCompression ||
+		    old_cAudioPassthroughDefault != m_cAudioPassthroughDefault) {
+
+			Create();	// update menu
+		}
+	}
+
+	return state;
+}
+
+/**
+ * @brief cMenuSetupSoft constructor
+ *
+ * Import global config variables into setup
+ */
+cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
+{
+	m_pDevice = device;
+	m_pAudioDevice = m_pDevice->Audio();
+	m_pConfig = m_pDevice->Config();
+
+	//
+	// General
+	//
+	m_cGeneral = 0;
+	m_cMakePrimary = m_pConfig->ConfigMakePrimary;
+	m_cHideMainMenuEntry = m_pConfig->ConfigHideMainMenuEntry;
+#ifdef USE_GLES
+	m_cMaxSizeGPUImageCache = m_pConfig->ConfigMaxSizeGPUImageCache;
+#endif
+
+	//
+	//	Debug
+	//
+#ifdef USE_GLES
+#ifdef WRITE_PNG
+	m_cDebugMenu = 0;
+	m_cWritePngs = m_pConfig->ConfigWritePngs;
+#endif
+#endif
+
+	//
+	// Statistics
+	//
+	m_cStatistics = 0;
+
+	//
+	// Logging
+	//
+	m_cLogging = 0;
+	m_cLogDefault   = m_pConfig->LogState;
+	m_cLogDebug_    = m_pConfig->ConfigLog & L_DEBUG;
+	m_cLogAVSync    = m_pConfig->ConfigLog & L_AV_SYNC;
+	m_cLogSound     = m_pConfig->ConfigLog & L_SOUND;
+	m_cLogOSD       = m_pConfig->ConfigLog & L_OSD;
+	m_cLogDRM       = m_pConfig->ConfigLog & L_DRM;
+	m_cLogCodec     = m_pConfig->ConfigLog & L_CODEC;
+	m_cLogStill     = m_pConfig->ConfigLog & L_STILL;
+	m_cLogTrick     = m_pConfig->ConfigLog & L_TRICK;
+	m_cLogMedia     = m_pConfig->ConfigLog & L_MEDIA;
+	m_cLogGL        = m_pConfig->ConfigLog & L_OPENGL;
+	m_cLogGLTime    = m_pConfig->ConfigLog & L_OPENGL_TIME;
+	m_cLogGLTimeAll = m_pConfig->ConfigLog & L_OPENGL_TIME_ALL;
+	m_cLogPacket    = m_pConfig->ConfigLog & L_PACKET;
+	m_cLogGrab      = m_pConfig->ConfigLog & L_GRAB;
+
+	//
+	// Video
+	//
+	m_cVideoMenu = 0;
+	m_cDisableDeint = m_pConfig->ConfigDisableDeint;
+
+	//
+	// Audio
+	//
+	m_cAudio = 0;
+	m_cAudioDelay              = m_pConfig->ConfigVideoAudioDelay;
+	m_cAudioSoftvol            = m_pConfig->ConfigAudioSoftvol;
+	m_cAudioBufferTime         = m_pConfig->ConfigAudioBufferTime;
+	m_cAudioNormalize          = m_pConfig->ConfigAudioNormalize;
+	m_cAudioMaxNormalize       = m_pConfig->ConfigAudioMaxNormalize;
+	m_cAudioCompression        = m_pConfig->ConfigAudioCompression;
+	m_cAudioMaxCompression     = m_pConfig->ConfigAudioMaxCompression;
+	m_cAudioStereoDescent      = m_pConfig->ConfigAudioStereoDescent;
+	m_cAudioDownmix            = m_pConfig->ConfigAudioDownmix;
+	m_cAudioPassthroughDefault = m_pConfig->AudioPassthroughState;
+	m_cAudioPassthroughPCM     = m_pConfig->ConfigAudioPassthrough & CODEC_PCM;
+	m_cAudioPassthroughAC3     = m_pConfig->ConfigAudioPassthrough & CODEC_AC3;
+	m_cAudioPassthroughEAC3    = m_pConfig->ConfigAudioPassthrough & CODEC_EAC3;
+	m_cAudioPassthroughDTS     = m_pConfig->ConfigAudioPassthrough & CODEC_DTS;
+	m_cAudioAutoAES            = m_pConfig->ConfigAudioAutoAES;
+
+	//
+	// Audio filter
+	//
+	m_cAudioEq = m_pConfig->ConfigAudioEq;
+	m_cAudioFilter = 0;
+	for (int i = 0; i < 18; i++) {
+		m_cAudioEqBand[i] = m_pConfig->SetupAudioEqBand[i];
+	}
+
+	Create();
+}
+
+/**
+ * @brief Store setup
+ */
+void cMenuSetupSoft::Store(void)
+{
+	//
+	// General
+	//
+	SetupStore("MakePrimary", m_pConfig->ConfigMakePrimary = m_cMakePrimary);
+	SetupStore("HideMainMenuEntry", m_pConfig->ConfigHideMainMenuEntry = m_cHideMainMenuEntry);
+#ifdef USE_GLES
+	SetupStore("MaxSizeGPUImageCache", m_pConfig->ConfigMaxSizeGPUImageCache = m_cMaxSizeGPUImageCache);
+#endif
+
+	//
+	// Debug
+	//
+#ifdef USE_GLES
+#ifdef WRITE_PNG
+	m_pConfig->ConfigWritePngs = m_cWritePngs;
+	SetupStore("WritePngs", m_pConfig->ConfigWritePngs);
+#endif
+#endif
+
+	//
+	// Logging
+	//
+	m_pConfig->ConfigLog =
+		(m_cLogDebug_    ? L_DEBUG : 0) |
+		(m_cLogAVSync    ? L_AV_SYNC : 0) |
+		(m_cLogSound     ? L_SOUND : 0) |
+		(m_cLogOSD       ? L_OSD : 0) |
+		(m_cLogDRM       ? L_DRM : 0) |
+		(m_cLogCodec     ? L_CODEC : 0) |
+		(m_cLogStill     ? L_STILL : 0) |
+		(m_cLogTrick     ? L_TRICK : 0) |
+		(m_cLogMedia     ? L_MEDIA : 0) |
+		(m_cLogGL        ? L_OPENGL : 0) |
+		(m_cLogGLTime    ? L_OPENGL_TIME : 0) |
+		(m_cLogGLTimeAll ? L_OPENGL_TIME_ALL : 0) |
+		(m_cLogPacket    ? L_PACKET : 0) |
+		(m_cLogGrab      ? L_GRAB : 0);
+	m_pConfig->LogState = m_cLogDefault;
+	if (m_pConfig->LogState) {
+		SetupStore("LogLevel", m_pConfig->ConfigLog);
+		m_pDevice->SetLogLevel(m_pConfig->ConfigLog);
+		cSoftHdLogger::GetLogger()->SetLogLevel(m_pConfig->ConfigLog);
+	} else {
+		SetupStore("LogLevel", -m_pConfig->ConfigLog);
+		m_pDevice->SetLogLevel(0);
+		cSoftHdLogger::GetLogger()->SetLogLevel(0);
+	}
+
+	//
+	// Video
+	//
+	SetupStore("DisableDeint", m_pConfig->ConfigDisableDeint = m_cDisableDeint);
+	if (m_pConfig->ConfigDisableDeint) {
+		LOGDEBUG("Disable deinterlacer!");
+	}
+	m_pDevice->SetDisableDeint();
+
+	//
+	// Audio
+	//
+	SetupStore("AudioDelay", m_pConfig->ConfigVideoAudioDelay = m_cAudioDelay);
+	m_pDevice->SetVideoAudioDelay(m_pConfig->ConfigVideoAudioDelay);
+	SetupStore("AudioSoftvol", m_pConfig->ConfigAudioSoftvol = m_cAudioSoftvol);
+	m_pAudioDevice->SetSoftvol(m_pConfig->ConfigAudioSoftvol);
+	SetupStore("AudioBufferTime", m_pConfig->ConfigAudioBufferTime = m_cAudioBufferTime);
+	m_pAudioDevice->SetBufferTimeInMs(m_pConfig->ConfigAudioBufferTime);
+	SetupStore("AudioNormalize", m_pConfig->ConfigAudioNormalize = m_cAudioNormalize);
+	SetupStore("AudioMaxNormalize", m_pConfig->ConfigAudioMaxNormalize = m_cAudioMaxNormalize);
+	m_pAudioDevice->SetNormalize(m_pConfig->ConfigAudioNormalize, m_pConfig->ConfigAudioMaxNormalize);
+	SetupStore("AudioCompression", m_pConfig->ConfigAudioCompression = m_cAudioCompression);
+	SetupStore("AudioMaxCompression", m_pConfig->ConfigAudioMaxCompression = m_cAudioMaxCompression);
+	m_pAudioDevice->SetCompression(m_pConfig->ConfigAudioCompression, m_pConfig->ConfigAudioMaxCompression);
+	SetupStore("AudioStereoDescent", m_pConfig->ConfigAudioStereoDescent = m_cAudioStereoDescent);
+	m_pAudioDevice->SetStereoDescent(m_pConfig->ConfigAudioStereoDescent);
+	SetupStore("AudioDownmix", m_pConfig->ConfigAudioDownmix = m_cAudioDownmix);
+	m_pAudioDevice->SetDownmix(m_pConfig->ConfigAudioDownmix);
+	// FIXME: can handle more audio state changes here
+	// downmix changed reset audio, to get change direct
+	if (m_pConfig->ConfigAudioDownmix != m_cAudioDownmix) {
+		m_pDevice->ResetChannelId();
+	}
+	m_pConfig->ConfigAudioPassthrough = (m_cAudioPassthroughPCM ? CODEC_PCM : 0)
+	                                  | (m_cAudioPassthroughAC3 ? CODEC_AC3 : 0)
+	                                  | (m_cAudioPassthroughEAC3 ? CODEC_EAC3 : 0)
+	                                  | (m_cAudioPassthroughDTS ? CODEC_DTS : 0);
+	m_pConfig->AudioPassthroughState = m_cAudioPassthroughDefault;
+	if (m_pConfig->AudioPassthroughState) {
+		SetupStore("AudioPassthrough", m_pConfig->ConfigAudioPassthrough);
+		m_pDevice->SetPassthrough(m_pConfig->ConfigAudioPassthrough);
+	} else {
+		SetupStore("AudioPassthrough", -m_pConfig->ConfigAudioPassthrough);
+		m_pDevice->SetPassthrough(0);
+	}
+	SetupStore("AudioAutoAES", m_pConfig->ConfigAudioAutoAES = m_cAudioAutoAES);
+	m_pAudioDevice->SetAutoAES(m_pConfig->ConfigAudioAutoAES);
+
+	//
+	// Audio filter
+	//
+	SetupStore("AudioEq", m_pConfig->ConfigAudioEq = m_cAudioEq);
+	SetupStore("AudioEqBand01b", m_pConfig->SetupAudioEqBand[0]  = m_cAudioEqBand[0]);
+	SetupStore("AudioEqBand02b", m_pConfig->SetupAudioEqBand[1]  = m_cAudioEqBand[1]);
+	SetupStore("AudioEqBand03b", m_pConfig->SetupAudioEqBand[2]  = m_cAudioEqBand[2]);
+	SetupStore("AudioEqBand04b", m_pConfig->SetupAudioEqBand[3]  = m_cAudioEqBand[3]);
+	SetupStore("AudioEqBand05b", m_pConfig->SetupAudioEqBand[4]  = m_cAudioEqBand[4]);
+	SetupStore("AudioEqBand06b", m_pConfig->SetupAudioEqBand[5]  = m_cAudioEqBand[5]);
+	SetupStore("AudioEqBand07b", m_pConfig->SetupAudioEqBand[6]  = m_cAudioEqBand[6]);
+	SetupStore("AudioEqBand08b", m_pConfig->SetupAudioEqBand[7]  = m_cAudioEqBand[7]);
+	SetupStore("AudioEqBand09b", m_pConfig->SetupAudioEqBand[8]  = m_cAudioEqBand[8]);
+	SetupStore("AudioEqBand10b", m_pConfig->SetupAudioEqBand[9]  = m_cAudioEqBand[9]);
+	SetupStore("AudioEqBand11b", m_pConfig->SetupAudioEqBand[10] = m_cAudioEqBand[10]);
+	SetupStore("AudioEqBand12b", m_pConfig->SetupAudioEqBand[11] = m_cAudioEqBand[11]);
+	SetupStore("AudioEqBand13b", m_pConfig->SetupAudioEqBand[12] = m_cAudioEqBand[12]);
+	SetupStore("AudioEqBand14b", m_pConfig->SetupAudioEqBand[13] = m_cAudioEqBand[13]);
+	SetupStore("AudioEqBand15b", m_pConfig->SetupAudioEqBand[14] = m_cAudioEqBand[14]);
+	SetupStore("AudioEqBand16b", m_pConfig->SetupAudioEqBand[15] = m_cAudioEqBand[15]);
+	SetupStore("AudioEqBand17b", m_pConfig->SetupAudioEqBand[16] = m_cAudioEqBand[16]);
+	SetupStore("AudioEqBand18b", m_pConfig->SetupAudioEqBand[17] = m_cAudioEqBand[17]);
+	m_pAudioDevice->SetEq(m_pConfig->SetupAudioEqBand, m_pConfig->ConfigAudioEq);
+}

@@ -68,7 +68,7 @@ cSoftHdPlayer::cSoftHdPlayer(const char *Url, cSoftHdDevice *device)
 	Pause = 0;
 	Random = 0;
 	Device = device;
-	Audio = Device->Audio;
+	Audio = Device->Audio();
 //	LOGDEBUG2(L_MEDIA, "cSoftHdPlayer: Player gestartet.");
 }
 

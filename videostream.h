@@ -26,6 +26,7 @@ extern "C" {
 }
 
 #include "codec_video.h"
+#include "video.h"
 
 #define VIDEO_BUFFER_SIZE (512 * 1024)  ///< video PES buffer default size
 #define VIDEO_PACKET_MAX 192            ///< max number of video packets held in ringbuffer
