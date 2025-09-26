@@ -1691,7 +1691,7 @@ static int ReadHWPlatform(void)
 void cVideoRender::Init(void)
 {
 	if (m_pDrmDevice->Init())
-		LOGFATAL("VideoInit: FindDevice() failed");
+		LOGFATAL("VideoInit: failed");
 
 	cDrmPlane *videoPlane = m_pDrmDevice->VideoPlane();
 	cDrmPlane *osdPlane = m_pDrmDevice->OsdPlane();

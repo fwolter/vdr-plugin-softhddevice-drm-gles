@@ -19,35 +19,11 @@
  * GNU Affero General Public License for more details.
  */
 
-#define __STDC_CONSTANT_MACROS      ///< needed for ffmpeg UINT64_C
-
-#include <string>
-using std::string;
-#include <fstream>
-using std::ifstream;
-
-#include <vdr/player.h>
-#include <vdr/plugin.h>
-
 #include "logger.h"
-
-#include "softhddevice-drm-gles.h"
-#include "softhddevice.h"
-#include "mediaplayer.h"
-
 #ifdef USE_GLES
 #include "openglosd.h"
 #endif
-
-extern "C"
-{
-#include <libavcodec/avcodec.h>
-}
-
-#include "videostream.h"
-#include "video.h"
-#include "audio.h"
-#include "codec_audio.h"
+#include "softhddevice.h"
 #include "softhdosd.h"
 
 /*****************************************************************************

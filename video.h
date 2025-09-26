@@ -52,6 +52,7 @@ extern "C" {
 #include "videostream.h"
 #include "glhelpers.h"
 #include "drmbuffer.h"
+#include "drmdevice.h"
 #include "threads.h"
 #include "grab.h"
 #include "plane.h"
@@ -78,6 +79,8 @@ struct lastFrame {
 	int trickspeed;
 };
 
+class cDrmDevice;
+
 /**
  * @brief cVideoRender - Video render class
  */
@@ -90,7 +93,6 @@ public:
 	void Init(void);
 	void Exit(void);
 	void CleanUp(void);
-	int FindDevice(void);
 	int HardwareQuirks(void) { return m_hardwareQuirks; };
 	void DisableDeint(int);
 	void DisableOglOsd(void) { m_disableOglOsd = 1; };

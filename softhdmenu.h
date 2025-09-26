@@ -22,10 +22,6 @@
 #ifndef __SOFTHDMENU_H
 #define __SOFTHDMENU_H
 
-#ifdef USE_GLES
-#include "openglosd.h"
-#endif
-
 #include "softhddevice.h"
 #include "softhdmenu.h"
 

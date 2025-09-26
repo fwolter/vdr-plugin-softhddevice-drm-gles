@@ -18,54 +18,13 @@
  * GNU Affero General Public License for more details.
  */
 
-// @todo: sort out header includes
-
-#ifndef __USE_GNU
-#define __USE_GNU
-#endif
-
-#include <stdbool.h>
-#include <unistd.h>
-
-#include <inttypes.h>
-
-#include <libintl.h>
-
-#ifdef USE_GLES
-#include <assert.h>
-#endif
-#include <pthread.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <string.h>
-#include <sys/mman.h>
-#include <drm_fourcc.h>
-
-#include "logger.h"
-
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavutil/hwcontext_drm.h>
-#include <libavutil/pixdesc.h>
-#include <libavfilter/buffersink.h>
-#include <libavfilter/buffersrc.h>
-#include <libavutil/opt.h>
-
-#include "misc.h"
-}
-#include "buf2rgb.h"
-
-#include "video.h"
-#include "audio.h"
-#include "drm.h"
-#include "threads.h"
-#include "grab.h"
 #include "drmdevice.h"
+#include "logger.h"
 
 /*****************************************************************************
  * cDrmBuffer class
  ****************************************************************************/
- 
+
  /**
  * @brief cDrmBuffer constructor
  *
@@ -77,11 +36,11 @@ cDrmBuffer::cDrmBuffer(void)
 
 /**
  * @brief cDrmBuffer constructor
- * 
+ *
  * Clone a cDrmBuffer
- * 
+ *
  * @param src     src buffer to be cloned
- * 
+ *
  * @returns       a new cDrmBuffer object cloned from src
  */
 cDrmBuffer::cDrmBuffer(cDrmBuffer *src)
@@ -148,15 +107,15 @@ cDrmBuffer::cDrmBuffer(cDrmBuffer *src)
 
 /**
  * @brief cDrmBuffer constructor
- * 
+ *
  * Create a new cDrmBuffer from a gbm buffer object
- * 
+ *
  * @param fdDrm          drm file descriptor
  * @param width          buffer width
  * @param height         buffer height
  * @param pixFmt         buffer pixel format
  * @param bo             pointer to gbm buffer object
- * 
+ *
  * @returns              a new cDrmBuffer object from a gbm buffer object
  */
 cDrmBuffer::cDrmBuffer(int fdDrm, uint32_t width, uint32_t height, uint32_t pixFmt, struct gbm_bo *bo)
@@ -238,7 +197,7 @@ void cDrmBuffer::Destroy(void)
 
 /**
  * @brief Infos of a pixel format
- * 
+ *
  * Each entry describes a format in the following matter:
  * {
  * 	uint32_t format,
@@ -246,7 +205,7 @@ void cDrmBuffer::Destroy(void)
  * 	uint8_t num_planes,
  * 	struct format_plane_info planes[4]
  * }
- * 
+ *
  * The format_plane_info is:
  * {
  * 	uint8_t bitspp,

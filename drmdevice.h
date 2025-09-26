@@ -36,6 +36,7 @@
 
 #ifdef USE_GLES
 #include <assert.h>
+#include <EGL/egl.h>
 #endif
 #include <pthread.h>
 #include <errno.h>
@@ -58,11 +59,14 @@ extern "C" {
 }
 #include "buf2rgb.h"
 
-#include "video.h"
+//#include "video.h"
 #include "audio.h"
 #include "drm.h"
 #include "threads.h"
 #include "grab.h"
+
+// save!
+#include "plane.h"
 
 /*****************************************************************************
  * cDrmDevice class
