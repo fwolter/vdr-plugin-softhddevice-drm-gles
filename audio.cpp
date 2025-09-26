@@ -43,7 +43,7 @@ extern "C"
 
 #include "ringbuffer.h"
 #include "audio.h"
-#include "video.h"
+#include "videorender.h"
 #include "codec_audio.h"
 #include "videostream.h"
 
@@ -539,7 +539,7 @@ int cSoftHdAudio::InitFilter(AVCodecContext *audioCtx)
 void cSoftHdAudio::InitRingbuffer(void)
 {
 	// ~2s 8ch 16bit
-	m_pRingbuffer = new cDeviceRingbuffer(m_ringBufferSize);
+	m_pRingbuffer = new cSoftHdRingbuffer(m_ringBufferSize);
 }
 
 /**

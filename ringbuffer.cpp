@@ -28,19 +28,19 @@
 #include "logger.h"
 
 /******************************************************************************
- * cDeviceRingbuffer class
+ * cSoftHdRingbuffer class
  *
  * Lock free ring buffer with only one writer and one reader
  *****************************************************************************/
 
 /**
- * @brief cDeviceRingbuffer constructor
+ * @brief cSoftHdRingbuffer constructor
  *
  * Init a new ring buffer
  *
  * @param size    Size of the ring buffer
  */
-cDeviceRingbuffer::cDeviceRingbuffer(size_t size)
+cSoftHdRingbuffer::cSoftHdRingbuffer(size_t size)
 {
 	if (!(m_pBuffer = (char *)malloc(size)))	// allocate buffer
 	LOGFATAL("%s: can't allocate memory for ringbuffer", __FUNCTION__);
@@ -53,9 +53,9 @@ cDeviceRingbuffer::cDeviceRingbuffer(size_t size)
 }
 
 /**
- * @brief cDeviceRingbuffer destructor
+ * @brief cSoftHdRingbuffer destructor
  */
-cDeviceRingbuffer::~cDeviceRingbuffer(void)
+cSoftHdRingbuffer::~cSoftHdRingbuffer(void)
 {
 	free(m_pBuffer);
 }
@@ -63,7 +63,7 @@ cDeviceRingbuffer::~cDeviceRingbuffer(void)
 /**
  * @brief Reset ring buffer pointers
  */
-void cDeviceRingbuffer::Reset(void)
+void cSoftHdRingbuffer::Reset(void)
 {
 	m_pReadPointer = m_pBuffer;
 	m_pWritePointer = m_pBuffer;
@@ -77,7 +77,7 @@ void cDeviceRingbuffer::Reset(void)
  *
  * @returns          Number of bytes that could be advanced in ring buffer
  */
-size_t cDeviceRingbuffer::WriteAdvance(size_t cnt)
+size_t cSoftHdRingbuffer::WriteAdvance(size_t cnt)
 {
 	size_t n;
 
@@ -114,7 +114,7 @@ size_t cDeviceRingbuffer::WriteAdvance(size_t cnt)
  *
  * @returns     The number of bytes that could be placed in the ring buffer
  */
-size_t cDeviceRingbuffer::Write(const void *buf, size_t cnt)
+size_t cSoftHdRingbuffer::Write(const void *buf, size_t cnt)
 {
 	size_t n;
 
@@ -155,7 +155,7 @@ size_t cDeviceRingbuffer::Write(const void *buf, size_t cnt)
  * @returns               The number of bytes that could be placed in the ring
  *                        buffer at the write pointer.
  */
-size_t cDeviceRingbuffer::GetWritePointer(void **wp)
+size_t cSoftHdRingbuffer::GetWritePointer(void **wp)
 {
 	size_t n;
 	size_t cnt;
@@ -182,7 +182,7 @@ size_t cDeviceRingbuffer::GetWritePointer(void **wp)
  *
  * @returns         Number of bytes that could be advanced in ring buffer
  */
-size_t cDeviceRingbuffer::ReadAdvance(size_t cnt)
+size_t cSoftHdRingbuffer::ReadAdvance(size_t cnt)
 {
 	size_t n;
 
@@ -219,7 +219,7 @@ size_t cDeviceRingbuffer::ReadAdvance(size_t cnt)
  *
  * @returns     Number of bytes that could be read from ring buffer
  */
-size_t cDeviceRingbuffer::Read(void *buf, size_t cnt)
+size_t cSoftHdRingbuffer::Read(void *buf, size_t cnt)
 {
 	size_t n;
 
@@ -260,7 +260,7 @@ size_t cDeviceRingbuffer::Read(void *buf, size_t cnt)
  * @returns          The number of bytes that could be read from the ring
  *                   buffer at the read pointer
  */
-size_t cDeviceRingbuffer::GetReadPointer(const void **rp)
+size_t cSoftHdRingbuffer::GetReadPointer(const void **rp)
 {
 	size_t n;
 	size_t cnt;
@@ -285,7 +285,7 @@ size_t cDeviceRingbuffer::GetReadPointer(const void **rp)
  *
  * @returns        Number of bytes free in buffer
  */
-size_t cDeviceRingbuffer::FreeBytes(void)
+size_t cSoftHdRingbuffer::FreeBytes(void)
 {
 	return m_Size - atomic_read(&m_filled);
 }
@@ -295,7 +295,7 @@ size_t cDeviceRingbuffer::FreeBytes(void)
  *
  * @returns        Number of bytes used in buffer.
  */
-size_t cDeviceRingbuffer::UsedBytes(void)
+size_t cSoftHdRingbuffer::UsedBytes(void)
 {
 	return atomic_read(&m_filled);
 }

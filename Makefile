@@ -127,8 +127,8 @@ override CFLAGS	  += $(_CFLAGS) $(DEFINES) $(INCLUDES) \
 
 ### The object files (add further files here):
 
-OBJS = $(PLUGIN).o mediaplayer.o softhddevice.o video.o audio.o codec_audio.o codec_video.o \
-       ringbuffer.o buf2rgb.o logger.o threads.o grab.o videostream.o h264parser.o plane.o drmbuffer.o softhdosd.o softhdmenu.o
+OBJS = $(PLUGIN).o audio.o buf2rgb.o codec_audio.o codec_video.o config.o drmbuffer.o drmdevice.o drmplane.o grab.o h264parser.o \
+	logger.o mediaplayer.o ringbuffer.o softhddevice.o softhdmenu.o softhdosd.o threads.o videorender.o videostream.o
 
 ifeq ($(GLES),1)
 OBJS += openglosd.o

@@ -45,7 +45,7 @@ extern "C"
 }
 
 #include "videostream.h"
-#include "video.h"
+#include "videorender.h"
 #include "audio.h"
 #include "codec_audio.h"
 #include "softhdosd.h"
@@ -229,7 +229,7 @@ cMenuSetupPage *cPluginSoftHdDevice::SetupMenu(void)
  */
 bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 {
-	return m_pConfig->SetupParse(name, value);
+	return m_pConfig->SetupParse(name, value, m_pDevice, m_pAudio);
 }
 
 /**

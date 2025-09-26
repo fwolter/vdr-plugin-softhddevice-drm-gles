@@ -59,14 +59,14 @@ extern "C" {
 }
 #include "buf2rgb.h"
 
-//#include "video.h"
+//#include "videorender.h"
 #include "audio.h"
 #include "drm.h"
 #include "threads.h"
 #include "grab.h"
 
 // save!
-#include "plane.h"
+#include "drmplane.h"
 
 /*****************************************************************************
  * cDrmDevice class
@@ -146,7 +146,7 @@ private:
 	EGLContext m_eglContext;               ///< EGL context
 	int m_glInitiated;                     ///< true, if OpenGL/ES context is initiated
 
-	int32_t find_crtc_for_connector(const drmModeRes *, const drmModeConnector *);
+	int32_t FindCrtcForConnector(const drmModeRes *, const drmModeConnector *);
 	int InitEGL(void);
 	EGLConfig GetEGLConfig(void);
 	int init_gbm(int, int, uint32_t, uint64_t);

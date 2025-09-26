@@ -27,7 +27,7 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 }
 
-#include "video.h"
+#include "videorender.h"
 
 class cVideoRender;
 

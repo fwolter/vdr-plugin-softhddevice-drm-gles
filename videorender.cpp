@@ -54,7 +54,7 @@ extern "C" {
 }
 #include "buf2rgb.h"
 
-#include "video.h"
+#include "videorender.h"
 #include "audio.h"
 #include "drm.h"
 #include "threads.h"

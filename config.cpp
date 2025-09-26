@@ -19,7 +19,7 @@
  * GNU Affero General Public License for more details.
  */
 
-#include "softhdconfig.h"
+#include "config.h"
 
 /*****************************************************************************
  * cSoftHdConfig - Setup parameters
@@ -28,10 +28,8 @@
 /**
  * @brief cSoftHdConfig constructor
  */
-cSoftHdConfig::cSoftHdConfig(cSoftHdDevice *device, cSoftHdAudio *audio)
+cSoftHdConfig::cSoftHdConfig(void)
 {
-	m_pDevice = device;
-	m_pAudio = audio;
 }
 
 /**
@@ -49,7 +47,7 @@ cSoftHdConfig::~cSoftHdConfig(void)
  *
  * @returns         true if the parameter is supported, false otherwise
  */
-bool cSoftHdConfig::SetupParse(const char *name, const char *value)
+bool cSoftHdConfig::SetupParse(const char *name, const char *value, cSoftHdDevice *device, cSoftHdAudio *audio)
 {
 	//LOGDEBUG("%s: '%s' = '%s'", __FUNCTION__, name, value);
 
@@ -64,29 +62,29 @@ bool cSoftHdConfig::SetupParse(const char *name, const char *value)
 		                                                     LogState = atoi(value) > 0;
 		                                                     	SetLogState();
 	} else if (!strcasecmp(name, "DisableDeint"))          { ConfigDisableDeint = atoi(value);
-		                                                     	m_pDevice->SetDisableDeint();
+		                                                     	device->SetDisableDeint();
 	} else if (!strcasecmp(name, "AudioDelay"))            { ConfigVideoAudioDelay = atoi(value);
-		                                                     	m_pDevice->SetVideoAudioDelay(m_pDevice->ConfigVideoAudioDelay);
+		                                                     	device->SetVideoAudioDelay(ConfigVideoAudioDelay);
 	} else if (!strcasecmp(name, "AudioPassthrough"))      { AudioPassthroughState = atoi(value) > 0;
 		                                                     ConfigAudioPassthrough = abs(atoi(value));
-		                                                     	SetPassthrough();
+		                                                     	SetPassthrough(device);
 	} else if (!strcasecmp(name, "AudioDownmix"))          { ConfigAudioDownmix = atoi(value);
-		                                                     	m_pAudio->SetDownmix(ConfigAudioDownmix);
+		                                                     	audio->SetDownmix(ConfigAudioDownmix);
 	} else if (!strcasecmp(name, "AudioSoftvol"))          { ConfigAudioSoftvol = atoi(value),
-		                                                     	m_pAudio->SetSoftvol(ConfigAudioSoftvol);
+		                                                     	audio->SetSoftvol(ConfigAudioSoftvol);
 	} else if (!strcasecmp(name, "AudioNormalize"))        { ConfigAudioNormalize = atoi(value);
-		                                                     	m_pAudio->SetNormalize(ConfigAudioNormalize, ConfigAudioMaxNormalize);
+		                                                     	audio->SetNormalize(ConfigAudioNormalize, ConfigAudioMaxNormalize);
 	} else if (!strcasecmp(name, "AudioMaxNormalize"))     { ConfigAudioMaxNormalize = atoi(value);
-		                                                     	m_pAudio->SetNormalize(ConfigAudioNormalize, ConfigAudioMaxNormalize);
+		                                                     	audio->SetNormalize(ConfigAudioNormalize, ConfigAudioMaxNormalize);
 	} else if (!strcasecmp(name, "AudioCompression"))      { ConfigAudioCompression = atoi(value);
-		                                                     	m_pAudio->SetCompression(ConfigAudioCompression, ConfigAudioMaxCompression);
+		                                                     	audio->SetCompression(ConfigAudioCompression, ConfigAudioMaxCompression);
 	} else if (!strcasecmp(name, "AudioMaxCompression"))   { ConfigAudioMaxCompression = atoi(value);
-		                                                     	m_pAudio->SetCompression(ConfigAudioCompression, ConfigAudioMaxCompression);
+		                                                     	audio->SetCompression(ConfigAudioCompression, ConfigAudioMaxCompression);
 	} else if (!strcasecmp(name, "AudioStereoDescent"))    { ConfigAudioStereoDescent = atoi(value);
-		                                                     	m_pAudio->SetStereoDescent(ConfigAudioStereoDescent);
+		                                                     	audio->SetStereoDescent(ConfigAudioStereoDescent);
 	} else if (!strcasecmp(name, "AudioBufferTime"))       { ConfigAudioBufferTime = atoi(value);
 	} else if (!strcasecmp(name, "AudioAutoAES"))          { ConfigAudioAutoAES = atoi(value);
-		                                                     	m_pAudio->SetAutoAES(ConfigAudioAutoAES);
+		                                                     	audio->SetAutoAES(ConfigAudioAutoAES);
 	} else if (!strcasecmp(name, "AudioEq"))               { ConfigAudioEq = atoi(value);
 	} else if (!strcasecmp(name, "AudioEqBand01b"))        { SetupAudioEqBand[0] = atoi(value);
 	} else if (!strcasecmp(name, "AudioEqBand02b"))        { SetupAudioEqBand[1] = atoi(value);
@@ -106,7 +104,7 @@ bool cSoftHdConfig::SetupParse(const char *name, const char *value)
 	} else if (!strcasecmp(name, "AudioEqBand16b"))        { SetupAudioEqBand[15] = atoi(value);
 	} else if (!strcasecmp(name, "AudioEqBand17b"))        { SetupAudioEqBand[16] = atoi(value);
 	} else if (!strcasecmp(name, "AudioEqBand18b"))        { SetupAudioEqBand[17] = atoi(value);
-		                                                     	m_pAudio->SetEq(SetupAudioEqBand, ConfigAudioEq);
+		                                                     	audio->SetEq(SetupAudioEqBand, ConfigAudioEq);
 #ifdef USE_GLES
 	} else if (!strcasecmp(name, "MaxSizeGPUImageCache"))  { ConfigMaxSizeGPUImageCache = atoi(value);
 #endif
@@ -116,10 +114,7 @@ bool cSoftHdConfig::SetupParse(const char *name, const char *value)
 	return true;
 }
 
-/**
-**	Set log level
-*/
-void cSoftHdConfig::SetLogLevel(int loglevel)
+void cSoftHdConfig::PrintLogLevel(int loglevel)
 {
 	if (!loglevel)
 		return;
@@ -144,8 +139,8 @@ void cSoftHdConfig::SetLogLevel(int loglevel)
 	if (loglevel & L_MEDIA)
 		strcat(prefix, " mediaplayer,");
 	if ((loglevel & L_OPENGL) ||
-		(loglevel & L_OPENGL_TIME) ||
-		(loglevel & L_OPENGL_TIME_ALL))
+	    (loglevel & L_OPENGL_TIME) ||
+	    (loglevel & L_OPENGL_TIME_ALL))
 		strcat(prefix, " OpenGL OSD,");
 	if (loglevel & L_PACKET)
 		strcat(prefix, " packet tracking,");
@@ -158,19 +153,19 @@ void cSoftHdConfig::SetLogLevel(int loglevel)
 void cSoftHdConfig::SetLogState(void)
 {
 	if (LogState) {
-		SetLogLevel(ConfigLog);
+		PrintLogLevel(ConfigLog);
 		cSoftHdLogger::GetLogger()->SetLogLevel(ConfigLog);
 	} else {
-		SetLogLevel(0);
+		PrintLogLevel(0);
 		cSoftHdLogger::GetLogger()->SetLogLevel(0);
 	}
 }
 
-void cSoftHdConfig::SetPassthrough(void)
+void cSoftHdConfig::SetPassthrough(cSoftHdDevice *device)
 {
 	if (AudioPassthroughState) {
-		m_pDevice->SetPassthrough(ConfigAudioPassthrough);
+		device->SetPassthrough(ConfigAudioPassthrough);
 	} else {
-		m_pDevice->SetPassthrough(0);
+		device->SetPassthrough(0);
 	}
 }

@@ -49,7 +49,7 @@ extern "C" {
 #include "iatomic.h"
 #include "videostream.h"
 #include "audio.h"
-#include "video.h"
+#include "videorender.h"
 #include "codec_audio.h"
 #include "codec_video.h"
 
@@ -1726,6 +1726,33 @@ void cSoftHdDevice::OsdDrawARGB(int xi, int yi, int height, int width, int pitch
 {
 	m_pRender->OsdDrawARGB(xi, yi, height, width, pitch, argb, x, y);
 }
+
+#ifdef USE_GLES
+#ifdef WRITE_PNG
+/**
+ * @brief Check, if writing the osd into a png file is enabled
+ */
+char cSoftHdDevice::WritePngs(void)
+{
+	return m_pConfig->ConfigWritePngs;
+};
+#endif
+/**
+ * @brief Get the maximum GPU image cache size
+ */
+int cSoftHdDevice::MaxSizeGPUImageCache(void)
+{
+	return m_pConfig->ConfigMaxSizeGPUImageCache;
+};
+
+/**
+ * @brief Is the OpenGL/ES osd disabled?
+ */
+int cSoftHdDevice::OglOsdIsDisabled(void)
+{
+	return m_pConfig->ConfigDisableOglOsd;
+};
+#endif
 
 /**
  * @brief Disables deinterlacer (called from setup menu or conf)

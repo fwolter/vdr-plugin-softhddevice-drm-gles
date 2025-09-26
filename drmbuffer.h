@@ -75,6 +75,7 @@ public:
 	int IsTrickspeedBuffer(void) { return m_trickspeed; };
 
 	int Id(void) { return m_fbId; };
+	void SetId(int id) { m_fbId = id; };
 	void SetFdDrm(int fdDrm) { m_fdDrm = fdDrm; };
 	int NumPlanes(void) { return m_numPlanes; };
 	void SetNumPlanes(int numPlanes) { m_numPlanes = numPlanes; };

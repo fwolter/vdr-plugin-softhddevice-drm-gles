@@ -152,7 +152,7 @@ private:
 	AVFilterContext *m_pBuffersinkCtx;
 
 	// ring buffer variables
-	cDeviceRingbuffer *m_pRingbuffer = nullptr;                 ///< sample ring buffer
+	cSoftHdRingbuffer *m_pRingbuffer = nullptr;                 ///< sample ring buffer
 	const unsigned m_ringBufferSize = 3 * 5 * 7 * 8 * 2 * 1000; ///< default ring buffer size ~2s 8ch 16bit (3 * 5 * 7 * 8)
 	cMutex m_rbMutex;                                           ///< mutex for ringbuffer access
 

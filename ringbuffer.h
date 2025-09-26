@@ -18,8 +18,8 @@
  * GNU Affero General Public License for more details.
  */
 
-#ifndef __DEVICE_RINGBUFFER_H
-#define __DEVICE_RINGBUFFER_H
+#ifndef __SOFTHDRINGBUFFER_H
+#define __SOFTHDRINGBUFFER_H
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,14 +28,14 @@
 #include "iatomic.h"
 
 /**
- * @brief cRingDeviceBuffer - RingBuffer class
+ * @brief cSoftHdRingbuffer - RingBuffer class
  */
 
-class cDeviceRingbuffer
+class cSoftHdRingbuffer
 {
 public:
-	cDeviceRingbuffer(size_t);
-	virtual ~cDeviceRingbuffer(void);
+	cSoftHdRingbuffer(size_t);
+	virtual ~cSoftHdRingbuffer(void);
 	void Reset(void);
 	size_t Write(const void *, size_t);
 	size_t GetWritePointer(void **);

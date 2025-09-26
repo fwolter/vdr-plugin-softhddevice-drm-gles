@@ -1,5 +1,5 @@
 /**
- * @file softhdconfig.h
+ * @file config.h
  * @brief SoftHdDevice config header file
  *
  * Copyright: (c) 2011, 2015 by Johns.  All Rights Reserved.
@@ -32,7 +32,7 @@ public:
 	cSoftHdConfig(void);
 	virtual ~cSoftHdConfig(void);
 
-	bool SetupParse(const char *, const char *);
+	bool SetupParse(const char *, const char *, cSoftHdDevice *, cSoftHdAudio *);
 #ifdef USE_GLES
 #ifdef WRITE_PNG
 	char ConfigWritePngs;                   ///< config write pngs from OSD
@@ -61,10 +61,10 @@ public:
 	int ConfigLog;                          ///< loglevel config
 
 	int ConfigDisableDeint;                 ///< disable deinterlacer
-
+	void PrintLogLevel(int);
 private:
-	cSoftHdDevice *m_pDevice;
-	cSoftHdAudio *m_pAudio;
+	void SetLogState(void);
+	void SetPassthrough(cSoftHdDevice *);
 };
 
 #endif

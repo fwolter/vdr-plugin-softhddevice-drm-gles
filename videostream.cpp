@@ -45,7 +45,7 @@ extern "C" {
 #include "iatomic.h"
 #include "videostream.h"
 #include "audio.h"
-#include "video.h"
+#include "videorender.h"
 #include "codec_audio.h"
 #include "codec_video.h"
 

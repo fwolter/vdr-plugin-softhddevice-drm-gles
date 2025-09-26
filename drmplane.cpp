@@ -22,7 +22,7 @@
 #include <xf86drmMode.h>
 #include <cinttypes>
 
-#include "plane.h"
+#include "drmplane.h"
 #include "logger.h"
 
 /*****************************************************************************

@@ -36,7 +36,7 @@ extern "C" {
 
 #include "buf2rgb.h"
 #include "codec_video.h"
-#include "video.h"
+#include "videorender.h"
 #include "logger.h"
 
 #define NUM_CAPTURE_BUFFERS 10

@@ -1,5 +1,5 @@
 /**
- * @file video.h
+ * @file videorender.h
  * @brief Rendering module class declaration
  *
  * Copyright: (c) 2009 - 2015 by Johns.  All Rights Reserved.
@@ -19,8 +19,8 @@
  * GNU Affero General Public License for more details.
  */
 
-#ifndef __VIDEO_H
-#define __VIDEO_H
+#ifndef __VIDEORENDER_H
+#define __VIDEORENDER_H
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>
@@ -55,7 +55,7 @@ extern "C" {
 #include "drmdevice.h"
 #include "threads.h"
 #include "grab.h"
-#include "plane.h"
+#include "drmplane.h"
 #include "drmdevice.h"
 
 #define RENDERBUFFERS 36                 ///< number of render video buffers

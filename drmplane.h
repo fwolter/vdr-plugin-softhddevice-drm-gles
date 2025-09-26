@@ -18,8 +18,8 @@
  * GNU Affero General Public License for more details.
  */
 
-#ifndef __PLANE_H
-#define __PLANE_H
+#ifndef __DRMPLANE_H
+#define __DRMPLANE_H
 
 #include <xf86drm.h>
 #include <xf86drmMode.h>

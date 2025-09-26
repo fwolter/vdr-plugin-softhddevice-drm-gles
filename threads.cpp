@@ -29,7 +29,7 @@ extern "C" {
 #include "logger.h"
 #include "vdr/thread.h"
 #include "threads.h"
-#include "video.h"
+#include "videorender.h"
 #include "audio.h"
 
 

@@ -55,7 +55,7 @@ extern "C" {
 }
 #include "buf2rgb.h"
 
-#include "video.h"
+#include "videorender.h"
 #include "audio.h"
 #include "drm.h"
 #include "threads.h"
@@ -204,6 +204,43 @@ static drmModeConnector *FindDrmConnector(int fd, drmModeRes *resources)
 }
 
 /**
+ * @brief Gets a property value
+ */
+static int GetPropertyValue(int fdDrm, uint32_t objectID,
+                            uint32_t objectType, const char *propName, uint64_t *value)
+{
+	uint32_t i;
+	int found = 0;
+	drmModePropertyPtr Prop;
+	drmModeObjectPropertiesPtr objectProps =
+		drmModeObjectGetProperties(fdDrm, objectID, objectType);
+
+	for (i = 0; i < objectProps->count_props; i++) {
+		if ((Prop = drmModeGetProperty(fdDrm, objectProps->props[i])) == NULL)
+			LOGDEBUG2(L_DRM, "%s: Unable to query property", __FUNCTION__);
+
+		if (strcmp(propName, Prop->name) == 0) {
+			*value = objectProps->prop_values[i];
+			found = 1;
+		}
+
+		drmModeFreeProperty(Prop);
+
+		if (found)
+			break;
+	}
+
+	drmModeFreeObjectProperties(objectProps);
+
+	if (!found) {
+		LOGDEBUG2(L_DRM, "%s: Unable to find value for property \'%s\'.", __FUNCTION__, propName);
+		return -1;
+	}
+
+	return 0;
+}
+
+/**
  * @brief Initiate the drm device
  *
  * @returns 0 on success, a negative value on error
@@ -302,7 +339,7 @@ find_mode:
 		m_crtcId = encoder->crtc_id;
 		LOGDEBUG2(L_DRM, "cDrmDevice Init: have encoder, m_crtcId %d", m_crtcId);
 	} else {
-		int32_t crtc_id = find_crtc_for_connector(resources, connector);
+		int32_t crtc_id = FindCrtcForConnector(resources, connector);
 		if (crtc_id == -1) {
 			LOGERROR("cDrmDevice Init: No crtc found!");
 			return -errno;
@@ -585,7 +622,7 @@ static const EGLint context_attribute_list[] =
 /**
  * @brief Get a suitable EGLConfig
  */
-EGLConfig cVideoRender::GetEGLConfig(void)
+EGLConfig cDrmDevice::GetEGLConfig(void)
 {
 	EGLint config_attribute_list[] = {
 		EGL_BUFFER_SIZE, 32,
@@ -635,7 +672,7 @@ EGLConfig cVideoRender::GetEGLConfig(void)
  * @returns 0       on success
  * @returns -1      on error
  */
-int cVideoRender::InitEGL(void)
+int cDrmDevice::InitEGL(void)
 {
 	EGLint iMajorVersion, iMinorVersion;
 
@@ -753,7 +790,7 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 			LOGDEBUG2(L_DRM, "%s: %d: handle %d pitch %d, offset %d, size %d", __FUNCTION__, i, buf->Handle(i), buf->Pitch(i), buf->Offset(i), buf->Size(i));
 		}
 		buf->SetNumObjects(1);
-		buf->SetObjIndex(0, 0);
+		buf->SetObjectIndex(0, 0);
 		buf->SetFdPrime(0, gbm_bo_get_fd(bo));
 
 		if (modifiers[0]) {
@@ -761,9 +798,11 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 			LOGDEBUG2(L_DRM, "%s: Using modifier %" PRIx64 "", __FUNCTION__, modifiers[0]);
 		}
 
+		uint32_t id;
 		// Add FB
 		ret = drmModeAddFB2WithModifiers(m_fdDrm, buf->Width(), buf->Height(), buf->PixFmt(),
-			buf->Handle(), buf->Pitch(), buf->Offset(), modifiers, &buf->Id(), mod_flags);
+			buf->Handle(), buf->Pitch(), buf->Offset(), modifiers, &id, mod_flags);
+		buf->SetId(id);
 	}
 
 	if (ret) {
@@ -776,11 +815,13 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 		memset(buf->Offset(), 0, 16);
 		memcpy(buf->Size(), (uint32_t [4]){ buf->Height() * buf->Width() * buf->Pitch(0), 0, 0, 0}, 16);
 		buf->SetNumObjects(1);
-		buf->SetObjIndex(0, 0);
+		buf->SetObjectIndex(0, 0);
 		buf->SetFdPrime(0, gbm_bo_get_fd(bo));
 
+		uint32_t id;
 		ret = drmModeAddFB2(m_fdDrm, buf->Width(), buf->Height(), buf->PixFmt(),
-			buf->Handle(), buf->Pitch(), buf->Offset(), &buf->Id(), 0);
+			buf->Handle(), buf->Pitch(), buf->Offset(), &id, 0);
+		buf->SetId(id);
 	}
 
 	if (ret) {
@@ -789,8 +830,9 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 		return NULL;
 	}
 
+	uint32_t pixFmt = buf->PixFmt();
 	LOGDEBUG2(L_DRM, "%s: New GL buffer %d x %d pix_fmt %4.4s fb_id %d", __FUNCTION__,
-		buf->Width(), buf->Height(), (char *)&buf->PixFmt(), buf->Id());
+		buf->Width(), buf->Height(), (char *)&pixFmt, buf->Id());
 
 	gbm_bo_set_user_data(bo, buf, drm_fb_destroy_callback);
 	return buf;
@@ -800,7 +842,7 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 /**
  * @brief Finds the CRTC_ID for the given encoder
  */
-static int32_t find_crtc_for_encoder(const drmModeRes *resources, const drmModeEncoder *encoder)
+static int32_t FindCrtcForEncoder(const drmModeRes *resources, const drmModeEncoder *encoder)
 {
 	int i;
 
@@ -818,7 +860,7 @@ static int32_t find_crtc_for_encoder(const drmModeRes *resources, const drmModeE
 /**
  * @brief Finds the CRTC_ID for the given connector
  */
-int32_t cVideoRender::find_crtc_for_connector(const drmModeRes *resources, const drmModeConnector *connector)
+int32_t cDrmDevice::FindCrtcForConnector(const drmModeRes *resources, const drmModeConnector *connector)
 {
 	int i;
 
@@ -827,7 +869,7 @@ int32_t cVideoRender::find_crtc_for_connector(const drmModeRes *resources, const
 		drmModeEncoder *encoder = drmModeGetEncoder(m_fdDrm, encoder_id);
 
 		if (encoder) {
-			const int32_t crtc_id = find_crtc_for_encoder(resources, encoder);
+			const int32_t crtc_id = FindCrtcForEncoder(resources, encoder);
 			drmModeFreeEncoder(encoder);
 			if (crtc_id != 0) {
 				return crtc_id;
@@ -849,46 +891,9 @@ void cDrmDevice::Close(void)
 /**
  * @brief Creates a property blob
  */
-int cDrmDevice::CreatePropertyBlob(&modeID)
+int cDrmDevice::CreatePropertyBlob(uint32_t *modeID)
 {
-	return drmModeCreatePropertyBlob(m_fdDrm, &m_drmModeInfo, sizeof(m_drmModeInfo), &modeID);
-}
-
-/**
- * @brief Gets a property value
- */
-static int GetPropertyValue(int fdDrm, uint32_t objectID,
-                            uint32_t objectType, const char *propName, uint64_t *value)
-{
-	uint32_t i;
-	int found = 0;
-	drmModePropertyPtr Prop;
-	drmModeObjectPropertiesPtr objectProps =
-		drmModeObjectGetProperties(fdDrm, objectID, objectType);
-
-	for (i = 0; i < objectProps->count_props; i++) {
-		if ((Prop = drmModeGetProperty(fdDrm, objectProps->props[i])) == NULL)
-			LOGDEBUG2(L_DRM, "%s: Unable to query property", __FUNCTION__);
-
-		if (strcmp(propName, Prop->name) == 0) {
-			*value = objectProps->prop_values[i];
-			found = 1;
-		}
-
-		drmModeFreeProperty(Prop);
-
-		if (found)
-			break;
-	}
-
-	drmModeFreeObjectProperties(objectProps);
-
-	if (!found) {
-		LOGDEBUG2(L_DRM, "%s: Unable to find value for property \'%s\'.", __FUNCTION__, propName);
-		return -1;
-	}
-
-	return 0;
+	return drmModeCreatePropertyBlob(m_fdDrm, &m_drmModeInfo, sizeof(m_drmModeInfo), modeID);
 }
 
 /**

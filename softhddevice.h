@@ -28,11 +28,11 @@ extern "C"
 #include <libavcodec/avcodec.h>
 }
 
-#include "softhdconfig.h"
+#include "config.h"
 #include "codec_audio.h"
 #include "videostream.h"
 #include "audio.h"
-#include "video.h"
+#include "videorender.h"
 
 class cAudioDecoder;
 
@@ -44,6 +44,7 @@ class cAudioDecoder;
 class cVideoStream;
 class cVideoRender;
 class cSoftHdAudio;
+class cSoftHdConfig;
 
 class cSoftHdDevice:public cDevice
 {
@@ -120,10 +121,10 @@ public:
 	// osd
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-	char WritePngs(void) { return m_pConfig->ConfigWritePngs; };
+	char WritePngs(void);
 #endif
-	int MaxSizeGPUImageCache(void) { return m_pConfig->ConfigMaxSizeGPUImageCache; };
-	int OglOsdIsDisabled(void) { return m_pConfig->ConfigDisableOglOsd; };
+	int MaxSizeGPUImageCache(void);
+	int OglOsdIsDisabled(void);
 	void SetDisableOglOsd(void);
 #endif
 	void SetDisableDeint(void);
@@ -137,7 +138,6 @@ public:
 	void ResetChannelId(void);
 
 	// Logging, statistics
-	void SetLogLevel(int);
 	void GetStats(int *, int *, int *);
 
 	// Mediaplayer
