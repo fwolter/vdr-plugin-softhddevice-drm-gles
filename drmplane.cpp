@@ -1,11 +1,14 @@
 /**
  * @file plane.h
- * @brief DRM plane class declaration
+ * DRM plane class
  *
- * Copyright: (c) 2018 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cDrmPlane, which is a class to describe
+ * planes, that are used for modesetting in the DRM system.
+ * 
+ * @copyright (c) 2018 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -15,7 +18,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.\
  */
 
 #include <xf86drm.h>
@@ -40,7 +43,7 @@ cDrmPlane::~cDrmPlane(void)
 }
 
 /**
- * @brief Fill the plane properties
+ * Fill the plane properties
  *
  * This "caches" the properties within the class
  *
@@ -63,7 +66,7 @@ void cDrmPlane::FillProperties(int fd)
 }
 
 /**
- * @brief Free the previously filled plane properties
+ * Free the previously filled plane properties
  */
 void cDrmPlane::FreeProperties(void)
 {
@@ -83,7 +86,7 @@ void cDrmPlane::FreeProperties(void)
 }
 
 /**
- * @brief Set the modesetting parameters of a plane
+ * Set the modesetting parameters of a plane
  *
  * These values are used for drm modesetting
  *
@@ -115,7 +118,7 @@ void cDrmPlane::SetParams(uint64_t crtcId, uint64_t fbId,
 }
 
 /**
- * @brief Add the properties to the mode setting request
+ * Add the properties to the mode setting request
  *
  * @param ModeReq      pointer to the atomic mode request
  * @param propName     name of the property to set
@@ -142,7 +145,7 @@ int cDrmPlane::SetPropertyRequest(drmModeAtomicReqPtr ModeReq, const char *propN
 }
 
 /**
- * @brief Set the plane zpos property
+ * Set the plane zpos property
  *
  * @param ModeReq       pointer to the atomic mode request
  */
@@ -152,7 +155,7 @@ void cDrmPlane::SetPlaneZpos(drmModeAtomicReqPtr ModeReq)
 }
 
 /**
- * @brief Set all other plane properties
+ * Set all other plane properties
  *
  * @param ModeReq        pointer to the atomic mode request
  */
@@ -173,7 +176,7 @@ void cDrmPlane::SetPlane(drmModeAtomicReqPtr ModeReq)
 }
 
 /**
- * @brief Check, if the plane is able to set the zpos property
+ * Check, if the plane is able to set the zpos property
  *
  * @param fdDrm     drm file descriptor
  * 
@@ -205,7 +208,7 @@ int cDrmPlane::HasZpos(int fdDrm)
 }
 
 /**
- * @brief Dump the plane parameter modesetting values
+ * Dump the plane parameter modesetting values
  */
 void cDrmPlane::DumpParameters(void)
 {

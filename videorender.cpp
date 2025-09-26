@@ -1,12 +1,15 @@
 /**
- * @file video.cpp
- * @brief Rendering module
+ * @file videorender.cpp
+ * Rendering class
  *
- * Copyright: (c) 2009 - 2015 by Johns.  All Rights Reserved.
- * Copyright: (c) 2018 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cVideoRender, which includes all methods to
+ * bring the video and osd to display.
  *
- * License: AGPLv3
+ * @copyright (c) 2009 - 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +19,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #ifndef __USE_GNU
@@ -66,7 +69,7 @@ extern "C" {
  ****************************************************************************/
 
 /**
- * @brief cVideoRender constructor
+ * cVideoRender constructor
  *
  * @param device         pointer to cSoftHdDevice
  */
@@ -78,7 +81,7 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 }
 
 /**
- * @brief cVideoRender destructor
+ * cVideoRender destructor
  */
 cVideoRender::~cVideoRender(void)
 {
@@ -94,7 +97,7 @@ cVideoRender::~cVideoRender(void)
 }
 
 /**
- * @brief Prepare the threads and process variables
+ * Prepare the threads and process variables
  */
 void cVideoRender::Prepare(void)
 {
@@ -113,7 +116,7 @@ void cVideoRender::Prepare(void)
 }
 
 /**
- * @brief Set the display resolution and refresh rate based on a user given string
+ * Set the display resolution and refresh rate based on a user given string
  *
  * @param resolution       string formatted like "1920x1080@50"
  */
@@ -131,7 +134,7 @@ void cVideoRender::SetDisplayResolution(const char* resolution)
 }
 
 /**
- * @brief Cleanup the renderer
+ * Cleanup the renderer
  *
  * Stop the filter thread, clean the render ringbuffer and destroy the framebuffers
  */
@@ -186,7 +189,7 @@ void cVideoRender::CleanUp(void)
 }
 
 /**
- * @brief Commit the frame to the hardware
+ * Commit the frame to the hardware
  *
  * @retval 2     VIDEO and OSD modesetting and commit was done, need to process outstanding DRM events
  * @retval 1     VIDEO only modesetting and commit was done, need to process outstanding DRM events
@@ -336,7 +339,7 @@ skip_video:
 }
 
 /**
- * @brief Sync the frames
+ * Sync the frames
  *
  * @retval 1     close or flush requested, skip video or show black frame
  * @retval 0     nothing to sync or paused
@@ -433,7 +436,7 @@ audioclock:
 }
 
 /**
- * @brief Get next video frame from ringbuffer
+ * Get next video frame from ringbuffer
  *
  * @retval 0     received frame with PTS value
  * @retval 1     received frame without PTS value
@@ -452,7 +455,7 @@ int cVideoRender::GetFrame(AVFrame **frame)
 }
 
 /**
- * @brief Get frame flags
+ * Get frame flags
  *
  * @param frame	      AVFrame
  *
@@ -468,7 +471,7 @@ int cVideoRender::GetFrameFlags(AVFrame *frame)
 }
 
 /**
- * @brief Set frame flags
+ * Set frame flags
  *
  * @param frame     AVFrame
  * @param flags     FRAME_FLAG_TRICKSPEED and/or FRAME_FLAG_STILLPICTURE
@@ -488,7 +491,7 @@ void cVideoRender::SetFrameFlags(AVFrame *frame, int flags)
 }
 
 /**
- * @brief Check, if this is a trickspeed frame
+ * Check, if this is a trickspeed frame
  *
  * @param frame    AVFrame
  *
@@ -500,7 +503,7 @@ int cVideoRender::IsTrickspeedFrame(AVFrame *frame)
 }
 
 /**
- * @brief Check, if this is a stillpicture frame
+ * Check, if this is a stillpicture frame
  *
  * @param frame    AVFrame
  *
@@ -512,7 +515,7 @@ int cVideoRender::IsStillpictureFrame(AVFrame *frame)
 }
 
 /**
- * @brief Mark this frame as a trickspeed frame
+ * Mark this frame as a trickspeed frame
  *
  * @param frame      AVFrame
  */
@@ -522,7 +525,7 @@ void cVideoRender::MarkAsTrickspeedFrame(AVFrame *frame)
 }
 
 /**
- * @brief Mark this frame as a stillpicture frame
+ * Mark this frame as a stillpicture frame
  *
  * @param frame     AVFrame
  */
@@ -532,7 +535,7 @@ void cVideoRender::MarkAsStillpictureFrame(AVFrame *frame)
 }
 
 /**
- * @brief Get suitable framebuffer for frame
+ * Get suitable framebuffer for frame
  * 
  * First, search for an already created buffer. If there is no such buffer, create one.
  * 
@@ -595,7 +598,7 @@ cDrmBuffer *cVideoRender::GetBuffer(AVFrame *frame)
 }
 
 /**
- * @brief Check if we should wait for audio to come up with video
+ * Check if we should wait for audio to come up with video
  * 
  * @retval 0     wait for video to sync with audio
  * @retval 1     wait for audio to sync with video
@@ -616,7 +619,7 @@ int cVideoRender::ShouldWaitForAudio(void) {
 }
 
 /**
- * @brief Display the frame (video and/or osd)
+ * Display the frame (video and/or osd)
  * 
  * @retval 0     modesetting and commit was done, need to process outstanding DRM events
  * @retval 1     no new frames or OSD, no modesetting was done, don't process outstanding DRM events
@@ -787,7 +790,7 @@ page_flip:
 }
 
 /**
- * @brief Wrapper for drmHandleEvent()
+ * Wrapper for drmHandleEvent()
  */
 int cVideoRender::DrmHandleEvent(void)
 {
@@ -799,7 +802,7 @@ int cVideoRender::DrmHandleEvent(void)
  ****************************************************************************/
 
 /**
- * @brief Clear the OSD (draw an empty/ transparent OSD)
+ * Clear the OSD (draw an empty/ transparent OSD)
  */
 void cVideoRender::OsdClear(void)
 {
@@ -844,7 +847,7 @@ void cVideoRender::OsdClear(void)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 /**
- * @brief Draw an OSD ARGB image.
+ * Draw an OSD ARGB image.
  *
  * @param xi         x-coordinate in argb image
  * @param yi         y-coordinate in argb image
@@ -907,7 +910,7 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
  ****************************************************************************/
 
 /**
- * @brief Stop decoding thread
+ * Stop decoding thread
  */
 void cVideoRender::ExitDecodingThread(void)
 {
@@ -918,7 +921,7 @@ void cVideoRender::ExitDecodingThread(void)
 }
 
 /**
- * @brief Start decoding thread
+ * Start decoding thread
  */
 void cVideoRender::WakeupDecodingThread(void)
 {
@@ -928,7 +931,7 @@ void cVideoRender::WakeupDecodingThread(void)
 }
 
 /**
- * @brief Stop display thread
+ * Stop display thread
  */
 void cVideoRender::ExitDisplayThread(void)
 {
@@ -942,7 +945,7 @@ void cVideoRender::ExitDisplayThread(void)
 }
 
 /**
- * @brief Start display thread
+ * Start display thread
  */
 void cVideoRender::WakeupDisplayThread(void)
 {
@@ -952,7 +955,7 @@ void cVideoRender::WakeupDisplayThread(void)
 }
 
 /**
- * @brief Callback free primedata if av_buffer is unreferenced
+ * Callback free primedata if av_buffer is unreferenced
  */
 static void ReleaseFrame( __attribute__ ((unused)) void *opaque, uint8_t *data)
 {
@@ -962,7 +965,7 @@ static void ReleaseFrame( __attribute__ ((unused)) void *opaque, uint8_t *data)
 }
 
 /**
- * @brief Enqueue a software decoded frame in the render ringbuffer
+ * Enqueue a software decoded frame in the render ringbuffer
  *
  * Get a buffer for the frame or prepare it before.
  *
@@ -1073,7 +1076,7 @@ get_buffer:
 }
 
 /**
- * @brief Render a frame
+ * Render a frame
  *
  * Frames either
  * - go via the deinterlacer or
@@ -1193,21 +1196,21 @@ int cVideoRender::RenderFrame(AVCodecContext * videoCtx, AVFrame * frame)
 }
 
 /**
- * @brief Wrapper to lock the render ringbuffer
+ * Wrapper to lock the render ringbuffer
  */
 void cVideoRender::FramesRbLock(void) {
 	m_displayQueue.Lock();
 }
 
 /**
- * @brief Wrapper to unlock the render ringbuffer
+ * Wrapper to unlock the render ringbuffer
  */
 void cVideoRender::FramesRbUnlock(void) {
 	m_displayQueue.Unlock();
 }
 
 /**
- * @brief Push the frame into the render ringbuffer
+ * Push the frame into the render ringbuffer
  *
  * @param frame     AVFrame which should go to the ringbuffer
  */
@@ -1218,7 +1221,7 @@ void cVideoRender::RbPushFrame(AVFrame *frame) {
 }
 
 /**
- * @brief Get a frame from the render ringbuffer
+ * Get a frame from the render ringbuffer
  *
  * @returns        next AVFrame from the ringbuffer
  */
@@ -1231,7 +1234,7 @@ AVFrame *cVideoRender::RbGetFrame(void) {
 }
 
 /**
- * @brief Wrapper to set the video clock (m_pts)
+ * Wrapper to set the video clock (m_pts)
  *
  * @param pts      the pts to be set
  */
@@ -1243,7 +1246,7 @@ void cVideoRender::SetVideoClock(int64_t pts)
 }
 
 /**
- * @brief Wrapper to get the video clock (m_pts)
+ * Wrapper to get the video clock (m_pts)
  *
  * @returns the current pts
  */
@@ -1257,7 +1260,7 @@ int64_t cVideoRender::GetVideoClock(void)
 }
 
 /**
- * @brief Send start condition to video thread
+ * Send start condition to video thread
  */
 void cVideoRender::StartVideo(void)
 {
@@ -1268,7 +1271,7 @@ void cVideoRender::StartVideo(void)
 }
 
 /**
- * @brief Close the renderer wait for the frames and framebuffers to be cleared
+ * Close the renderer wait for the frames and framebuffers to be cleared
  *
  * @param black     true, if a black fb should be set and the last rendered buffer should be cleared,
  *                  otherwise don't set a black fb and wait for the clear until the next frame arrives
@@ -1301,7 +1304,7 @@ void cVideoRender::SetClosing(int black)
 }
 
 /**
- * @brief Pause the renderer
+ * Pause the renderer
  */
 void cVideoRender::PauseVideo(void)
 {
@@ -1312,7 +1315,7 @@ void cVideoRender::PauseVideo(void)
 }
 
 /**
- * @brief Resume the renderer after pausing
+ * Resume the renderer after pausing
  */
 void cVideoRender::ResumeVideo(void)
 {
@@ -1323,7 +1326,7 @@ void cVideoRender::ResumeVideo(void)
 }
 
 /**
- * @brief Check the renderers pausing status
+ * Check the renderers pausing status
  *
  * @retval 1     if paused
  * @retval 0     if rendering
@@ -1338,7 +1341,7 @@ int cVideoRender::VideoIsPaused(void)
 }
 
 /**
- * @brief Set the trickspeed parameters
+ * Set the trickspeed parameters
  *
  * @param speed         trick speed value from VDR (0 = normal)
  * @param forward       1 if forward trick speed, 0 if backward
@@ -1354,7 +1357,7 @@ void cVideoRender::SetTrickSpeed(int speed, int forward)
 }
 
 /**
- * @brief Get the current trickspeed
+ * Get the current trickspeed
  *
  * @returns current trick speed value set with SetTrickSpeed()
  */
@@ -1368,7 +1371,7 @@ int cVideoRender::GetTrickSpeed(void)
 }
 
 /**
- * @brief Get the current trickspeed direction
+ * Get the current trickspeed direction
  *
  * @retval 1       if forward trickspeed
  * @retval 0       if backward trickspeed
@@ -1383,7 +1386,7 @@ int cVideoRender::GetTrickForward(void)
 }
 
 /**
- * @brief Get the count of frames, which should still be rendered in trickspeed mode
+ * Get the count of frames, which should still be rendered in trickspeed mode
  *
  * @returns       the count of frames still left to be rendered
  */
@@ -1397,7 +1400,7 @@ int cVideoRender::GetTrickCounter(void)
 }
 
 /**
- * @brief Set the count of frames, which should still be rendered in trickspeed mode
+ * Set the count of frames, which should still be rendered in trickspeed mode
  *
  * @param counter       the count of frames to be rendered
  */
@@ -1409,7 +1412,7 @@ void cVideoRender::SetTrickCounter(int counter)
 }
 
 /**
- * @brief Decrease the number of frames, which should still be rendered in trickspeed mode
+ * Decrease the number of frames, which should still be rendered in trickspeed mode
  *
  * @returns       the count of frames left to be rendered
  */
@@ -1428,7 +1431,7 @@ int cVideoRender::DecTrickCounter(void)
  ****************************************************************************/
 
 /**
- * @brief Trigger a screen grab
+ * Trigger a screen grab
  *
  * @retval 0     on success, grab was triggered
  * @retval 1     on timeout, grab was not triggered
@@ -1451,7 +1454,7 @@ int cVideoRender::TriggerGrab(void)
 }
 
 /**
- * @brief Convert a the video drm buffer to an rgb image
+ * Convert a the video drm buffer to an rgb image
 */
 void cVideoRender::ConvertVideoBufToRgb(void)
 {
@@ -1485,7 +1488,7 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 }
 
 /**
- * @brief Convert a the osd drm buffer to an rgb image
+ * Convert a the osd drm buffer to an rgb image
 */
 void cVideoRender::ConvertOsdBufToRgb(void)
 {
@@ -1514,7 +1517,7 @@ void cVideoRender::ConvertOsdBufToRgb(void)
 }
 
 /**
- * @brief Clear the grab drm buffers
+ * Clear the grab drm buffers
 */
 void cVideoRender::ClearGrab(void)
 {
@@ -1525,7 +1528,7 @@ void cVideoRender::ClearGrab(void)
 }
 
 /**
- * @brief Get the grabbed image
+ * Get the grabbed image
  *
  * @param[out] size       returns output size (memory)
  * @param[out] width      returns output width
@@ -1559,7 +1562,7 @@ cSoftHdGrab *cVideoRender::GetGrab(int *size, int *width, int *height, int *x, i
 }
 
 /**
- * @brief Get some rendering statistics
+ * Get some rendering statistics
  *
  * @param[out] duped      number of duplicated frames
  * @param[out] dropped    number of dropped frames
@@ -1577,7 +1580,7 @@ void cVideoRender::GetStats(int *duped, int *dropped, int *counter)
  ****************************************************************************/
 
 /**
- * @brief Wrapper to get the screen size from the drm device
+ * Wrapper to get the screen size from the drm device
  *
  * @param[out] width           screen width
  * @param[out] height          screen height
@@ -1589,7 +1592,7 @@ void cVideoRender::GetScreenSize(int *width, int *height, double *pixelAspect)
 }
 
 /**
- * @brief Helper function to read a line from a given file
+ * Helper function to read a line from a given file
  *
  * @param[out] buf           pointer to the data
  * @param[out] size          size of the data at buf
@@ -1616,7 +1619,7 @@ static size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 }
 
 /**
- * @brief Helper function to find out which platform we are on
+ * Helper function to find out which platform we are on
  *
  * @returns the hardware quirks of the device
  */
@@ -1686,7 +1689,7 @@ static int ReadHWPlatform(void)
 }
 
 /**
- * @brief Initialize the renderer
+ * Initialize the renderer
  */
 void cVideoRender::Init(void)
 {
@@ -1801,7 +1804,7 @@ void cVideoRender::Init(void)
 }
 
 /**
- * @brief Exit and cleanup the renderer
+ * Exit and cleanup the renderer
  */
 void cVideoRender::Exit(void)
 {
@@ -1842,7 +1845,7 @@ void cVideoRender::Exit(void)
 }
 
 /**
- * @brief Set size and position of the video on the screen
+ * Set size and position of the video on the screen
  *
  * @param rect         a cRect, where the video should be rendered in
  */
@@ -1859,7 +1862,7 @@ void cVideoRender::SetVideoOutputPosition(const cRect &rect)
 }
 
 /**
- * @brief Disable the deinterlacer
+ * Disable the deinterlacer
  *
  * @param disable         1: disable the deinterlacer
  *                        0: don't disable the deinterlacer, so use it if available
@@ -1870,7 +1873,7 @@ void cVideoRender::DisableDeint(int disable)
 }
 
 /**
- * @brief Check the decoding thread status
+ * Check the decoding thread status
  *
  * @retval     1 if active
  *             0 if stopped
@@ -1880,7 +1883,7 @@ int cVideoRender::DecodingThreadIsActive(void) {
 };
 
 /**
- * @brief Stop the filter thread
+ * Stop the filter thread
  */
 void cVideoRender::StopFilter(void)
 {
@@ -1888,7 +1891,7 @@ void cVideoRender::StopFilter(void)
 }
 
 /**
- * @brief Let the filter thread run into a state, where no new frames need to be filtered
+ * Let the filter thread run into a state, where no new frames need to be filtered
  */
 void cVideoRender::WaitForFilterIdle(void)
 {

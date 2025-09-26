@@ -1,10 +1,10 @@
 /**
  * @file buf2rgb.cpp
- * @brief Some helper functions to convert and blit buffers
+ * Some helper functions to convert and blit buffers
  *
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 extern "C" {
@@ -39,7 +39,7 @@ extern "C" {
  ***************************************************************************************/
 
 /**
- * @brief Convert a DRM format to a ffmpeg AV format
+ * Convert a DRM format to a ffmpeg AV format
  */
 enum AVPixelFormat DrmFormatToAVFormat(cDrmBuffer *buf)
 {
@@ -59,7 +59,7 @@ enum AVPixelFormat DrmFormatToAVFormat(cDrmBuffer *buf)
 }
 
 /**
- * @brief Convert a DRM buffer to rgb format image
+ * Convert a DRM buffer to rgb format image
  *
  * Conversion is done with ffmpegs swscale
  *
@@ -136,7 +136,7 @@ uint8_t *BufToRgb(cDrmBuffer *buf, int *size, int dstW, int dstH, enum AVPixelFo
 }
 
 /**
- * @brief Scale an image
+ * Scale an image
  *
  * Conversion is done with ffmpegs swscale
  *
@@ -187,7 +187,7 @@ uint8_t *ScaleRgb24(uint8_t *src, int *size, int srcW, int srcH, int dstW, int d
 }
 
 /**
- * @brief Blend two images
+ * Blend two images
  *
  * Both, front and back image data have to be same size
  * front is the OSD (ARGB)
@@ -248,7 +248,7 @@ void AlphaBlend(uint8_t *result, uint8_t *front, uint8_t *back, const unsigned i
 }
 
 /**
- * @brief Blit the video on black background
+ * Blit the video on black background
  *
  * @param[in] src      pointer to the source video
  * @param[in] dstW     destination width of the image
@@ -277,7 +277,7 @@ uint8_t *BlitVideo(uint8_t *src, int dstW, int dstH, int dstX, int dstY, int src
 }
 
 /**
- * @brief Print raw stream data
+ * Print raw stream data
  *
  * @param data        pointer to stream data
  * @param size        data size

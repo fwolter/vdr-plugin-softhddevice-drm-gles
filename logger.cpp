@@ -1,10 +1,14 @@
 /**
  * @file logger.cpp
- * @brief Logger functions
+ * Logger class
  *
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cSoftHdLogger, which is a class to log things
+ * into syslog. You can use one of the LOG* macros, which are
+ * defined in the header file logger.h.
  *
- * License: AGPLv3
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -14,7 +18,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include "logger.h"

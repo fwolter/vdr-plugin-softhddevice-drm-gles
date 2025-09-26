@@ -1,11 +1,11 @@
 /**
  * @file ringbuffer.h
- * @brief Ringbuffer class declaration
+ * Ringbuffer class header file
  *
- * Copyright: (c) 2009, 2011 by Johns. All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * @copyright (c) 2009, 2011 by Johns. All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -15,7 +15,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #ifndef __SOFTHDRINGBUFFER_H
@@ -28,7 +28,7 @@
 #include "iatomic.h"
 
 /**
- * @brief cSoftHdRingbuffer - RingBuffer class
+ * cSoftHdRingbuffer - RingBuffer class
  */
 
 class cSoftHdRingbuffer

@@ -1,12 +1,15 @@
 /**
  * @file softhdmenu.cpp
- * @brief Softhddevice setup menu class
+ * Setup menu class
  *
- * Copyright: (c) 2011, 2015 by Johns.  All Rights Reserved.
- * Copyright (c) 2018 zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cMenuSetupSoft which describes the
+ * setup menu and sets the config paramaters.
  *
- * License: AGPLv3
+ * @copyright (c) 2011, 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +19,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include <vdr/plugin.h>
@@ -30,7 +33,7 @@
  ****************************************************************************/
 
 /**
- * @brief Create a seperator item
+ * Create a seperator item
  *
  * @param label       text inside separator
  */
@@ -45,7 +48,7 @@ static inline cOsdItem *SeparatorItem(const char *label)
 }
 
 /**
- * @brief Create a collapsed item
+ * Create a collapsed item
  *
  * @param label     text inside collapsed
  * @param flag      flag handling collapsed or opened
@@ -62,7 +65,7 @@ inline cOsdItem *cMenuSetupSoft::CollapsedItem(const char *label, int &flag, con
 }
 
 /**
- * @brief Create setup menu.
+ * Create setup menu.
  */
 void cMenuSetupSoft::Create(void)
 {
@@ -216,7 +219,7 @@ void cMenuSetupSoft::Create(void)
 }
 
 /**
- * @brief Process key for setup menu.
+ * Process key for setup menu.
  *
  * @param key          pressed key
  */
@@ -269,7 +272,7 @@ eOSState cMenuSetupSoft::ProcessKey(eKeys key)
 }
 
 /**
- * @brief cMenuSetupSoft constructor
+ * cMenuSetupSoft constructor
  *
  * Import global config variables into setup
  */
@@ -363,7 +366,7 @@ cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
 }
 
 /**
- * @brief Store setup
+ * Store setup
  */
 void cMenuSetupSoft::Store(void)
 {

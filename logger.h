@@ -1,10 +1,10 @@
 /**
  * @file logger.h
- * @brief Logger class declaration
+ * Logger class header file
  *
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #ifndef __LOGGER_H
@@ -34,6 +34,13 @@
 
 /**
  * Logger macros
+ *
+ *   - LOGFATAL     logs to LOG_ERR and aborts
+ *   - LOGERROR     logs to LOG_ERR
+ *   - LOGWARNING   logs to LOG_WARN
+ *   - LOGINFO      logs to LOG_INFO
+ *   - LOGDEBUG     logs to LOG_DEBUG
+ *   - LOGDEBUG2    logs to LOG_DEBUG and prints a category info
  */
 #define LOGFATAL cSoftHdLogger::GetLogger()->LogFatal
 #define LOGERROR cSoftHdLogger::GetLogger()->LogError

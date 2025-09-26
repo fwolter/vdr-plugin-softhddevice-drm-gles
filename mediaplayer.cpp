@@ -1,23 +1,27 @@
-///
-///	@file mediaplayer.cpp	@brief A software HD device plugin for VDR.
-///
-///	Copyright (c) 2020 by zille.  All Rights Reserved.
-///
-///	Contributor(s):
-///
-///	License: AGPLv3
-///
-///	This program is free software: you can redistribute it and/or modify
-///	it under the terms of the GNU Affero General Public License as
-///	published by the Free Software Foundation, either version 3 of the
-///	License.
-///
-///	This program is distributed in the hope that it will be useful,
-///	but WITHOUT ANY WARRANTY; without even the implied warranty of
-///	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-///	GNU Affero General Public License for more details.
-///
-//////////////////////////////////////////////////////////////////////////////
+/**
+ * @file mediaplayer.cpp
+ * Mediaplayer class
+ *
+ * This file defines all classes used for the integrated mediaplayer
+ *    - cSoftHdPlayer (cPlayer)
+ *    - cSoftHdControl (cControl)
+ *    - cSoftHdMenu (cOsdMenu)
+ *
+ * @copyright (c) 2020 zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.}
+ */
 
 #include <cstdlib>
 #include <sys/stat.h>
@@ -48,40 +52,39 @@ extern "C"
 #include "videostream.h"
 #include "audio.h"
 
+/*****************************************************************************
+ * cSoftHdPlayer (cPlayer mediaplayer)
+ ****************************************************************************/
 
-//////////////////////////////////////////////////////////////////////////////
-//	cPlayer Mediaplayer
-//////////////////////////////////////////////////////////////////////////////
-
-cSoftHdPlayer::cSoftHdPlayer(const char *Url, cSoftHdDevice *device)
+cSoftHdPlayer::cSoftHdPlayer(const char *url, cSoftHdDevice *device)
 :cPlayer (pmAudioVideo)
 {
-//	pPlayer= this;
-	Source = (char *) malloc(1 + strlen(Url));
-	strcpy(Source, Url);
-	if (strcasestr(Source, ".M3U") && !strcasestr(Source, ".M3U8")) {
-		ReadPL(Source);
+//	m_pPlayer= this;
+	m_pSource = (char *) malloc(1 + strlen(url));
+	strcpy(m_pSource, url);
+	if (strcasestr(m_pSource, ".M3U") && !strcasestr(m_pSource, ".M3U8")) {
+		ReadPL(m_pSource);
 		CurrentEntry = FirstEntry;
 	} else {
 		FirstEntry = CurrentEntry = NULL;
 	}
 	Pause = 0;
 	Random = 0;
-	Device = device;
-	Audio = Device->Audio();
+	m_pDevice = device;
+	m_pAudio = m_pDevice->Audio();
 //	LOGDEBUG2(L_MEDIA, "cSoftHdPlayer: Player gestartet.");
 }
 
 cSoftHdPlayer::~cSoftHdPlayer()
 {
 	StopPlay = 1;
-	free(Source);
+	free(m_pSource);
 	if (FirstEntry) {
 		while(FirstEntry) {
 			PLEntry *entry = FirstEntry;
 			FirstEntry = entry->NextEntry;
 			delete entry;
-			Entries--;
+			m_Entries--;
 		}
 	}
 
@@ -100,7 +103,7 @@ void cSoftHdPlayer::Action(void)
 //	LOGDEBUG2(L_MEDIA, "cSoftHdPlayer: Action");
 	NoModify = 0;
 
-	if (strcasestr(Source, ".M3U") && !strcasestr(Source, ".M3U8")) {
+	if (strcasestr(m_pSource, ".M3U") && !strcasestr(m_pSource, ".M3U8")) {
 		while(CurrentEntry) {
 			Jump = 0;
 			Player(CurrentEntry->Path.c_str());
@@ -110,7 +113,7 @@ void cSoftHdPlayer::Action(void)
 
 				if (Random) {
 					srand (time (NULL));
-					SetEntry(std::rand() % (Entries));
+					SetEntry(std::rand() % (m_Entries));
 				}
 			}
 			NoModify = 0;
@@ -120,10 +123,10 @@ void cSoftHdPlayer::Action(void)
 			}
 		}
 	} else {
-		Player(Source);
+		Player(m_pSource);
 	}
 
-	while(Audio->GetClock() != AV_NOPTS_VALUE)
+	while(m_pAudio->GetClock() != AV_NOPTS_VALUE)
 		usleep(5000);
 
 	cSoftHdControl::Control()->Close = 1;
@@ -133,7 +136,7 @@ void cSoftHdPlayer::ReadPL(const char *Playlist)
 {
 	ifstream f;
 	PLEntry *last_entry = NULL;
-	Entries = 0;
+	m_Entries = 0;
 
 	f.open(Playlist);
 	if (!f.good()) {
@@ -163,7 +166,7 @@ void cSoftHdPlayer::ReadPL(const char *Playlist)
 				last_entry->NextEntry = entry;
 			}
 			last_entry = entry;
-			Entries++;
+			m_Entries++;
 		}
 	}
 
@@ -215,7 +218,7 @@ void cSoftHdPlayer::Player(const char *url)
 
 	for (unsigned int i = 0; i < format->nb_streams; i++) {
 		if (format->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
-			Device->SetAudioCodec(format->streams[i]->codecpar->codec_id,
+			m_pDevice->SetAudioCodec(format->streams[i]->codecpar->codec_id,
 				format->streams[i]->codecpar, &format->streams[i]->time_base);
 			audio_stream_index = jump_stream_index = i;
 			break;
@@ -228,7 +231,7 @@ void cSoftHdPlayer::Player(const char *url)
 	if (video_stream_index < 0) {
 		LOGDEBUG2(L_MEDIA, "Player: stream does not seem to contain video");
 	} else {
-		Device->SetVideoCodec(video_codec->id,
+		m_pDevice->SetVideoCodec(video_codec->id,
 			format->streams[video_stream_index]->codecpar,
 			&format->streams[video_stream_index]->time_base);
 		jump_stream_index = video_stream_index;
@@ -242,16 +245,16 @@ void cSoftHdPlayer::Player(const char *url)
 		if (err == 0) {
 repeat:
 			if (audio_stream_index == packet.stream_index) {
-				if (!Device->PlayAudioPkts(&packet)) {
+				if (!m_pDevice->PlayAudioPkts(&packet)) {
 					usleep(packet.duration * AV_TIME_BASE *
 						av_q2d(format->streams[audio_stream_index]->time_base));
 					goto repeat;
 				}
-				CurrentTime = Audio->GetClock() / 1000 - start_time;
+				CurrentTime = m_pAudio->GetClock() / 1000 - start_time;
 			}
 
 			if (video_stream_index == packet.stream_index) {
-				if (!Device->PlayVideoPkts(&packet)) {
+				if (!m_pDevice->PlayVideoPkts(&packet)) {
 					usleep(packet.duration * AV_TIME_BASE *
 						av_q2d(format->streams[video_stream_index]->time_base));
 					goto repeat;
@@ -272,12 +275,12 @@ repeat:
 			av_seek_frame(format, format->streams[jump_stream_index]->index,
 				packet.pts + (int64_t)(Jump /		// - BufferOffset
 				av_q2d(format->streams[jump_stream_index]->time_base)), 0);
-			Device->Clear();
+			m_pDevice->Clear();
 			Jump = 0;
 		}
 
 		if (StopPlay)
-			Device->Clear();
+			m_pDevice->Clear();
 
 		av_packet_unref(&packet);
 	}
@@ -294,27 +297,27 @@ const char * cSoftHdPlayer::GetTitle(void)
 	if (CurrentEntry)
 		return CurrentEntry->Path.c_str();
 
-	return Source;
+	return m_pSource;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-//	cControl Mediaplayer
-//////////////////////////////////////////////////////////////////////////////
+/*****************************************************************************
+ * cSoftHdControl (cControl mediaplayer)
+ ****************************************************************************/
 
-cSoftHdControl *cSoftHdControl::pControl = NULL;
-cSoftHdPlayer *cSoftHdControl::pPlayer = NULL;
+cSoftHdControl *cSoftHdControl::m_pControl = NULL;
+cSoftHdPlayer *cSoftHdControl::m_pPlayer = NULL;
 
 /**
 **	Player control constructor.
 */
-cSoftHdControl::cSoftHdControl(const char *Url, cSoftHdDevice *device)
-:cControl(pPlayer = new cSoftHdPlayer(Url, device))
+cSoftHdControl::cSoftHdControl(const char *url, cSoftHdDevice *device)
+:cControl(m_pPlayer = new cSoftHdPlayer(url, device))
 {
 //	LOGDEBUG2(L_MEDIA, "cSoftHdControl: Player gestartet.");
-	pControl = this;
+	m_pControl = this;
 	Close = 0;
-	pOsd = NULL;
-	Device = device;
+	m_pOsd = NULL;
+	m_pDevice = device;
 }
 
 /**
@@ -322,118 +325,117 @@ cSoftHdControl::cSoftHdControl(const char *Url, cSoftHdDevice *device)
 */
 cSoftHdControl::~cSoftHdControl()
 {
-	delete pPlayer;
-	pPlayer = NULL;
-	pControl = NULL;
+	delete m_pPlayer;
+	m_pPlayer = NULL;
+	m_pControl = NULL;
 	LOGDEBUG2(L_MEDIA, "cSoftHdControl: Player beendet.");
 }
 
 void cSoftHdControl::Hide(void)
 {
 	LOGDEBUG2(L_MEDIA, "[cSoftHdControl] Hide");
-	if (pOsd) {
-		delete pOsd;
-		pOsd = NULL;
+	if (m_pOsd) {
+		delete m_pOsd;
+		m_pOsd = NULL;
 	}
 }
 
 void cSoftHdControl::ShowProgress(void)
 {
-	if (!pOsd) {
+	if (!m_pOsd) {
 		LOGDEBUG2(L_MEDIA, "[cSoftHdControl] ShowProgress get OSD");
-		pOsd = Skins.Current()->DisplayReplay(false);
+		m_pOsd = Skins.Current()->DisplayReplay(false);
 	}
 
-	pOsd->SetTitle(pPlayer->GetTitle());
-	pOsd->SetProgress(pPlayer->CurrentTime, pPlayer->Duration);
-	pOsd->SetCurrent(IndexToHMSF(pPlayer->CurrentTime, false, 1));
-	pOsd->SetTotal(IndexToHMSF(pPlayer->Duration, false, 1));
+	m_pOsd->SetTitle(m_pPlayer->GetTitle());
+	m_pOsd->SetProgress(m_pPlayer->CurrentTime, m_pPlayer->Duration);
+	m_pOsd->SetCurrent(IndexToHMSF(m_pPlayer->CurrentTime, false, 1));
+	m_pOsd->SetTotal(IndexToHMSF(m_pPlayer->Duration, false, 1));
 
 	Skins.Flush();
 }
 
 /**
-**	Handle a key event.
-**
-**	@param key	key pressed
-*/
+ * Handle a key event
+ *
+ * @param key     key pressed
+ */
 eOSState cSoftHdControl::ProcessKey(eKeys key)
 {
 	switch (key) {
-		case kNone:
-			if (pOsd)
-				ShowProgress();
-			if (Close) {
-				Hide();
-				return osStopReplay;
-			}
-			break;
-
-		case kOk:
-			if (pOsd) {
-				Hide();
-			} else {
-				ShowProgress();
-			}
-			break;
-
-		case kPlay:
-			if (pPlayer->Pause) {
-				pPlayer->Pause = 0;
-				Device->Play();
-			}
-			break;
-
-		case kGreen:
-			pPlayer->Jump = -60;
-		break;
-
-		case kYellow:
-			pPlayer->Jump = 60;
-		break;
-
-		case kBlue:
+	case kNone:
+		if (m_pOsd)
+			ShowProgress();
+		if (Close) {
 			Hide();
-			pPlayer->StopPlay = 1;
 			return osStopReplay;
+		}
+		break;
 
-		case kPause:
-			if (pPlayer->Pause) {
-				pPlayer->Pause = 0;
-				Device->Play();
-			} else {
-				pPlayer->Pause = 1;
-				Device->Freeze();
-			}
-			break;
+	case kOk:
+		if (m_pOsd) {
+			Hide();
+		} else {
+			ShowProgress();
+		}
+		break;
 
-		case kNext:
-			pPlayer->StopPlay = 1;
-			break;
+	case kPlay:
+		if (m_pPlayer->Pause) {
+			m_pPlayer->Pause = 0;
+			m_pDevice->Play();
+		}
+		break;
 
-		default:
-			break;
+	case kGreen:
+		m_pPlayer->Jump = -60;
+	break;
+
+	case kYellow:
+		m_pPlayer->Jump = 60;
+	break;
+
+	case kBlue:
+		Hide();
+		m_pPlayer->StopPlay = 1;
+		return osStopReplay;
+
+	case kPause:
+		if (m_pPlayer->Pause) {
+			m_pPlayer->Pause = 0;
+			m_pDevice->Play();
+		} else {
+			m_pPlayer->Pause = 1;
+			m_pDevice->Freeze();
+		}
+		break;
+
+	case kNext:
+		m_pPlayer->StopPlay = 1;
+		break;
+
+	default:
+		break;
 	}
 
 	return osContinue;
 }
 
-
-//////////////////////////////////////////////////////////////////////////////
-//	cOsdMenu
-//////////////////////////////////////////////////////////////////////////////
+/*****************************************************************************
+ * cSoftHdMenu (cOsdMenu mediaplayer)
+ ****************************************************************************/
 cSoftHdMenu *cSoftHdMenu::pSoftHdMenu = NULL;
 
 /**
-**	Soft device menu constructor.
-*/
+ * Softhddevice menu constructor
+ */
 cSoftHdMenu::cSoftHdMenu(const char *title, cSoftHdDevice *device,
-			 int c0, int c1, int c2, int c3, int c4)
+                         int c0, int c1, int c2, int c3, int c4)
 :cOsdMenu(title, c0, c1, c2, c3, c4)
 {
 	pSoftHdMenu = this;
 	Playlist.clear();
-	Device = device;
+	m_pDevice = device;
 
 	if (cSoftHdControl::Control() && cSoftHdControl::Control()->Player()->FirstEntry) {
 		LOGDEBUG2(L_MEDIA, "cSoftHdMenu: pointer to cSoftHdControl exist.");
@@ -444,33 +446,33 @@ cSoftHdMenu::cSoftHdMenu(const char *title, cSoftHdDevice *device,
 }
 
 /**
-**	Soft device menu destructor.
-*/
+ * Softhddevice menu destructor
+ */
 cSoftHdMenu::~cSoftHdMenu()
 {
 	pSoftHdMenu = NULL;
 }
 
 /**
-**	Create main menu.
-*/
+ * Create main menu
+ */
 void cSoftHdMenu::MainMenu(void)
 {
 	int current;
 
-	current = Current();			// get current menu item index
-	Clear();				// clear the menu
+	current = Current();               // get current menu item index
+	Clear();                           // clear the menu
 
 	Add(new cOsdItem(hk(tr(" play file / make play list")), osUser1));
 	Add(new cOsdItem(hk(tr(" select play list")), osUser2));
 
-	SetCurrent(Get(current));		// restore selected menu entry
+	SetCurrent(Get(current));          // restore selected menu entry
 	Display();
 }
 
 /**
-**	Create play list menu.
-*/
+ * Create playlist menu
+ */
 void cSoftHdMenu::PlayListMenu(void)
 {
 	struct PLEntry *entry = cSoftHdControl::Control()->Player()->FirstEntry;
@@ -493,8 +495,8 @@ void cSoftHdMenu::PlayListMenu(void)
 }
 
 /**
-**	Create select play list menu.
-*/
+ * Create select playlist menu
+ */
 void cSoftHdMenu::SelectPL(void)
 {
 	struct dirent **DirList;
@@ -516,11 +518,11 @@ void cSoftHdMenu::SelectPL(void)
 }
 
 /**
-**	Create sub menu find file or make a play list.
-**
-**	@param SearchPath	path to start search mediafile
-**	@param playlist		if there is a play list write to play list else make a new menu
-*/
+ * Create sub menu find file or make a play list.
+ *
+ * @param SearchPath     path to start search mediafile
+ * @param playlist       if there is a play list write to play list else make a new menu
+ */
 void cSoftHdMenu::FindFile(string SearchPath, FILE *playlist)
 {
 	struct dirent **DirList;
@@ -583,10 +585,10 @@ void cSoftHdMenu::FindFile(string SearchPath, FILE *playlist)
 }
 
 /**
-**	Make a play list.
-**
-**	@param Target	path to start search mediafiles
-**	@param mode		open file mode
+ * Make a play list
+ *
+ * @param Target     path to start search mediafiles
+ * @param mode       open file mode
 */
 void cSoftHdMenu::MakePlayList(const char * Target, const char * mode)
 {
@@ -609,10 +611,10 @@ void cSoftHdMenu::MakePlayList(const char * Target, const char * mode)
 }
 
 /**
-**	Handle key event.
-**
-**	@param key	key event
-*/
+ * Handle key event
+ *
+ * @param key       key event
+ */
 eOSState cSoftHdMenu::ProcessKey(eKeys key)
 {
 	eOSState state;
@@ -622,11 +624,11 @@ eOSState cSoftHdMenu::ProcessKey(eKeys key)
 	state = cOsdMenu::ProcessKey(key);
 
 	switch (state) {
-		case osUser1:			// play file / make play list
+		case osUser1:                   // play file / make play list
 			Path = cVideoDirectory::Name();
 			FindFile(Path, NULL);
 			return osContinue;
-		case osUser2:			// select play list
+		case osUser2:                   // select play list
 			Path = cPlugin::ConfigDirectory("softhddevice-drm-gles");
 			SelectPL();
 			return osContinue;
@@ -722,26 +724,26 @@ eOSState cSoftHdMenu::ProcessKey(eKeys key)
 }
 
 /**
-**	Play media file.
-**
-**	@param name	file name
-*/
+ * Play media file
+ *
+ * @param name        file name
+ */
 void cSoftHdMenu::PlayMedia(const char *name)
 {
 	string aim = Path + "/" + name;
 	if (!cSoftHdControl::Control()) {
-		cControl::Launch(new cSoftHdControl(aim.c_str(), Device));
+		cControl::Launch(new cSoftHdControl(aim.c_str(), m_pDevice));
 	} else {
 		LOGERROR("PlayMedia can't start %s",aim.c_str());
 	}
 }
 
 /**
-**	Test if it's a media file.
-**
-**	@param name	file name
-**	@returns true if it's a media file
-*/
+ * Test if it's a media file.
+ *
+ * @param name        file name
+ * @returns           true if it's a media file
+ */
 int cSoftHdMenu::TestMedia(const char *name)
 {
 	if (strcasestr(name, ".MP3"))

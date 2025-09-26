@@ -1,12 +1,15 @@
 /**
  * @file codec_audio.cpp
- * @brief Audio decoder functions
+ * Audio decoder class
  *
- * Copyright: (c) 2009 - 2015 by Johns.  All Rights Reserved.
- * Copyright: (c) 2018 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cAudioDecoder, which has all the functions
+ * to decode audio data. It's the audio interface to ffmpeg.
  *
- * License: AGPLv3
+ * @copyright (c) 2009 - 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +19,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include <stdint.h>
@@ -38,7 +41,7 @@ extern "C" {
  ****************************************************************************/
 
 /**
- * @brief Audio decoder class constructor
+ * Audio decoder class constructor
  *
  * @param audio           audio module
  */
@@ -58,7 +61,7 @@ cAudioDecoder::cAudioDecoder(cSoftHdAudio *audio)
 }
 
 /**
- * @brief Audio decoder class destructor
+ * Audio decoder class destructor
  */
 cAudioDecoder::~cAudioDecoder(void)
 {
@@ -66,7 +69,7 @@ cAudioDecoder::~cAudioDecoder(void)
 }
 
 /**
- * @brief Open and initiate the audio decoder
+ * Open and initiate the audio decoder
  *
  * @param codecId       audio codec id
  * @param par           audio codec parameters
@@ -114,7 +117,7 @@ void cAudioDecoder::Open(enum AVCodecID codecId, AVCodecParameters *par, AVRatio
 }
 
 /**
- * @brief Close the audio decoder
+ * Close the audio decoder
  */
 void cAudioDecoder::Close(void)
 {
@@ -124,7 +127,7 @@ void cAudioDecoder::Close(void)
 }
 
 /**
- * @brief Passthrough audio data
+ * Passthrough audio data
  *
  * Build spdif headers depending on the codec and send the
  * data to the audio device.
@@ -280,7 +283,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 }
 
 /**
- * @brief Handle audio format changes
+ * Handle audio format changes
  *
  * Setup audio, if format changed
  *
@@ -338,7 +341,7 @@ int cAudioDecoder::UpdateFormat(void)
 }
 
 /**
- * @brief Decode an audio packet
+ * Decode an audio packet
  *
  * @param avpkt        audio packet to decode
  */

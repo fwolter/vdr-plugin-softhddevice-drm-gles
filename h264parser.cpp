@@ -1,11 +1,14 @@
 /**
  * @file h264parser.cpp
- * @brief H264 parser functions
+ * H264 parser class
  *
- * Copyright: (c) 2018 - 2019 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cH264Parser which is used to parse
+ * width and height from a H264 stream.
  *
- * License: AGPLv3
+ * @copyright (c) 2018 - 2019 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -15,7 +18,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include <cassert>
@@ -33,7 +36,7 @@ extern "C" {
  ****************************************************************************/
 
 /**
- * @brief cH264Parser constructor
+ * cH264Parser constructor
  *
  * @param avpkt     video stream AVPacket to analyze
  */
@@ -43,14 +46,14 @@ cH264Parser::cH264Parser(AVPacket *avpkt)
 }
 
 /**
- * @brief cH264Parser destructor
+ * cH264Parser destructor
  */
 cH264Parser::~cH264Parser(void)
 {
 }
 
 /**
- * @brief Get width and height from stream
+ * Get width and height from stream
  *
  * @param[out] width      video stream width
  * @param[out] height     video stream height

@@ -1,12 +1,12 @@
 /**
  * @file videorender.h
- * @brief Rendering module class declaration
+ * Rendering class header file
  *
- * Copyright: (c) 2009 - 2015 by Johns.  All Rights Reserved.
- * Copyright: (c) 2018 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * @copyright (c) 2009 - 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +16,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #ifndef __VIDEORENDER_H
@@ -82,7 +82,7 @@ struct lastFrame {
 class cDrmDevice;
 
 /**
- * @brief cVideoRender - Video render class
+ * cVideoRender - Video render class
  */
 class cVideoRender
 {

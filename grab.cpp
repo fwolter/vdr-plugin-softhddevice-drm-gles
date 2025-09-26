@@ -1,10 +1,13 @@
 /**
  * @file grab.cpp
- * @brief Grabber functions
+ * Grabber class
  *
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cSoftHdGrab, which is used to handle
+ * grab requests.
+ * 
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -14,7 +17,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include "logger.h"
@@ -25,7 +28,7 @@
  ****************************************************************************/
 
 /**
- * @brief Grabber class constructor
+ * Grabber class constructor
  */
  cSoftHdGrab::cSoftHdGrab(void)
 {
@@ -37,14 +40,14 @@
 }
 
 /**
- * @brief Grabber class destructor
+ * Grabber class destructor
  */
 cSoftHdGrab::~cSoftHdGrab(void)
 {
 }
 
 /**
- * @brief Free the grab buffer
+ * Free the grab buffer
  */
 void cSoftHdGrab::FreeBuf(void)
 {

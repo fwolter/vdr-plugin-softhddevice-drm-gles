@@ -1,11 +1,14 @@
 /**
  * @file drmdevice.cpp
- * @brief DRM device class
+ * DRM device class
  *
- * Copyright: (c) 2018 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cDrmDevice, which keeps some functions
+ * to interact with the DRM (display) system.
+ * 
+ * @copyright (c) 2018 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -15,7 +18,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 // @todo: sort out header includes
@@ -67,7 +70,7 @@ extern "C" {
  ****************************************************************************/
 
 /**
- * @brief cDrmDevice constructor
+ * cDrmDevice constructor
  *
  * @param render         pointer to cVideoRender object
  */
@@ -77,7 +80,7 @@ cDrmDevice::cDrmDevice(cVideoRender *render)
 }
 
 /**
- * @brief cDrmDevice destructor
+ * cDrmDevice destructor
  */
 cDrmDevice::~cDrmDevice(void)
 {
@@ -94,7 +97,7 @@ static int get_resources(int fd, drmModeRes **resources)
 }
 
 /**
- * @brief Test drm capabilities
+ * Test drm capabilities
  *
  * @returns 0 if all caps match, 1 on mismatch
  */
@@ -125,7 +128,7 @@ static int TestCaps(int fd)
 
 #define MAX_DRM_DEVICES 64
 /**
- * @brief Find and open a suitable device with the wanted capabilities
+ * Find and open a suitable device with the wanted capabilities
  *
  * @returns the file descriptor of the opened device
  */
@@ -171,7 +174,7 @@ static int FindDrmDevice(drmModeRes **resources)
 }
 
 /**
- * @brief Find a suitable connector, preferably a connected one
+ * Find a suitable connector, preferably a connected one
  */
 static drmModeConnector *FindDrmConnector(int fd, drmModeRes *resources)
 {
@@ -204,7 +207,7 @@ static drmModeConnector *FindDrmConnector(int fd, drmModeRes *resources)
 }
 
 /**
- * @brief Gets a property value
+ * Gets a property value
  */
 static int GetPropertyValue(int fdDrm, uint32_t objectID,
                             uint32_t objectType, const char *propName, uint64_t *value)
@@ -241,7 +244,7 @@ static int GetPropertyValue(int fdDrm, uint32_t objectID,
 }
 
 /**
- * @brief Initiate the drm device
+ * Initiate the drm device
  *
  * @returns 0 on success, a negative value on error
  */
@@ -567,7 +570,7 @@ find_mode:
 }
 
 /**
- * @brief Get the display size
+ * Get the display size
  *
  * @param[out] width           display width
  * @param[out] height          display height
@@ -583,7 +586,7 @@ void cDrmDevice::GetScreenSize(int *width, int *height, double *pixel_aspect)
 
 #ifdef USE_GLES
 /**
- * @brief Init gbm device and surface
+ * Init gbm device and surface
  *
  * @param w            gbm surface width
  * @param h            gbm surface height
@@ -620,7 +623,7 @@ static const EGLint context_attribute_list[] =
 };
 
 /**
- * @brief Get a suitable EGLConfig
+ * Get a suitable EGLConfig
  */
 EGLConfig cDrmDevice::GetEGLConfig(void)
 {
@@ -667,7 +670,7 @@ EGLConfig cDrmDevice::GetEGLConfig(void)
 }
 
 /**
- * @brief Init EGL
+ * Init EGL
  *
  * @returns 0       on success
  * @returns -1      on error
@@ -756,7 +759,7 @@ __attribute__ ((weak)) uint32_t
 gbm_bo_get_offset(struct gbm_bo *bo, int plane);
 
 /**
- * @brief Get a buffer from a gbm buffer object
+ * Get a buffer from a gbm buffer object
  *
  * @param bo        gbm buffer object
  *
@@ -840,7 +843,7 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 #endif
 
 /**
- * @brief Finds the CRTC_ID for the given encoder
+ * Finds the CRTC_ID for the given encoder
  */
 static int32_t FindCrtcForEncoder(const drmModeRes *resources, const drmModeEncoder *encoder)
 {
@@ -858,7 +861,7 @@ static int32_t FindCrtcForEncoder(const drmModeRes *resources, const drmModeEnco
 }
 
 /**
- * @brief Finds the CRTC_ID for the given connector
+ * Finds the CRTC_ID for the given connector
  */
 int32_t cDrmDevice::FindCrtcForConnector(const drmModeRes *resources, const drmModeConnector *connector)
 {
@@ -881,7 +884,7 @@ int32_t cDrmDevice::FindCrtcForConnector(const drmModeRes *resources, const drmM
 }
 
 /**
- * @brief Close drm file handle
+ * Close drm file handle
  */
 void cDrmDevice::Close(void)
 {
@@ -889,7 +892,7 @@ void cDrmDevice::Close(void)
 }
 
 /**
- * @brief Creates a property blob
+ * Creates a property blob
  */
 int cDrmDevice::CreatePropertyBlob(uint32_t *modeID)
 {
@@ -897,7 +900,7 @@ int cDrmDevice::CreatePropertyBlob(uint32_t *modeID)
 }
 
 /**
- * @brief Add a property to a request
+ * Add a property to a request
  */
 int cDrmDevice::SetPropertyRequest(drmModeAtomicReqPtr ModeReq,
 					uint32_t objectID, uint32_t objectType,
@@ -931,7 +934,7 @@ int cDrmDevice::SetPropertyRequest(drmModeAtomicReqPtr ModeReq,
 }
 
 /**
- * @brief Saves information of a CRTC
+ * Saves information of a CRTC
  */
 void cDrmDevice::SaveCrtc(void)
 {
@@ -939,7 +942,7 @@ void cDrmDevice::SaveCrtc(void)
 }
 
 /**
- * @brief Restore information of a CRTC
+ * Restore information of a CRTC
  */
 void cDrmDevice::RestoreCrtc(void)
 {
@@ -951,7 +954,7 @@ void cDrmDevice::RestoreCrtc(void)
 }
 
 /**
- * @brief Polls for a drm event
+ * Polls for a drm event
  */
 int cDrmDevice::HandleEvent(void)
 {
@@ -959,7 +962,7 @@ int cDrmDevice::HandleEvent(void)
 }
 
 /**
- * @brief Init the event context
+ * Init the event context
  */
 void cDrmDevice::InitEvent(void)
 {

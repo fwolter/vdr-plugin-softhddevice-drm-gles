@@ -1,10 +1,10 @@
 /**
  * @file iatomic.h
- * @brief Atomic wrapper macros function header file
+ * Atomic wrapper macros function header file
  *
- * Copyright: (c) 2014 by Johns.  All Rights Reserved.
+ * @copyright (c) 2014 by Johns.  All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 #ifndef __IATOMIC_H
 #define __IATOMIC_H

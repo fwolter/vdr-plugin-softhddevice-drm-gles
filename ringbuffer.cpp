@@ -1,11 +1,14 @@
 /**
  * @file ringbuffer.cpp
- * @brief Ringbuffer module
+ * Ringbuffer class
  *
- * Copyright: (c) 2009, 2011, 2014 by Johns. All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cSoftHdRinguffer, which is a ringbuffer
+ * implementation used for the audio data.
+ * 
+ * @copyright (c) 2009, 2011, 2014 by Johns. All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -15,7 +18,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include <stdio.h>
@@ -34,7 +37,7 @@
  *****************************************************************************/
 
 /**
- * @brief cSoftHdRingbuffer constructor
+ * cSoftHdRingbuffer constructor
  *
  * Init a new ring buffer
  *
@@ -53,7 +56,7 @@ cSoftHdRingbuffer::cSoftHdRingbuffer(size_t size)
 }
 
 /**
- * @brief cSoftHdRingbuffer destructor
+ * cSoftHdRingbuffer destructor
  */
 cSoftHdRingbuffer::~cSoftHdRingbuffer(void)
 {
@@ -61,7 +64,7 @@ cSoftHdRingbuffer::~cSoftHdRingbuffer(void)
 }
 
 /**
- * @brief Reset ring buffer pointers
+ * Reset ring buffer pointers
  */
 void cSoftHdRingbuffer::Reset(void)
 {
@@ -71,7 +74,7 @@ void cSoftHdRingbuffer::Reset(void)
 }
 
 /**
- * @brief Advance write pointer in ring buffer
+ * Advance write pointer in ring buffer
  *
  * @param cnt        Number of bytes to be adavanced
  *
@@ -107,7 +110,7 @@ size_t cSoftHdRingbuffer::WriteAdvance(size_t cnt)
 }
 
 /**
- * @brief Write to a ring buffer
+ * Write to a ring buffer
  *
  * @param buf   buffer of @p cnt bytes to be written
  * @param cnt   Number of bytes in buffer
@@ -148,7 +151,7 @@ size_t cSoftHdRingbuffer::Write(const void *buf, size_t cnt)
 }
 
 /**
- * @brief Get write pointer and free bytes at this position of ring buffer
+ * Get write pointer and free bytes at this position of ring buffer
  *
  * @param[out] wp         Write pointer is placed here
  *
@@ -176,7 +179,7 @@ size_t cSoftHdRingbuffer::GetWritePointer(void **wp)
 }
 
 /**
- * @brief Advance read pointer in ring buffer
+ * Advance read pointer in ring buffer
  *
  * @param cnt       Number of bytes to be advanced
  *
@@ -212,7 +215,7 @@ size_t cSoftHdRingbuffer::ReadAdvance(size_t cnt)
 }
 
 /**
- * @brief Read from a ring buffer.
+ * Read from a ring buffer.
  *
  * @param buf   buffer of @p cnt bytes to be read
  * @param cnt   Number of bytes to be read
@@ -253,7 +256,7 @@ size_t cSoftHdRingbuffer::Read(void *buf, size_t cnt)
 }
 
 /**
- * @brief Get read pointer and used bytes at this position of ring buffer
+ * Get read pointer and used bytes at this position of ring buffer
  *
  * @param[out] rp    Read pointer is placed here
  *
@@ -281,7 +284,7 @@ size_t cSoftHdRingbuffer::GetReadPointer(const void **rp)
 }
 
 /**
- * @brief Get free bytes in ring buffer
+ * Get free bytes in ring buffer
  *
  * @returns        Number of bytes free in buffer
  */
@@ -291,7 +294,7 @@ size_t cSoftHdRingbuffer::FreeBytes(void)
 }
 
 /**
- * @brief Get used bytes in ring buffer.
+ * Get used bytes in ring buffer.
  *
  * @returns        Number of bytes used in buffer.
  */

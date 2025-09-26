@@ -1,56 +1,54 @@
-///
-///	@file mediaplayer.cpp	@brief A software HD device plugin for VDR.
-///
-///	Copyright (c) 2020 by zille.  All Rights Reserved.
-///
-///	Contributor(s):
-///
-///	License: AGPLv3
-///
-///	This program is free software: you can redistribute it and/or modify
-///	it under the terms of the GNU Affero General Public License as
-///	published by the Free Software Foundation, either version 3 of the
-///	License.
-///
-///	This program is distributed in the hope that it will be useful,
-///	but WITHOUT ANY WARRANTY; without even the implied warranty of
-///	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-///	GNU Affero General Public License for more details.
-///
-//////////////////////////////////////////////////////////////////////////////
+/**
+ * @file mediaplayer.h
+ * Mediaplayer class header file
+ *
+ * @copyright (c) 2020 zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.}
+ */
 
 #include "softhddevice.h"
 
-	struct PLEntry {
-		string Path;
-		string File;
-		string Folder;
-		string SubFolder;
-		struct PLEntry *NextEntry;
-	};
+struct PLEntry {
+	string Path;
+	string File;
+	string Folder;
+	string SubFolder;
+	struct PLEntry *NextEntry;
+};
 
-//////////////////////////////////////////////////////////////////////////////
-//	cPlayer
-//////////////////////////////////////////////////////////////////////////////
-
-/**
-**	player for mediaplayer mode.
-*/
+/*****************************************************************************
+ * cSoftHdPlayer (cPlayer mediaplayer)
+ *
+ * player for mediaplayer mode
+ ****************************************************************************/
 class cSoftHdPlayer : public cPlayer, cThread
 {
 private:
 	void Player(const char *);
 	void ReadPL(const char *);
-	char *Source;
-	int Entries;
-	cSoftHdDevice *Device;
-	cSoftHdAudio *Audio;
+
+	char *m_pSource;
+	int m_Entries;
+	cSoftHdDevice *m_pDevice;
+	cSoftHdAudio *m_pAudio;
 protected:
 	virtual void Activate(bool On);
 	virtual void Action(void);
 public:
 	cSoftHdPlayer(const char *, cSoftHdDevice *);
-	virtual ~ cSoftHdPlayer();
+	virtual ~cSoftHdPlayer();
 	struct PLEntry *FirstEntry;
 	struct PLEntry *CurrentEntry;
 	void SetEntry(int);
@@ -64,56 +62,53 @@ public:
 	int Duration;
 };
 
-//////////////////////////////////////////////////////////////////////////////
-//	cControl
-//////////////////////////////////////////////////////////////////////////////
-
-/**
-**	control class for mediaplayer mode.
-*/
-
+/*****************************************************************************
+ * cSoftHdControl (cControl mediaplayer)
+ *
+ * control class for mediaplayer mode
+ ****************************************************************************/
 class cSoftHdControl : public cControl
 {
 private:
 	void ShowProgress();
-	static cSoftHdControl *pControl;
-	static cSoftHdPlayer *pPlayer;
-	cSkinDisplayReplay *pOsd;
-	cSoftHdDevice *Device;
+
+	static cSoftHdControl *m_pControl;
+	static cSoftHdPlayer *m_pPlayer;
+	cSkinDisplayReplay *m_pOsd;
+	cSoftHdDevice *m_pDevice;
 public:
-	cSoftHdControl(const char *, cSoftHdDevice *);		///< control constructor
-	virtual ~cSoftHdControl();		///< control destructor
-	virtual void Hide(void);		///< hide control
-	virtual cOsdObject *GetLOGINFO(void) { return NULL; }
-	virtual eOSState ProcessKey(eKeys);	///< process input events
-	static cSoftHdControl *Control() { return pControl; }
-	static cSoftHdPlayer *Player() { return pPlayer; }
+	cSoftHdControl(const char *, cSoftHdDevice *);
+	virtual ~cSoftHdControl();
+	virtual void Hide(void);
+	virtual cOsdObject *GetLOGINFO(void) { return NULL; };
+	virtual eOSState ProcessKey(eKeys);
+	static cSoftHdControl *Control() { return m_pControl; }
+	static cSoftHdPlayer *Player() { return m_pPlayer; }
 	int Close;
 };
 
-//////////////////////////////////////////////////////////////////////////////
-//	cOsdMenu
-//////////////////////////////////////////////////////////////////////////////
-
-/**
-**	Soft device plugin menu class.
-*/
+/*****************************************************************************
+ * cSoftHdMenu (cOsdMenu mediaplayer)
+ *
+ * plugin menu class for mediaplayer mode.
+ ****************************************************************************/
 class cSoftHdMenu : public cOsdMenu
 {
 private:
-	void MainMenu(void);			///< create plugin main menu
+	void MainMenu(void);
 	void SelectPL(void);
 	void FindFile(string, FILE *);
 	void MakePlayList(const char *, const char *);
 	int TestMedia(const char *);
 	void PlayMedia(const char *);
+
 	string Path;
 	string LastItem;
 	string Playlist;
-	cSoftHdDevice *Device;
+	cSoftHdDevice *m_pDevice;
 public:
 	cSoftHdMenu(const char *, cSoftHdDevice *, int = 0, int = 0, int = 0, int = 0, int = 0);
-	virtual ~ cSoftHdMenu();
+	virtual ~cSoftHdMenu();
 	void PlayListMenu(void);
 	virtual eOSState ProcessKey(eKeys);
 	static cSoftHdMenu *pSoftHdMenu;

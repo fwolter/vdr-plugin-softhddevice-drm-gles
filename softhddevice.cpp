@@ -1,12 +1,16 @@
 /**
  * @file softhddevice.cpp
- * @brief Softhddevice device class
+ * Device class
  *
- * Copyright: (c) 2011 - 2015 by Johns.  All Rights Reserved.
- * Copyright: (c) 2018 - 2019 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cSoftHdDevice which is the implementation
+ * of cDevice. This is the place where all the device commands
+ * which are sent be VDR are placed in (i.e. Play(), TrickSpeed() ...)
  *
- * License: AGPLv3
+ * @copyright (c) 2011 - 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 - 2019 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +20,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #ifndef __USE_GNU
@@ -63,7 +67,7 @@ extern "C" {
  ****************************************************************************/
 
 /**
- * @brief Mpeg bitrate table
+ * Mpeg bitrate table
  *
  * BitRateTable[Version][Layer][Index]
  */
@@ -82,14 +86,14 @@ static const uint16_t BitRateTable[2][4][16] = {
 };
 
 /**
- * @brief Mpeg samplerate table
+ * Mpeg samplerate table
  */
 static const uint16_t SampleRateTable[4] = {
 	44100, 48000, 32000, 0
 };
 
 /**
- * @brief Fast check for Mpeg audio
+ * Fast check for Mpeg audio
  *
  * 4 bytes 0xFFExxxxx Mpeg audio
  */
@@ -112,7 +116,7 @@ static inline int FastMpegCheck(const uint8_t * p)
 }
 
 /**
- * @brief Check for Mpeg audio
+ * Check for Mpeg audio
  *
  * 0xFFEx already checked.
  *
@@ -200,7 +204,7 @@ static int MpegCheck(const uint8_t * data, int size)
 }
 
 /**
- * @brief Fast check for AAC LATM audio
+ * Fast check for AAC LATM audio
  *
  * 3 bytes 0x56Exxx AAC LATM audio
  */
@@ -216,7 +220,7 @@ static inline int FastLatmCheck(const uint8_t * p)
 }
 
 /**
- * @brief Check for AAC LATM audio.
+ * Check for AAC LATM audio.
  *
  * 0x56Exxx already checked.
  *
@@ -246,7 +250,7 @@ static int LatmCheck(const uint8_t * data, int size)
 }
 
 /**
- * @brief possible AC-3 frame sizes
+ * possible AC-3 frame sizes
  * from ATSC A/52 table 5.18 frame size code table.
  */
 const uint16_t Ac3FrameSizeTable[38][3] = {
@@ -263,7 +267,7 @@ const uint16_t Ac3FrameSizeTable[38][3] = {
 };
 
 /**
- * @brief Fast check for (E-)AC-3 audio.
+ * Fast check for (E-)AC-3 audio.
  *
  * 5 bytes 0x0B77xxxxxx AC-3 audio
  */
@@ -279,7 +283,7 @@ static inline int FastAc3Check(const uint8_t * p)
 }
 
 /**
- * @brief Check for (E-)AC-3 audio.
+ * Check for (E-)AC-3 audio.
  *
  * 0x0B77xxxxxx already checked.
  *
@@ -352,7 +356,7 @@ static int Ac3Check(const uint8_t * data, int size)
 }
 
 /**
- * @brief Fast check for ADTS Audio Data Transport Stream.
+ * Fast check for ADTS Audio Data Transport Stream.
  *
  * 7/9 bytes 0xFFFxxxxxxxxxxx(xxxx)  ADTS audio
  */
@@ -371,7 +375,7 @@ static inline int FastAdtsCheck(const uint8_t * p)
 }
 
 /**
- * @brief Check for ADTS Audio Data Transport Stream
+ * Check for ADTS Audio Data Transport Stream
  *
  * 0xFFF already checked.
  *
@@ -415,7 +419,7 @@ static int AdtsCheck(const uint8_t * data, int size)
 }
 
 /**
- * @brief Call rgb to jpeg for C Plugin
+ * Call rgb to jpeg for C Plugin
  */
 extern "C" uint8_t * CreateJpeg(uint8_t * image, int *size, int quality,
 	int width, int height)
@@ -425,7 +429,7 @@ extern "C" uint8_t * CreateJpeg(uint8_t * image, int *size, int quality,
 
 #if defined(USE_JPEG) && JPEG_LIB_VERSION >= 80
 /**
- * @brief Create a jpeg image in memory
+ * Create a jpeg image in memory
  *
  * @param image      raw RGB image
  * @param raw_size   size of raw image
@@ -480,7 +484,7 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
  ****************************************************************************/
 
 /**
- * @brief cSoftHdDevice constructor
+ * cSoftHdDevice constructor
  *
  * creates
  *     audio device
@@ -501,7 +505,7 @@ cSoftHdDevice::cSoftHdDevice(cSoftHdConfig *config)
 }
 
 /**
- * @brief cSoftHdDevice destructor
+ * cSoftHdDevice destructor
  *
  * deletes
  *    audio device
@@ -522,7 +526,7 @@ cSoftHdDevice::~cSoftHdDevice(void)
 }
 
 /**
- * @brief Device init
+ * Device init
  *
  * prepares the renderer
  */
@@ -532,7 +536,7 @@ void cSoftHdDevice::Init()
 }
 
 /**
- * @brief Device exit
+ * Device exit
  */
 void cSoftHdDevice::Exit(void)
 {
@@ -552,7 +556,7 @@ void cSoftHdDevice::Exit(void)
 }
 
 /**
- * @brief Device prepare
+ * Device prepare
  *
  * If we don't have the audio decoder created,
  * init the audio, audio decoder and renderer
@@ -588,7 +592,7 @@ void cSoftHdDevice::Start(void)
 }
 
 /**
- * @brief Stop plugin.
+ * Stop plugin.
  *
  * @note stop everything, but don't cleanup, module is still called.
  */
@@ -598,7 +602,7 @@ void cSoftHdDevice::Stop(void)
 }
 
 /**
- * @brief Clear all audio data from the decoder and ringbuffer
+ * Clear all audio data from the decoder and ringbuffer
  *
  * @note does nothing, if audio is muted
  */
@@ -613,7 +617,7 @@ void cSoftHdDevice::ClearAudio(void)
 }
 
 /**
- * @brief Informs a device that it will be the primary device
+ * Informs a device that it will be the primary device
  *
  * @param on	flag if becoming or loosing primary
  */
@@ -646,7 +650,7 @@ cSpuDecoder *cSoftHdDevice::GetSpuDecoder(void)
 }
 
 /**
- * @brief Tells whether this device has an MPEG decoder
+ * Tells whether this device has an MPEG decoder
  */
 bool cSoftHdDevice::HasDecoder(void) const
 {
@@ -654,7 +658,7 @@ bool cSoftHdDevice::HasDecoder(void) const
 }
 
 /**
- * @brief Returns true if this device can currently start a replay session
+ * Returns true if this device can currently start a replay session
  */
 bool cSoftHdDevice::CanReplay(void) const
 {
@@ -720,7 +724,7 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 }
 
 /**
- * @brief Gets the current System Time Counter, which can be used to
+ * Gets the current System Time Counter, which can be used to
  *        synchronize audio, video and subtitles.
  */
 int64_t cSoftHdDevice::GetSTC(void)
@@ -735,7 +739,7 @@ int64_t cSoftHdDevice::GetSTC(void)
 }
 
 /**
- * @brief Set trick play speed.
+ * Set trick play speed.
  *
  * Every single frame shall then be displayed the given number of
  * times.
@@ -755,7 +759,7 @@ void cSoftHdDevice::TrickSpeed(int speed, bool forward)
 }
 
 /**
- * @brief Clears all video and audio data from the device.
+ * Clears all video and audio data from the device.
  *
  * This is called by VDR via DeviceClear() in the Empty() call
  *
@@ -788,7 +792,7 @@ void cSoftHdDevice::Clear(void)
 }
 
 /**
- * @brief Sets the device into play mode (after a previous trick mode)
+ * Sets the device into play mode (after a previous trick mode)
  *
  * This is called by VDR via DevicePlay() in the Play() and Goto() call
  *
@@ -813,7 +817,7 @@ void cSoftHdDevice::Play(void)
 }
 
 /**
- * @brief Puts the device into "freeze frame" mode.
+ * Puts the device into "freeze frame" mode.
  */
 void cSoftHdDevice::Freeze(void)
 {
@@ -834,7 +838,7 @@ void cSoftHdDevice::Freeze(void)
 }
 
 /**
- * @brief Turns off audio while replaying.
+ * Turns off audio while replaying.
  */
 void cSoftHdDevice::Mute(void)
 {
@@ -845,7 +849,7 @@ void cSoftHdDevice::Mute(void)
 }
 
 /**
- * @brief Display the given I-frame as a still picture.
+ * Display the given I-frame as a still picture.
  *
  * @param data       pes or ts data of a frame
  * @param length     length of data area
@@ -987,7 +991,7 @@ receive:
 }
 
 /**
- * @brief Check if the device is ready for further action.
+ * Check if the device is ready for further action.
  *
  * This function is useless, the return value is ignored and
  * all buffers are overrun by vdr.
@@ -1034,7 +1038,7 @@ bool cSoftHdDevice::Poll(__attribute__ ((unused)) cPoller & poller, int timeout)
 }
 
 /**
- * @brief Flush the device output buffers.
+ * Flush the device output buffers.
  *
  * @param timeout_ms        timeout in ms to become ready
  */
@@ -1052,7 +1056,7 @@ bool cSoftHdDevice::Flush(int timeout)
 }
 
 /**
- * @brief Sets the video display format
+ * Sets the video display format
  * 
  * @param videoDisplayFormat      video display format
  * Set it to the given one (only useful if this device has an MPEG decoder).
@@ -1065,7 +1069,7 @@ void cSoftHdDevice::SetVideoDisplayFormat(eVideoDisplayFormat videoDisplayFormat
 }
 
 /**
- * @brief Set the video format
+ * Set the video format
  *
  * Sets the output video format to either 16:9 or 4:3 (only useful
  * if this device has an MPEG decoder).
@@ -1083,7 +1087,7 @@ void cSoftHdDevice::SetVideoFormat(bool videoFormat16_9)
 }
 
 /**
- * @brief Get the video size
+ * Get the video size
  *
  * Returns the width, height and aspect ratio of the currently
  * displayed video material
@@ -1098,7 +1102,7 @@ void cSoftHdDevice::GetVideoSize(int &width, int &height, double &aspectRatio)
 }
 
 /**
- * @brief Returns the width, height and aspect ratio the OSD
+ * Returns the width, height and aspect ratio the OSD
  *
  * FIXME: Called every second, for nothing (no OSD displayed)?
  */
@@ -1108,7 +1112,7 @@ void cSoftHdDevice::GetOsdSize(int &width, int &height, double &aspectRatio)
 }
 
 /**
- * @brief Play an audio packet
+ * Play an audio packet
  *
  * @param data   data of exactly one complete PES packet
  * @param size   size of PES packet
@@ -1328,7 +1332,7 @@ int cSoftHdDevice::GetAudioChannelDevice(void)
 }
 
 /**
- * @brief Sets the audio volume on this device (Volume = 0...255).
+ * Sets the audio volume on this device (Volume = 0...255).
  *
  * @param volume        device volume
  */
@@ -1339,7 +1343,7 @@ void cSoftHdDevice::SetVolumeDevice(int volume)
 }
 
 /**
- * @brief Read the PES header length from PES header.
+ * Read the PES header length from PES header.
  *
  * @returns length
  */
@@ -1349,7 +1353,7 @@ int cSoftHdDevice::PesHeadLength(const uint8_t *p)
 }
 
 /**
- * @brief Print the first 11 bytes of the stream
+ * Print the first 11 bytes of the stream
  *
  * @param data        pointer to stream data
  * @param offset      print from here
@@ -1371,7 +1375,7 @@ static void PrintStreamData10(const uchar *data, int offset)
 }
 
 /**
-** @brief Play a video packet
+** Play a video packet
  *
  * @param data  exactly one complete PES packet (which is incomplete)
  * @param size  length of PES packet
@@ -1450,7 +1454,7 @@ newstream:
 }
 
 /**
- * @brief Grabs the currently visible screen image
+ * Grabs the currently visible screen image
  *
  * @param size      size of the returned data
  * @param jpeg      flag true, create JPEG data
@@ -1586,7 +1590,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 }
 
 /**
- * @brief Ask the output, if it can scale video
+ * Ask the output, if it can scale video
  *
  * @param rect      requested video window rectangle
  *
@@ -1598,7 +1602,7 @@ cRect cSoftHdDevice::CanScaleVideo(const cRect & rect, __attribute__ ((unused)) 
 }
 
 /**
- * @brief Scale the currently shown video
+ * Scale the currently shown video
  *
  * @param x         video window x coordinate OSD relative
  * @param y         video window x coordinate OSD relative
@@ -1615,7 +1619,7 @@ void cSoftHdDevice::ScaleVideo(const cRect & rect)
 }
 
 /**
- * @brief Can play IBP frames in fast forward trickspeed
+ * Can play IBP frames in fast forward trickspeed
  */
 bool cSoftHdDevice::HasIBPTrickSpeed(void) const
 {
@@ -1623,7 +1627,7 @@ bool cSoftHdDevice::HasIBPTrickSpeed(void) const
 }
 
 /**
- * @brief Return command line help string.
+ * Return command line help string.
  */
 const char *cSoftHdDevice::CommandLineHelp(void)
 {
@@ -1639,7 +1643,7 @@ const char *cSoftHdDevice::CommandLineHelp(void)
 }
 
 /**
- * @brief Process the command line arguments.
+ * Process the command line arguments.
  *
  * @param argc	number of arguments
  * @param argv	arguments vector
@@ -1702,7 +1706,7 @@ int cSoftHdDevice::ProcessArgs(int argc, char *argv[])
 }
 
 /**
- * @brief Close the OSD
+ * Close the OSD
  */
 void cSoftHdDevice::OsdClose(void)
 {
@@ -1710,7 +1714,7 @@ void cSoftHdDevice::OsdClose(void)
 }
 
 /**
- * @brief Draw an OSD pixmap
+ * Draw an OSD pixmap
  *
  * @param xi         x-coordinate in argb image
  * @param yi         y-coordinate in argb image
@@ -1730,7 +1734,7 @@ void cSoftHdDevice::OsdDrawARGB(int xi, int yi, int height, int width, int pitch
 #ifdef USE_GLES
 #ifdef WRITE_PNG
 /**
- * @brief Check, if writing the osd into a png file is enabled
+ * Check, if writing the osd into a png file is enabled
  */
 char cSoftHdDevice::WritePngs(void)
 {
@@ -1738,7 +1742,7 @@ char cSoftHdDevice::WritePngs(void)
 };
 #endif
 /**
- * @brief Get the maximum GPU image cache size
+ * Get the maximum GPU image cache size
  */
 int cSoftHdDevice::MaxSizeGPUImageCache(void)
 {
@@ -1746,7 +1750,7 @@ int cSoftHdDevice::MaxSizeGPUImageCache(void)
 };
 
 /**
- * @brief Is the OpenGL/ES osd disabled?
+ * Is the OpenGL/ES osd disabled?
  */
 int cSoftHdDevice::OglOsdIsDisabled(void)
 {
@@ -1755,7 +1759,7 @@ int cSoftHdDevice::OglOsdIsDisabled(void)
 #endif
 
 /**
- * @brief Disables deinterlacer (called from setup menu or conf)
+ * Disables deinterlacer (called from setup menu or conf)
  */
 void cSoftHdDevice::SetDisableDeint(void)
 {
@@ -1764,7 +1768,7 @@ void cSoftHdDevice::SetDisableDeint(void)
 }
 
 /**
- * @brief Disables OpenGL/ES Osd (called from setup menu or conf)
+ * Disables OpenGL/ES Osd (called from setup menu or conf)
  */
 void cSoftHdDevice::SetDisableOglOsd(void)
 {
@@ -1774,7 +1778,7 @@ void cSoftHdDevice::SetDisableOglOsd(void)
 }
 
 /**
- * @brief Set the passthrough mask (called from setup menu or conf)
+ * Set the passthrough mask (called from setup menu or conf)
  */
 void cSoftHdDevice::SetPassthrough(int mask)
 {
@@ -1784,7 +1788,7 @@ void cSoftHdDevice::SetPassthrough(int mask)
 }
 
 /**
- * @brief Reset the channel ID (restarts audio)
+ * Reset the channel ID (restarts audio)
  */
 void cSoftHdDevice::ResetChannelId(void)
 {
@@ -1793,7 +1797,7 @@ void cSoftHdDevice::ResetChannelId(void)
 }
 
 /**
- * @brief Get statistics from the renderer
+ * Get statistics from the renderer
  *
  * @param[out] duped     duped frames
  * @param[out] dropped   dropped frames
@@ -1814,7 +1818,7 @@ void cSoftHdDevice::GetStats(int *duped, int *dropped, int *counter)
  ****************************************************************************/
 
 /**
- * @brief Open an audio codec
+ * Open an audio codec
  *
  * @param codecId       audio codec id
  * @param par           audio codec parameters
@@ -1826,7 +1830,7 @@ void cSoftHdDevice::SetAudioCodec(enum AVCodecID codecId, AVCodecParameters * pa
 }
 
 /**
- * @brief Open a video codec
+ * Open a video codec
  *
  * @param codecId       video codec id
  * @param par           video codec parameters
@@ -1841,7 +1845,7 @@ void cSoftHdDevice::SetVideoCodec(enum AVCodecID codecId, AVCodecParameters * pa
 }
 
 /**
- * @brief Play an audio packet
+ * Play an audio packet
  *
  * @param pkt        AVPacket to play
  *
@@ -1859,7 +1863,7 @@ int cSoftHdDevice::PlayAudioPkts(AVPacket * pkt)
 }
 
 /**
- * @brief Play a video packet
+ * Play a video packet
  *
  * @param pkt        AVPacket to play
  *

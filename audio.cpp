@@ -1,12 +1,16 @@
 /**
  * @file audio.cpp
- * @brief Audio and alsa module
+ * Audio and alsa module class
  *
- * Copyright: (c) 2009 - 2014 by Johns.  All Rights Reserved.
- * Copyright: (c) 2018 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cSoftHdAudio , which holds all functions
+ * we need to deal with audio, e.g.handling the audio stream
+ * and sending it to hardware.
  *
- * License: AGPLv3
+ * @copyright (c) 2009 - 2014 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * 
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +20,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include <stdint.h>
@@ -55,7 +59,7 @@ extern "C"
  *****************************************************************************/
 
 /**
- * @brief cSoftHdAudio constructor
+ * cSoftHdAudio constructor
  */
 cSoftHdAudio::cSoftHdAudio(cSoftHdDevice *device)
 {
@@ -63,7 +67,7 @@ cSoftHdAudio::cSoftHdAudio(cSoftHdDevice *device)
 }
 
 /**
- * @brief cSoftHdAudio denstructor
+ * cSoftHdAudio denstructor
  */
 cSoftHdAudio::~cSoftHdAudio(void)
 {
@@ -74,7 +78,7 @@ cSoftHdAudio::~cSoftHdAudio(void)
  *****************************************************************************/
 
  /**
- * @brief Reorder audio frame
+ * Reorder audio frame
  *
  * ffmpeg L  R  C   Ls Rs           -> alsa L R  Ls Rs C
  * ffmpeg L  R  C   LFE Ls Rs       -> alsa L R  Ls Rs C  LFE
@@ -136,7 +140,7 @@ static void ReorderAudioFrame(uint16_t * buf, int size, int channels)
 }
 
 /**
- * @brief Normalize audio
+ * Normalize audio
  *
  * @param samples   sample buffer
  * @param count     number of bytes in sample buffer
@@ -217,7 +221,7 @@ void cSoftHdAudio::Normalize(uint16_t *samples, int count)
 }
 
 /**
- * @brief Reset normalize settings
+ * Reset normalize settings
  */
 void cSoftHdAudio::ResetNormalizer(void)
 {
@@ -232,7 +236,7 @@ void cSoftHdAudio::ResetNormalizer(void)
 }
 
 /**
- * @brief Compress audio
+ * Compress audio
  *
  * @param samples   sample buffer
  * @param count     number of bytes in sample buffer
@@ -287,7 +291,7 @@ void cSoftHdAudio::Compress(uint16_t *samples, int count)
 }
 
 /**
- * @brief Reset compressor
+ * Reset compressor
  */
 void cSoftHdAudio::ResetCompressor(void)
 {
@@ -298,7 +302,7 @@ void cSoftHdAudio::ResetCompressor(void)
 }
 
 /**
- * @brief Software amplifier
+ * Software amplifier
  *
  * @param samples   sample buffer
  * @param count     number of bytes in sample buffer
@@ -329,7 +333,7 @@ void cSoftHdAudio::SoftAmplify(int16_t *samples, int count)
 }
 
 /**
- * @brief Set equalizer bands
+ * Set equalizer bands
  *
  * @param band      setting frequenz bands
  * @param onoff     set using equalizer
@@ -404,7 +408,7 @@ void cSoftHdAudio::SetEq(int band[17], int onoff)
 }
 
 /**
- * @brief Init filter
+ * Init filter
  *
  * @retval 0    everything ok
  * @retval 1    didn't support channels, downmix set -> scrap this frame, test next
@@ -543,7 +547,7 @@ void cSoftHdAudio::InitRingbuffer(void)
 }
 
 /**
- * @brief Cleanup audio ringbuffer
+ * Cleanup audio ringbuffer
  */
 void cSoftHdAudio::ExitRingbuffer(void)
 {
@@ -559,7 +563,7 @@ void cSoftHdAudio::ExitRingbuffer(void)
  *****************************************************************************/
 
 /**
- * @brief Place samples in audio output queue
+ * Place samples in audio output queue
  *
  * @param frame		audio frame
  */
@@ -588,7 +592,7 @@ void cSoftHdAudio::EnqueueFrame(AVFrame *frame)
 }
 
 /**
- * @brief Place samples in spdif audio output queue
+ * Place samples in spdif audio output queue
  *
  * Places data as is in the ringbuffer. Caller has to ensure,
  * that necessary headers have been added to the buffer before (e.g. for passthrough).
@@ -610,7 +614,7 @@ void cSoftHdAudio::EnqueueRawData(uint16_t *buffer, int count, AVFrame *frame)
 }
 
 /**
- * @brief Send audio data to ringbuffer
+ * Send audio data to ringbuffer
  * 
  * @param buffer     data buffer
  * @param count      number of bytes in data buffer
@@ -631,7 +635,7 @@ void cSoftHdAudio::Enqueue(uint16_t *buffer, int count, AVFrame *frame)
 }
 
 /**
- * @brief Start audio thread if possible and skip
+ * Start audio thread if possible and skip
  */
 void cSoftHdAudio::StartAudioThread(AVFrame *frame)
 {
@@ -671,7 +675,7 @@ void cSoftHdAudio::StartAudioThread(AVFrame *frame)
 }
 
 /**
- * @brief Setup alsa
+ * Setup alsa
  *
  * only used for passthrough atm, setting up PCM goes via Filter()
  *
@@ -782,7 +786,7 @@ get_frame:
 }
 
 /**
- * @brief Check, if we are able to sync audio and video
+ * Check, if we are able to sync audio and video
  *
  * Called before video sync, once we got a video frame.
  * It starts the audio thread, if there is more than m_startThreshold data in the ringbuffer
@@ -847,7 +851,7 @@ int cSoftHdAudio::VideoReady(int64_t videoPts)
 }
 
 /**
- * @brief Skip Audio if it's behind video
+ * Skip Audio if it's behind video
  *
  * @param videoPts   real video presentation timestamp
  */
@@ -906,7 +910,7 @@ int cSoftHdAudio::Skip(int64_t videoPts, int full)
 }
 
 /**
- * @brief Flush audio buffers
+ * Flush audio buffers
  *
  * Stop alsa player if running,
  * otherwise flush the alsa buffers and force a filter init
@@ -928,7 +932,7 @@ void cSoftHdAudio::FlushBuffers(void)
 }
 
 /**
- * @brief Get free bytes in audio ringbuffer
+ * Get free bytes in audio ringbuffer
  */
 int cSoftHdAudio::GetFreeBytes(void)
 {
@@ -936,7 +940,7 @@ int cSoftHdAudio::GetFreeBytes(void)
 }
 
 /**
- * @brief Get used bytes in audio ringbuffer
+ * Get used bytes in audio ringbuffer
  */
 int cSoftHdAudio::GetUsedBytes(void)
 {
@@ -945,7 +949,7 @@ int cSoftHdAudio::GetUsedBytes(void)
 }
 
 /**
- * @brief Get current audio clock
+ * Get current audio clock
  *
  * This is different from m_pts, which is the pts of the last
  * audio frame enqueued in the ringbuffer.
@@ -990,7 +994,7 @@ int64_t cSoftHdAudio::GetClock(void)
 }
 
 /**
- * @brief Set mixer volume (0-1000)
+ * Set mixer volume (0-1000)
  *
  * @param volume    volume (0 .. 1000)
  */
@@ -1014,7 +1018,7 @@ void cSoftHdAudio::SetVolume(int volume)
 }
 
 /**
- * @brief Resume audio
+ * Resume audio
  *
  * Start audio playback after pause
  */
@@ -1046,7 +1050,7 @@ void cSoftHdAudio::Resume(void)
 }
 
 /**
- * @brief Pause audio
+ * Pause audio
  */
 void cSoftHdAudio::Pause(void)
 {
@@ -1073,7 +1077,7 @@ void cSoftHdAudio::Pause(void)
 }
 
 /**
- * @brief Set audio buffer time.
+ * Set audio buffer time.
  *
  * PES audio packets have a max distance of 300 ms.
  * TS audio packet have a max distance of 100 ms.
@@ -1086,7 +1090,7 @@ void cSoftHdAudio::SetBufferTimeInMs(int delayInMs)
 }
 
 /**
- * @brief Set audio downmix
+ * Set audio downmix
  *
  * @param onoff		-1: toggle, 1: turn on, 0: turn off
  */
@@ -1100,7 +1104,7 @@ void cSoftHdAudio::SetDownmix(int onoff)
 }
 
 /**
- * @brief Set software volume
+ * Set software volume
  *
  * @param onoff          -1: toggle, 1: turn on, 0: turn off
  */
@@ -1114,7 +1118,7 @@ void cSoftHdAudio::SetSoftvol(int onoff)
 }
 
 /**
- * @brief Set normalize volume parameters
+ * Set normalize volume parameters
  *
  * @param onoff          -1: toggle, 1: turn on, 0: turn off
  * @param maxfac         max. factor of normalize / 1000
@@ -1130,7 +1134,7 @@ void cSoftHdAudio::SetNormalize(int onoff, int maxfac)
 }
 
 /**
- * @brief Set volume compression parameters
+ * Set volume compression parameters
  *
  * @param onoff         -1: toggle, 1: turn on, 0: turn off
  * @param maxfac        max. factor of compression / 1000
@@ -1152,7 +1156,7 @@ void cSoftHdAudio::SetCompression(int onoff, int maxfac)
 }
 
 /**
- * @brief Set stereo loudness descent
+ * Set stereo loudness descent
  *
  * @param delta     value (/1000) to reduce stereo volume
  */
@@ -1163,7 +1167,7 @@ void cSoftHdAudio::SetStereoDescent(int delta)
 }
 
 /**
- * @brief Set pcm audio device.
+ * Set pcm audio device.
  *
  * @param device    name of pcm device
  */
@@ -1173,7 +1177,7 @@ void cSoftHdAudio::SetDevice(const char *device)
 }
 
 /**
- * @brief Set pass-through audio device
+ * Set pass-through audio device
  *
  * @param device    name of pass-through device
  */
@@ -1183,7 +1187,7 @@ void cSoftHdAudio::SetPassthroughDevice(const char *device)
 }
 
 /**
- * @brief Set audio passthrough mask
+ * Set audio passthrough mask
  *
  * @param mask    passthrough mask (as a bitmask)
  */
@@ -1193,7 +1197,7 @@ void cSoftHdAudio::SetPassthrough(int mask)
 }
 
 /**
- * @brief Set pcm audio mixer channel
+ * Set pcm audio mixer channel
  *
  * @param channel    name of the mixer channel (e.g. PCM or Master)
  */
@@ -1203,7 +1207,7 @@ void cSoftHdAudio::SetChannel(const char *channel)
 }
 
 /**
- * @brief Set automatic AES flag handling
+ * Set automatic AES flag handling
  *
  * @param onoff     turn setting AES flag on or off
  */
@@ -1217,7 +1221,7 @@ void cSoftHdAudio::SetAutoAES(int onoff)
 }
 
 /**
- * @brief Initialize audio output module
+ * Initialize audio output module
  *
  * @param passthrough     passthrough mask
  */
@@ -1230,7 +1234,7 @@ void cSoftHdAudio::Init(int passthrough)
 }
 
 /**
- * @brief Cleanup audio output module
+ * Cleanup audio output module
  */
 void cSoftHdAudio::Exit(void)
 {
@@ -1251,7 +1255,7 @@ void cSoftHdAudio::Exit(void)
  *****************************************************************************/
 
 /**
- * @brief xrun recovery
+ * xrun recovery
  */
 void cSoftHdAudio::XrunRecovery(void)
 {
@@ -1267,7 +1271,7 @@ void cSoftHdAudio::XrunRecovery(void)
 }
 
 /**
- * @brief Flush alsa buffers
+ * Flush alsa buffers
  */
 void cSoftHdAudio::FlushAlsaBuffers(void)
 {
@@ -1298,7 +1302,7 @@ void cSoftHdAudio::FlushAlsaBuffers(void)
  *****************************************************************************/
 
 /**
- * @brief Play some samples and return
+ * Play some samples and return
  *
  * PlayWithAlsa is called in the cAudioThread
  *
@@ -1399,7 +1403,7 @@ int cSoftHdAudio::PlayWithAlsa(void)
 }
 
 /**
- * @brief Open alsa device
+ * Open alsa device
  *
  * @param device             alsa device
  * @param passthrough        set, if this is a passthrough device
@@ -1449,7 +1453,7 @@ char *cSoftHdAudio::OpenAlsaDevice(const char *device, int passthrough)
 }
 
 /**
- * @brief Find alsa device giving some search hints
+ * Find alsa device giving some search hints
  *
  * @param devname          interface identification (e.g. "pcm")
  * @param hint             string to compare with device name hints
@@ -1494,7 +1498,7 @@ char *cSoftHdAudio::FindAlsaDevice(const char *devname, const char *hint, int pa
 }
 
 /**
- * @brief Search for an alsa pcm device and open it
+ * Search for an alsa pcm device and open it
  */
 void cSoftHdAudio::AlsaInitPCMDevice(void)
 {
@@ -1559,7 +1563,7 @@ void cSoftHdAudio::AlsaInitPCMDevice(void)
  *****************************************************************************/
 
 /**
- * @brief Initialize alsa mixer
+ * Initialize alsa mixer
  */
 void cSoftHdAudio::AlsaInitMixer(void)
 {
@@ -1611,7 +1615,7 @@ void cSoftHdAudio::AlsaInitMixer(void)
 }
 
 /**
- * @brief Set alsa mixer volume (0-1000)
+ * Set alsa mixer volume (0-1000)
  *
  * @param volume      volume (0 .. 1000)
  */
@@ -1626,7 +1630,7 @@ void cSoftHdAudio::AlsaSetVolume(int volume)
 }
 
 /**
- * @brief Setup alsa audio for requested format
+ * Setup alsa audio for requested format
  *
  * @param channels      Channels requested
  * @param sample_rate   SampleRate requested
@@ -1747,7 +1751,7 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 }
 
 /**
- * @brief Empty log callback
+ * Empty log callback
  */
 static void AlsaNoopCallback( __attribute__ ((unused))
 	const char *file, __attribute__ ((unused))
@@ -1776,7 +1780,7 @@ void cSoftHdAudio::AlsaInit(void)
 }
 
 /**
- * @brief Cleanup alsa audio output module.
+ * Cleanup alsa audio output module.
  */
 void cSoftHdAudio::AlsaExit(void)
 {

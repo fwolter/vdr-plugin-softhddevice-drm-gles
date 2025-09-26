@@ -1,12 +1,16 @@
 /**
  * @file softosd.cpp
- * @brief Osd classes for softhddevice
+ * Osd class
  *
- * Copyright: (c) 2011, 2015 by Johns.  All Rights Reserved.
- * Copyright (c) 2018 zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file provides cSoftOsd which is the software accelerated
+ * version of this plugin (in contrast to the hardware accelerater cOglOsd).
+ * It also decribes cSoftOsdProvider.
  *
- * License: AGPLv3
+ * @copyright (c) 2011, 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +20,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include "logger.h"
@@ -31,7 +35,7 @@
  ****************************************************************************/
 
 /**
- * @brief cSoftOsd constructor
+ * cSoftOsd constructor
  *
  * Initializes the OSD with the given coordinates.
  *
@@ -51,7 +55,7 @@ cSoftOsd::cSoftOsd(int left, int top, uint level, cSoftHdDevice *device)
 }
 
 /**
- * @brief cSoftOsd destructor
+ * cSoftOsd destructor
  *
  * Shuts down the OSD.
  */
@@ -63,7 +67,7 @@ cSoftOsd::~cSoftOsd(void)
 }
 
 /**
- *	@brief Sets this OSD to be the active one.
+ *	Sets this OSD to be the active one.
  *
  *	@param on          true on, false off
  *
@@ -91,7 +95,7 @@ void cSoftOsd::SetActive(bool on)
 }
 
 /**
- * @brief Set the sub-areas to the given areas
+ * Set the sub-areas to the given areas
  */
 eOsdError cSoftOsd::SetAreas(const tArea * areas, int n)
 {
@@ -115,7 +119,7 @@ eOsdError cSoftOsd::SetAreas(const tArea * areas, int n)
 }
 
 /**
- * @brief Actually commit all data to the OSD hardware
+ * Actually commit all data to the OSD hardware
  */
 void cSoftOsd::Flush(void)
 {
@@ -307,7 +311,7 @@ void cSoftOsd::Flush(void)
  ****************************************************************************/
 
 /**
- * @brief cOsdProvider constructor
+ * cOsdProvider constructor
  */
 cSoftOsdProvider::cSoftOsdProvider(cSoftHdDevice *device) : cOsdProvider()
 {
@@ -322,7 +326,7 @@ cSoftOsdProvider::cSoftOsdProvider(cSoftHdDevice *device) : cOsdProvider()
 }
 
 /**
- * @brief cOsdProvider destructor
+ * cOsdProvider destructor
  */
 cSoftOsdProvider::~cSoftOsdProvider()
 {
@@ -334,7 +338,7 @@ cSoftOsdProvider::~cSoftOsdProvider()
 }
 
 /**
- * @brief Create a new OSD
+ * Create a new OSD
  *
  * Create either a hardware accelerated (cOglOsd) or software rendered (cSoftOsd) OSD
  * 
@@ -365,7 +369,7 @@ cOsd *cSoftOsdProvider::CreateOsd(int left, int top, uint level)
 }
 
 /**
- * @brief Check if this OSD provider is able to handle a true color OSD.
+ * Check if this OSD provider is able to handle a true color OSD.
  *
  * @returns true we are able to handle a true color OSD.
  */
@@ -376,7 +380,7 @@ bool cSoftOsdProvider::ProvidesTrueColor(void)
 
 #ifdef USE_GLES
 /**
- * @brief Stop the OpenGL thread, if the osd size changed and update the size
+ * Stop the OpenGL thread, if the osd size changed and update the size
  */
 void cSoftOsdProvider::OsdSizeChanged(void) {
 	// cleanup OpenGL context
@@ -386,7 +390,7 @@ void cSoftOsdProvider::OsdSizeChanged(void) {
 }
 
 /**
- * @brief Start the OpenGL thread
+ * Start the OpenGL thread
  */
 bool cSoftOsdProvider::StartOpenGlThread(void) {
 	if (m_pDevice->OglOsdIsDisabled()) {
@@ -415,7 +419,7 @@ bool cSoftOsdProvider::StartOpenGlThread(void) {
 }
 
 /**
- * @brief Stop the OpenGL thread
+ * Stop the OpenGL thread
  */
 void cSoftOsdProvider::StopOpenGlThread(void) {
 	LOGDEBUG2(L_OPENGL, "stopping OpenGL worker thread");
@@ -427,7 +431,7 @@ void cSoftOsdProvider::StopOpenGlThread(void) {
 }
 
 /**
- * @brief Store image data
+ * Store image data
  */
 int cSoftOsdProvider::StoreImageData(const cImage &Image)
 {
@@ -439,14 +443,14 @@ int cSoftOsdProvider::StoreImageData(const cImage &Image)
 }
 
 /**
- * @brief Get stored image data
+ * Get stored image data
  */
 const cImage *cSoftOsdProvider::GetImageData(int ImageHandle) {
 	return cOsdProvider::GetImageData(ImageHandle);
 }
 
 /**
- * @brief Drop stored image data
+ * Drop stored image data
  */
 void cSoftOsdProvider::DropImageData(int imgHandle)
 {

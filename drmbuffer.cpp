@@ -1,11 +1,15 @@
 /**
  * @file drmbuffer.cpp
- * @brief DRM buffer class
+ * DRM buffer class
  *
- * Copyright: (c) 2018 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This files defines cDrmBuffer, which is a class used to describe
+ * a DRM buffer, keeping framebuffer and prime handles to be used
+ * by the kernel display interface.
  *
- * License: AGPLv3
+ * @copyright (c) 2018 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * License{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -15,7 +19,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include "drmdevice.h"
@@ -26,7 +30,7 @@
  ****************************************************************************/
 
  /**
- * @brief cDrmBuffer constructor
+ * cDrmBuffer constructor
  *
  * @param device     pointer to cSoftHdDevice
  */
@@ -35,7 +39,7 @@ cDrmBuffer::cDrmBuffer(void)
 }
 
 /**
- * @brief cDrmBuffer constructor
+ * cDrmBuffer constructor
  *
  * Clone a cDrmBuffer
  *
@@ -106,7 +110,7 @@ cDrmBuffer::cDrmBuffer(cDrmBuffer *src)
 }
 
 /**
- * @brief cDrmBuffer constructor
+ * cDrmBuffer constructor
  *
  * Create a new cDrmBuffer from a gbm buffer object
  *
@@ -129,14 +133,14 @@ cDrmBuffer::cDrmBuffer(int fdDrm, uint32_t width, uint32_t height, uint32_t pixF
 }
 
 /**
- * @brief cDrmBuffer destructor
+ * cDrmBuffer destructor
  */
 cDrmBuffer::~cDrmBuffer(void)
 {
 }
 
 /**
- * @brief Clear and destroy the buffer object and its parameters
+ * Clear and destroy the buffer object and its parameters
  */
 void cDrmBuffer::Destroy(void)
 {
@@ -196,7 +200,7 @@ void cDrmBuffer::Destroy(void)
 }
 
 /**
- * @brief Infos of a pixel format
+ * Infos of a pixel format
  *
  * Each entry describes a format in the following matter:
  * {
@@ -221,9 +225,8 @@ static const struct format_info format_info_array[] = {
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-
 /**
- * @brief Find infos for the given pixel format
+ * Find infos for the given pixel format
  *
  * @param format      pixel format
  *
@@ -239,7 +242,7 @@ const struct format_info *FindFormat(uint32_t format)
 }
 
 /**
- * @brief Setup the buffer
+ * Setup the buffer
  *
  * @param fdDrm          drm file descriptor
  * @param width          buffer width
@@ -391,7 +394,7 @@ int cDrmBuffer::Setup(int fdDrm, uint32_t width, uint32_t height, uint32_t pixFm
 }
 
 /**
- * @brief Color the buffer black
+ * Color the buffer black
  */
 void cDrmBuffer::FillBlack(void)
 {

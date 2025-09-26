@@ -1,12 +1,15 @@
 /**
  * @file softhddevice.cpp
- * @brief A software HD device plugin for VDR
+ * Main plugin class
  *
- * Copyright: (c) 2011, 2015 by Johns.  All Rights Reserved.
- * Copyright (c) 2018 zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cPluginSoftHdDevice, which is the main class
+ * for initializing the plugin itselft.
  *
- * License: AGPLv3
+ * @copyright (c) 2011, 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +19,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #define __STDC_CONSTANT_MACROS      ///< needed for ffmpeg UINT64_C
@@ -69,7 +72,7 @@ static const char *const MAINMENUENTRY = trNOOP("SHD Media Player");
  ****************************************************************************/
 
 /**
- * @brief cPluginSoftHdDevice constructor
+ * cPluginSoftHdDevice constructor
  *
  * Initialize any member variables here.
  *
@@ -87,7 +90,7 @@ cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 }
 
 /**
- * @brief cPluginSoftHdDevice destructor
+ * cPluginSoftHdDevice destructor
  *
  * Clean up after yourself!
  */
@@ -97,7 +100,7 @@ cPluginSoftHdDevice::~cPluginSoftHdDevice(void)
 }
 
 /**
- * @brief Return plugin version number
+ * Return plugin version number
  *
  * @returns version number as constant string
  */
@@ -107,7 +110,7 @@ const char *cPluginSoftHdDevice::Version(void)
 }
 
 /**
- * @brief Return plugin short description
+ * Return plugin short description
  *
  * @returns short description as constant string
  */
@@ -117,7 +120,7 @@ const char *cPluginSoftHdDevice::Description(void)
 }
 
 /**
- * @brief Return a string that describes all known command line options
+ * Return a string that describes all known command line options
  *
  * @returns command line help as constant string
  */
@@ -127,7 +130,7 @@ const char *cPluginSoftHdDevice::CommandLineHelp(void)
 }
 
 /**
- * @brief Process the command line arguments
+ * Process the command line arguments
  */
 bool cPluginSoftHdDevice::ProcessArgs(int argc, char *argv[])
 {
@@ -137,7 +140,7 @@ bool cPluginSoftHdDevice::ProcessArgs(int argc, char *argv[])
 }
 
 /**
- * @brief Initializes the DVB devices
+ * Initializes the DVB devices
  *
  * Must be called before accessing any DVB functions
  *
@@ -152,7 +155,7 @@ bool cPluginSoftHdDevice::Initialize(void)
 }
 
 /**
- * @brief Start any background activities the plugin shall perform
+ * Start any background activities the plugin shall perform
  */
 bool cPluginSoftHdDevice::Start(void)
 {
@@ -174,7 +177,7 @@ bool cPluginSoftHdDevice::Start(void)
 }
 
 /**
- * @brief Shutdown plugin
+ * Shutdown plugin
  *
  * Stop any background activities the plugin is performing
  */
@@ -186,7 +189,7 @@ void cPluginSoftHdDevice::Stop(void)
 }
 
 /**
- * @brief Create main menu entry
+ * Create main menu entry
  */
 const char *cPluginSoftHdDevice::MainMenuEntry(void)
 {
@@ -196,7 +199,7 @@ const char *cPluginSoftHdDevice::MainMenuEntry(void)
 }
 
 /**
- * @brief Perform the action when selected from the main VDR menu
+ * Perform the action when selected from the main VDR menu
  */
 cOsdObject *cPluginSoftHdDevice::MainMenuAction(void)
 {
@@ -206,7 +209,7 @@ cOsdObject *cPluginSoftHdDevice::MainMenuAction(void)
 }
 
 /**
- * @brief Return our setup menu
+ * Return our setup menu
  */
 cMenuSetupPage *cPluginSoftHdDevice::SetupMenu(void)
 {
@@ -220,7 +223,7 @@ cMenuSetupPage *cPluginSoftHdDevice::SetupMenu(void)
  ****************************************************************************/
 
 /**
- * @brief Parse setup parameters
+ * Parse setup parameters
  *
  * @param name      paramter name (case sensetive)
  * @param value     value as string
@@ -233,7 +236,7 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
 }
 
 /**
- * @brief Receive requests or messages
+ * Receive requests or messages
  *
  * @param id     unique identification string that identifies the
  *               service protocol
@@ -253,7 +256,7 @@ bool cPluginSoftHdDevice::Service(const char *id, void *data)
  ****************************************************************************/
 
 /**
- * @brief SVDRP commands help text
+ * SVDRP commands help text
  */
 static const char *SVDRPHelpText[] = {
 	"PLAY Url\n" "    Play the media from the given url.\n",
@@ -261,7 +264,7 @@ static const char *SVDRPHelpText[] = {
 };
 
 /**
- * @brief Return SVDRP commands help pages
+ * Return SVDRP commands help pages
  *
  * return a pointer to a list of help strings for all of the plugin's
  * SVDRP commands.
@@ -272,7 +275,7 @@ const char **cPluginSoftHdDevice::SVDRPHelpPages(void)
 }
 
 /**
- * @brief Handle SVDRP commands
+ * Handle SVDRP commands
  *
  * @param command       SVDRP command
  * @param option        all command arguments

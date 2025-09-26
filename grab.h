@@ -1,10 +1,10 @@
 /**
  * @file grab.h
- * @brief Grabber class declaration
+ * Grabber header file
  *
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -14,7 +14,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #ifndef __GRAB_H
@@ -25,9 +25,9 @@
 #include <vdr/osd.h>
 
 /**
- * @brief cSoftHdGrab - Grabber class
+ * cSoftHdGrab - Grabber class
  *
- * Class to hold the data for a grabbed buffer
+ * Class to hold the data for a grabbed buffer.
  * Grab is triggered by VDR/ cSoftHdDevice, data is set by the renderer
  * and composed by cSoftHdDevice again.
  */

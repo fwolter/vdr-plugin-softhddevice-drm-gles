@@ -1,12 +1,18 @@
 /**
  * @file threads.cpp
- * @brief Thread functions
+ * Thread classes
  *
- * Copyright: (c) 2009 - 2015 by Johns.  All Rights Reserved.
- * Copyright: (c) 2018 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines all thread classes, which are
+ *   - cDecodingThread
+ *   - cDisplayThread
+ *   - cAudioThread
+ *   - cFilterThread
  *
- * License: AGPLv3
+ * @copyright (c) 2009 - 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +22,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 extern "C" {
@@ -31,7 +37,6 @@ extern "C" {
 #include "threads.h"
 #include "videorender.h"
 #include "audio.h"
-
 
 /*****************************************************************************
  * cDecodingThread class
@@ -200,7 +205,7 @@ cFilterThread::~cFilterThread(void)
 }
 
 /**
- * @brief Init the video filter
+ * Init the video filter
  *
  * @param videoCtx      codec context
  * @param frame         AVFrame to take init parameters from
@@ -464,7 +469,7 @@ void cFilterThread::Action(void)
 }
 
 /**
- * @brief Get the number of frames in the ringbuffer to be filtered
+ * Get the number of frames in the ringbuffer to be filtered
  */
 int cFilterThread::GetRbFramesFilled(void)
 {
@@ -472,7 +477,7 @@ int cFilterThread::GetRbFramesFilled(void)
 }
 
 /**
- * @brief Get the next frame of the ringbuffer to be filtered
+ * Get the next frame of the ringbuffer to be filtered
  */
 AVFrame *cFilterThread::RbGetFrame(void)
 {
@@ -484,7 +489,7 @@ AVFrame *cFilterThread::RbGetFrame(void)
 }
 
 /**
- * @brief Put a frame in the ringbuffer to be filtered
+ * Put a frame in the ringbuffer to be filtered
  */
 void cFilterThread::RbPushFrame(AVFrame *frame)
 {

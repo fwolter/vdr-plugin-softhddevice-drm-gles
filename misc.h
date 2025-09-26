@@ -1,11 +1,11 @@
 /**
  * @file misc.h
- * @brief Misc function header file
+ * Misc function header file
  *
- * Copyright: (c) 2009 - 2012 by Lutz Sammer.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * @copyright (c) 2009 - 2012 by Lutz Sammer.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
  *
- * License: AGPLv3
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -15,7 +15,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #ifndef __MISC_H
@@ -35,7 +35,7 @@
 #endif
 
 /**
- * @brief Workaround for av_err2str() not working with C++
+ * Workaround for av_err2str() not working with C++
  */
 #ifdef av_err2str
 #undef av_err2str
@@ -55,7 +55,7 @@ static inline const char* av_err2string(int errnum)
 #endif
 
 /**
- * @brief Nice time-stamp string.
+ * Nice time-stamp string.
  *
  * @param ts       time stamp
  */

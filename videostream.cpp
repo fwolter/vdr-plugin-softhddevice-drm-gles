@@ -1,12 +1,15 @@
 /**
  * @file videostream.cpp
- * @brief Video Stream functions
+ * Videostream class
  *
- * Copyright: (c) 2011 - 2015 by Johns.  All Rights Reserved.
- * Copyright: (c) 2018 - 2019 by zille.  All Rights Reserved.
- * Copyright: (c) 2025 by Andreas Baierl. All Rights Reserved.
+ * This file defines cVideoStream, which is repsonsible for
+ * handling the video stream.
  *
- * License: AGPLv3
+ * @copyright (c) 2011 - 2015 by Johns.  All Rights Reserved.
+ * @copyright (c) 2018 - 2019 by zille.  All Rights Reserved.
+ * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
+ *
+ * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -16,7 +19,7 @@
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
+ * GNU Affero General Public License for more details.}
  */
 
 #include <assert.h>
@@ -32,7 +35,6 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/timestamp.h>
-
 }
 
 #include "softhddevice-drm-gles.h"
@@ -54,7 +56,7 @@ extern "C" {
  ****************************************************************************/
 
 /**
- * @brief cVideoStream constructor
+ * cVideoStream constructor
  */
 cVideoStream::cVideoStream(cSoftHdDevice *device)
 {
@@ -67,7 +69,7 @@ cVideoStream::cVideoStream(cSoftHdDevice *device)
 }
 
 /**
- * @brief cVideoStream destructor
+ * cVideoStream destructor
  */
 cVideoStream::~cVideoStream(void)
 {
@@ -75,7 +77,7 @@ cVideoStream::~cVideoStream(void)
 }
 
 /**
- * @brief Initialize video packet ringbuffer
+ * Initialize video packet ringbuffer
  */
 void cVideoStream::InitPacketRb(void)
 {
@@ -95,7 +97,7 @@ void cVideoStream::InitPacketRb(void)
 }
 
 /**
- * @brief Cleanup video packet ringbuffer
+ * Cleanup video packet ringbuffer
  */
 void cVideoStream::CleanupPacketRb(void)
 {
@@ -107,7 +109,7 @@ void cVideoStream::CleanupPacketRb(void)
 }
 
 /**
- * @brief Place video data in packet ringbuffer
+ * Place video data in packet ringbuffer
  *
  * @param pts       presentation timestamp of pes packet
  * @param data      data of pes packet
@@ -141,7 +143,7 @@ void cVideoStream::EnqueueInRb(int64_t pts, const void *data, int size)
 }
 
 /**
- * @brief Exit video stream
+ * Exit video stream
  */
 void cVideoStream::Exit(void)
 {
@@ -157,7 +159,7 @@ void cVideoStream::Exit(void)
 }
 
 /**
- * @brief Clears all video stream data, which is buffered to be decoded
+ * Clears all video stream data, which is buffered to be decoded
  */
 void cVideoStream::Clear(void)
 {
@@ -176,7 +178,7 @@ void cVideoStream::Clear(void)
 }
 
 /**
- * @brief Close the decoder
+ * Close the decoder
  */
 void cVideoStream::CloseDecoder(void)
 {
@@ -188,7 +190,7 @@ void cVideoStream::CloseDecoder(void)
 }
 
 /**
- * @brief Flush the decoder
+ * Flush the decoder
  *
  * Some hardware (RPI) needs a reopen workaround (close/open) here, because
  * hardware doesn't do the hardware flush right.
@@ -206,7 +208,7 @@ void cVideoStream::FlushDecoder(void)
 }
 
 /**
- * @brief Decode from PES packet ringbuffer.
+ * Decode from PES packet ringbuffer.
  *
  * @param stream	video stream
  *
@@ -350,7 +352,7 @@ receive_trickspeed:
 }
 
 /**
- * @brief Get pointer to avpkt in ringbuffer, where we can write to
+ * Get pointer to avpkt in ringbuffer, where we can write to
  *
  * @return     avpkt to write data in
  */
@@ -362,7 +364,7 @@ AVPacket *cVideoStream::GetPacketToWrite(void)
 }
 
 /**
- * @brief Advance the write pointer to avpkt in ringbuffer
+ * Advance the write pointer to avpkt in ringbuffer
  */
 void cVideoStream::AdvancePacketToWrite(void)
 {
@@ -370,7 +372,7 @@ void cVideoStream::AdvancePacketToWrite(void)
 }
 
 /**
- * @brief Increase filled packets counter
+ * Increase filled packets counter
  */
 void cVideoStream::IncreasePacketsFilled(void)
 {
@@ -378,7 +380,7 @@ void cVideoStream::IncreasePacketsFilled(void)
 }
 
 /**
- * @brief Get number of video buffers.
+ * Get number of video buffers.
  *
  * @param stream            video stream
  */
@@ -388,7 +390,7 @@ int cVideoStream::GetPacketsFilled(void)
 }
 
 /**
- * @brief Set the interlaced flag for the stream
+ * Set the interlaced flag for the stream
  *
  * @param interlaced        true, if interlaced
  */
@@ -399,7 +401,7 @@ void cVideoStream::SetInterlaced(int interlaced)
 }
 
 /**
- * @brief Set the timebase for the stream
+ * Set the timebase for the stream
  *
  * @param num       timbase numerator
  * @param den       timebase denumerator
@@ -411,7 +413,7 @@ void cVideoStream::SetTimebase(int num, int den)
 }
 
 /**
- * @brief Stop the stream
+ * Stop the stream
  *
  * Skips the decoding of the stream until m_closing gets false again (with Start())
  */
@@ -427,7 +429,7 @@ void cVideoStream::Stop(void)
 }
 
 /**
- * @brief Pause the stream
+ * Pause the stream
  *
  * Prevent the stream from decoding new frames and sending them to filter or renderer
  * cCondVar is necessary to finish a decoding loop

@@ -1,6 +1,6 @@
 /**
  * @file softosd.h
- * @brief Softhddevice osd header file
+ * Softhddevice osd header file
  *
  * Copyright: (c) 2011, 2014 by Johns.  All Rights Reserved.
  * Copyright (c) 2018 - 2019 zille.  All Rights Reserved.
