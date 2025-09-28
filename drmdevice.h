@@ -149,7 +149,7 @@ private:
 	int32_t FindCrtcForConnector(const drmModeRes *, const drmModeConnector *);
 	int InitEGL(void);
 	EGLConfig GetEGLConfig(void);
-	int init_gbm(int, int, uint32_t, uint64_t);
+	int InitGbm(int, int, uint32_t, uint64_t);
 #endif
 };
 

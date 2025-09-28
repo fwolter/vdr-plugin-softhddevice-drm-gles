@@ -53,7 +53,7 @@ void cDrmPlane::FillProperties(int fd)
 {
 	drmModeObjectProperties *props = drmModeObjectGetProperties(fd, GetId(), DRM_MODE_OBJECT_PLANE);
 	if (!props) {
-		LOGERROR("%s (plane): could not get %u properties: %s", GetId(), __FUNCTION__, strerror(errno));
+		LOGERROR("drmplane: %s: could not get %u properties: %s", GetId(), __FUNCTION__, strerror(errno));
 		return;
 	}
 
@@ -136,7 +136,7 @@ int cDrmPlane::SetPropertyRequest(drmModeAtomicReqPtr ModeReq, const char *propN
 	}
 
 	if (id < 0) {
-		LOGERROR("%s: Unable to find value for property \'%s\'.",
+		LOGERROR("drmplane: %s: Unable to find value for property \'%s\'.",
 			__FUNCTION__, propName);
 		return -EINVAL;
 	}
@@ -189,14 +189,14 @@ int cDrmPlane::HasZpos(int fdDrm)
 	const uint32_t flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
 
 	if (!(ModeReq = drmModeAtomicAlloc())) {
-		LOGERROR("%s: cannot allocate atomic request (%d): %m", __FUNCTION__, errno);
+		LOGERROR("drmplane: %s: cannot allocate atomic request (%d): %m", __FUNCTION__, errno);
 		return 0;
 	}
 
 	SetPlaneZpos(ModeReq);
 
 	if (drmModeAtomicCommit(fdDrm, ModeReq, flags, NULL) != 0) {
-		LOGDEBUG2(L_DRM, "%s: cannot set atomic mode (%d), don't use zpos change: %m",
+		LOGDEBUG2(L_DRM, "drmplane: %s: cannot set atomic mode (%d), don't use zpos change: %m",
 			__FUNCTION__, errno);
 		drmModeAtomicFree(ModeReq);
 		return 0;
@@ -212,16 +212,16 @@ int cDrmPlane::HasZpos(int fdDrm)
  */
 void cDrmPlane::DumpParameters(void)
 {
-	LOGINFO("DumpParameters (plane_id = %d):", GetId());
-	LOGINFO("  CRTC ID: %" PRIu64 "",          GetCrtcId());
-	LOGINFO("  FB ID  : %" PRIu64 "",          GetFbId());
-	LOGINFO("  CRTC X : %" PRIu64 "",          GetCrtcX());
-	LOGINFO("  CRTC Y : %" PRIu64 "",          GetCrtcY());
-	LOGINFO("  CRTC W : %" PRIu64 "",          GetCrtcW());
-	LOGINFO("  CRTC H : %" PRIu64 "",          GetCrtcH());
-	LOGINFO("  SRC X  : %" PRIu64 "",          GetSrcX());
-	LOGINFO("  SRC Y  : %" PRIu64 "",          GetSrcY());
-	LOGINFO("  SRC W  : %" PRIu64 "",          GetSrcW());
-	LOGINFO("  SRC H  : %" PRIu64 "",          GetSrcH());
-	LOGINFO("  ZPOS   : %" PRIu64 "",          GetZpos());
+	LOGERROR("DumpParameters (plane_id = %d):", GetId());
+	LOGERROR("  CRTC ID: %" PRIu64 "",          GetCrtcId());
+	LOGERROR("  FB ID  : %" PRIu64 "",          GetFbId());
+	LOGERROR("  CRTC X : %" PRIu64 "",          GetCrtcX());
+	LOGERROR("  CRTC Y : %" PRIu64 "",          GetCrtcY());
+	LOGERROR("  CRTC W : %" PRIu64 "",          GetCrtcW());
+	LOGERROR("  CRTC H : %" PRIu64 "",          GetCrtcH());
+	LOGERROR("  SRC X  : %" PRIu64 "",          GetSrcX());
+	LOGERROR("  SRC Y  : %" PRIu64 "",          GetSrcY());
+	LOGERROR("  SRC W  : %" PRIu64 "",          GetSrcW());
+	LOGERROR("  SRC H  : %" PRIu64 "",          GetSrcH());
+	LOGERROR("  ZPOS   : %" PRIu64 "",          GetZpos());
 }

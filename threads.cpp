@@ -55,13 +55,13 @@ cDecodingThread::~cDecodingThread(void)
 
 void cDecodingThread::Action(void)
 {
-	LOGDEBUG("decoding thread started");
+	LOGDEBUG("threads: decoding thread started");
 	while(Running()) {
 		if (m_pDevice->VideoStream()->DecodeInput()) {
 			usleep(10000);
 		}
 	}
-	LOGDEBUG("decoding thread stopped");
+	LOGDEBUG("threads: decoding thread stopped");
 }
 
 void cDecodingThread::Stop(void)
@@ -69,7 +69,7 @@ void cDecodingThread::Stop(void)
 	if (!Active())
 		return;
 
-	LOGDEBUG("stopping decoding thread");
+	LOGDEBUG("threads: stopping decoding thread");
 	Cancel(2);
 }
 
@@ -90,20 +90,20 @@ cDisplayThread::~cDisplayThread(void)
 
 void cDisplayThread::Action(void)
 {
-	LOGDEBUG("display thread started");
+	LOGDEBUG("threads: display thread started");
 	while(Running()) {
 		int ret = m_pRender->DisplayFrame();
 
 		if (!ret) {
 			if (m_pRender->DrmHandleEvent() != 0)
-			LOGERROR("display thread: drmHandleEvent failed!");
+			LOGERROR("threads: display thread: drmHandleEvent failed!");
 		}
 
 		if (m_pRender->ShouldClose() || m_pRender->ShouldFlush())
 			m_pRender->CleanUp();
 
 	}
-	LOGDEBUG("display thread stopped");
+	LOGDEBUG("threads: display thread stopped");
 }
 
 void cDisplayThread::Stop(void)
@@ -111,7 +111,7 @@ void cDisplayThread::Stop(void)
 	if (!Active())
 		return;
 
-	LOGDEBUG("stopping display thread");
+	LOGDEBUG("threads: stopping display thread");
 	Cancel(2);
 }
 
@@ -133,7 +133,7 @@ cAudioThread::~cAudioThread(void)
 void cAudioThread::Action(void)
 {
 	m_mutex.Lock();
-	LOGDEBUG("audio thread started");
+	LOGDEBUG("threads: audio thread started");
 	while (Running()) {
 		if (!m_pAudio->IsPaused()) {
 			m_pAudio->FlushAlsaBuffers();
@@ -169,7 +169,7 @@ void cAudioThread::Action(void)
 			}
 		}
 	}
-	LOGDEBUG("audio thread stopped");
+	LOGDEBUG("threads: audio thread stopped");
 }
 
 void cAudioThread::Stop(void)
@@ -181,7 +181,7 @@ void cAudioThread::Stop(void)
 	if (!Active())
 		return;
 
-	LOGDEBUG("stopping audio thread");
+	LOGDEBUG("threads: stopping audio thread");
 	Cancel(2);
 }
 
@@ -221,7 +221,7 @@ int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disa
 	const char *filterDescr = NULL;
 	m_pFilterGraph = avfilter_graph_alloc();
 	if (!m_pFilterGraph) {
-		LOGERROR("filter thread: Init: Cannot alloc filter graph");
+		LOGERROR("filter thread: %s: Cannot alloc filter graph", __FUNCTION__);
 		return -1;
 	}
 
@@ -257,7 +257,7 @@ int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disa
 
 	if (disabled) {
 		if (interlaced)
-			LOGDEBUG2(L_CODEC, "filter thread: Init: Deinterlacer wanted, but disabled in setup!");
+			LOGDEBUG2(L_CODEC, "filter thread: %s: Deinterlacer wanted, but disabled in setup!", __FUNCTION__);
 		interlaced = 0;
 	}
 
@@ -297,11 +297,11 @@ int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disa
 		sarNum,
 		sarDen);
 
-	LOGDEBUG2(L_CODEC, "filter thread: Init: filter=\"%s\" args=\"%s\"", filterDescr, args);
+	LOGDEBUG2(L_CODEC, "filter thread: %s: filter=\"%s\" args=\"%s\"", __FUNCTION__, filterDescr, args);
 
 	ret = avfilter_graph_create_filter(&m_pBuffersrcCtx, buffersrc, "in", args, NULL, m_pFilterGraph);
 	if (ret < 0) {
-		LOGERROR("filter thread: Init: Cannot create buffer source (%d)", ret);
+		LOGERROR("filter thread: %s: Cannot create buffer source (%d)", __FUNCTION__, ret);
 		avfilter_graph_free(&m_pFilterGraph);
 		return -1;
 	}
@@ -312,7 +312,7 @@ int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disa
 	par->hw_frames_ctx = frame->hw_frames_ctx;
 	ret = av_buffersrc_parameters_set(m_pBuffersrcCtx, par);
 	if (ret < 0) {
-		LOGERROR("filter thread: Init: Cannot av_buffersrc_parameters_set (%d)", ret);
+		LOGERROR("filter thread: %s: Cannot av_buffersrc_parameters_set (%d)", __FUNCTION__, ret);
 		av_free(par);
 		avfilter_graph_free(&m_pFilterGraph);
 		return -1;
@@ -322,7 +322,7 @@ int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disa
 
 	ret = avfilter_graph_create_filter(&m_pBuffersinkCtx, buffersink, "out", NULL, NULL, m_pFilterGraph);
 	if (ret < 0) {
-		LOGERROR("filter thread: Init: Cannot create buffer sink (%d)", ret);
+		LOGERROR("filter thread: %s: Cannot create buffer sink (%d)", __FUNCTION__, ret);
 		avfilter_graph_free(&m_pFilterGraph);
 		return -1;
 	}
@@ -331,7 +331,7 @@ int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disa
 		enum AVPixelFormat pixFmts[] = { AV_PIX_FMT_NV12, AV_PIX_FMT_NONE };
 		ret = av_opt_set_int_list(m_pBuffersinkCtx, "pix_fmts", pixFmts, AV_PIX_FMT_NONE, AV_OPT_SEARCH_CHILDREN);
 		if (ret < 0) {
-			LOGERROR("filter thread: Init: Cannot set output pixel format (%d)", ret);
+			LOGERROR("filter thread: %s: Cannot set output pixel format (%d)", __FUNCTION__, ret);
 			avfilter_graph_free(&m_pFilterGraph);
 			return -1;
 		}
@@ -355,14 +355,14 @@ int cFilterThread::Init(const AVCodecContext *videoCtx, AVFrame *frame, int disa
 	avfilter_inout_free(&outputs);
 
 	if (ret < 0) {
-		LOGERROR("filter thread: Init: avfilter_graph_parse_ptr failed (%d)", ret);
+		LOGERROR("filter thread: %s: avfilter_graph_parse_ptr failed (%d)", __FUNCTION__, ret);
 		avfilter_graph_free(&m_pFilterGraph);
 		return -1;
 	}
 
 	ret = avfilter_graph_config(m_pFilterGraph, NULL);
 	if (ret < 0) {
-		LOGERROR("filter thread: Init: avfilter_graph_config failed (%d)", ret);
+		LOGERROR("filter thread: %s: avfilter_graph_config failed (%d)", __FUNCTION__, ret);
 		avfilter_graph_free(&m_pFilterGraph);
 		return -1;
 	}
@@ -376,7 +376,7 @@ void cFilterThread::Action(void)
 	int ret = 0;
 	int enqueued = 0;
 
-	LOGDEBUG("video filter thread started");
+	LOGDEBUG("threads: video filter thread started");
 
 	while (Running()) {
 		if (!GetRbFramesFilled()) {
@@ -402,7 +402,7 @@ void cFilterThread::Action(void)
 
 		// add frame to filter
 		if (av_buffersrc_add_frame_flags(m_pBuffersrcCtx, frame, AV_BUFFERSRC_FLAG_KEEP_REF) < 0)
-			LOGWARNING("filter thread: can't add_frame.");
+			LOGWARNING("filter thread: %s: can't add_frame.", __FUNCTION__);
 		else
 			av_frame_free(&frame);
 
@@ -418,7 +418,7 @@ void cFilterThread::Action(void)
 				av_frame_free(&filtFrame);
 				break;
 			} else if (ret < 0) {
-				LOGERROR("filter thread: can't get filtered frame: %s",
+				LOGERROR("filter thread: %s: can't get filtered frame: %s", __FUNCTION__,
 				av_err2str(ret));
 				av_frame_free(&filtFrame);
 				break;
@@ -465,7 +465,7 @@ void cFilterThread::Action(void)
 				av_frame_free(&filtFrame);
 		}
 	}
-	LOGDEBUG("filter thread stopped");
+	LOGDEBUG("threads: filter thread stopped");
 }
 
 /**
@@ -503,7 +503,7 @@ void cFilterThread::Stop(void)
 	if (!Active())
 		return;
 
-	LOGDEBUG("stopping filter thread");
+	LOGDEBUG("threads: stopping filter thread");
 	Cancel(2);
 	m_filterBug = 0;
 	m_filterTrick = 0;
@@ -527,5 +527,5 @@ void cFilterThread::WaitForIdle(void)
 	int timeoutInMs = 2000;
 	mutex.Lock();
 	if (!m_waitIdleCondition.TimedWait(mutex, timeoutInMs))
-		LOGERROR("filter thread: timeout (%dms) while waiting for empty filter ringbuffer", timeoutInMs);
+		LOGERROR("filter thread: %s: timeout (%dms) while waiting for empty filter ringbuffer", __FUNCTION__, timeoutInMs);
 }

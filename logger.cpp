@@ -142,6 +142,9 @@ void cSoftHdLogger::LogInfo(const char *format, ...)
  */
 void cSoftHdLogger::LogDebug(const char *format, ...)
 {
+	if (!logLevel)
+		return;
+
 	va_list ap;
 	char fmt[256];
 

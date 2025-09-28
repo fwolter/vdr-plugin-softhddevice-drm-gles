@@ -85,7 +85,7 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
  */
 cVideoRender::~cVideoRender(void)
 {
-	LOGDEBUG2(L_DRM, "~cVideoRender");
+	LOGDEBUG2(L_DRM, "videorender: %s", __FUNCTION__);
 	if (m_pFilterThread)
 		delete m_pFilterThread;
 	if (m_pDisplayThread)
@@ -93,7 +93,7 @@ cVideoRender::~cVideoRender(void)
 	if (m_pDecodingThread)
 		delete m_pDecodingThread;
 	free(m_pLastFrame);
-	LOGDEBUG2(L_DRM, "~cVideoRender deleted");
+	LOGDEBUG2(L_DRM, "videorender: %s", __FUNCTION__);
 }
 
 /**
@@ -145,7 +145,7 @@ void cVideoRender::CleanUp(void)
 
 	// first wait for m_pFilterThread to be closed
 	if (m_pFilterThread->Active()) {
-		LOGDEBUG("CleanUp: cancel filter thread");
+		LOGDEBUG("videorender: %s: cancel filter thread", __FUNCTION__);
 		m_pFilterThread->Stop();
 	}
 
@@ -185,7 +185,7 @@ void cVideoRender::CleanUp(void)
 	m_closing = 0;
 	m_deintDisabled = m_configDeintDisabled;
 
-	LOGDEBUG("CleanUp: DRM cleaned (m_framesFilled %d m_numFramesToFilter %d)", atomic_read(&m_framesFilled), atomic_read(&m_numFramesToFilter));
+	LOGDEBUG("videorender: %s: DRM cleaned (m_framesFilled %d m_numFramesToFilter %d)", __FUNCTION__, atomic_read(&m_framesFilled), atomic_read(&m_numFramesToFilter));
 }
 
 /**
@@ -216,7 +216,7 @@ int cVideoRender::CommitBuffer(cDrmBuffer *buf, int skipVideo)
 	drmModeAtomicReqPtr modeReq;
 	uint32_t flags = DRM_MODE_PAGE_FLIP_EVENT;
 	if (!(modeReq = drmModeAtomicAlloc())) {
-		LOGERROR("DisplayFrame: cannot allocate atomic request (%d): %m", errno);
+		LOGERROR("videorender: %s: cannot allocate atomic request (%d): %m", __FUNCTION__, errno);
 		return -2;
 	}
 
@@ -269,7 +269,7 @@ int cVideoRender::CommitBuffer(cDrmBuffer *buf, int skipVideo)
 
 	videoPlane->SetPlane(modeReq);
 	dirty += 2;
-//	LOGDEBUG2(L_DRM, "DisplayFrame: SetPlane Video (fb = %" PRIu64 ")", videoPlane->GetFbId());
+//	LOGDEBUG2(L_DRM, "videorender: %s: SetPlane Video (fb = %" PRIu64 ")", __FUNCTION__, videoPlane->GetFbId());
 
 skip_video:
 	// handle the osd plane
@@ -281,7 +281,7 @@ skip_video:
 			videoPlane->SetPlaneZpos(modeReq);
 			osdPlane->SetPlaneZpos(modeReq);
 
-			LOGDEBUG2(L_DRM, "DisplayFrame: SetPlaneZpos: video->plane_id %d -> zpos %" PRIu64 ", osd->plane_id %d -> zpos %" PRIu64 "",
+			LOGDEBUG2(L_DRM, "videorender: %s: SetPlaneZpos: video->plane_id %d -> zpos %" PRIu64 ", osd->plane_id %d -> zpos %" PRIu64 "", __FUNCTION__,
 				videoPlane->GetId(), videoPlane->GetZpos(),
 				osdPlane->GetId(), osdPlane->GetZpos());
 		}
@@ -292,13 +292,13 @@ skip_video:
 
 		osdPlane->SetPlane(modeReq);
 		dirty += 1;
-		LOGDEBUG2(L_DRM, "DisplayFrame: SetPlane OSD %d (fb = %" PRIu64 ")", m_osdShown, osdPlane->GetFbId());
+		LOGDEBUG2(L_DRM, "videorender: %s: SetPlane OSD %d (fb = %" PRIu64 ")", __FUNCTION__, m_osdShown, osdPlane->GetFbId());
 		m_pBufOsd->MarkClean();
 	}
 
 	if (m_startgrab) {
 		if (m_pBufOsd && m_osdShown) {
-			LOGDEBUG2(L_GRAB, "DisplayFrame: Trigger osd grab arrived");
+			LOGDEBUG2(L_GRAB, "videorender: %s: Trigger osd grab arrived", __FUNCTION__);
 			cDrmBuffer *osdBuf = new cDrmBuffer(m_pBufOsd);
 			// dimensions should be the size on screen
 			m_grabOsd.SetRect(0, 0, m_pBufOsd->Width(), m_pBufOsd->Height());
@@ -307,7 +307,7 @@ skip_video:
 
 		cDrmBuffer *pbuf = buf ? buf : (m_pLastFrame->buf ? m_pLastFrame->buf : NULL);
 		if (pbuf) {
-			LOGDEBUG2(L_GRAB, "DisplayFrame: Trigger video grab arrived");
+			LOGDEBUG2(L_GRAB, "videorender: %s: Trigger video grab arrived", __FUNCTION__);
 			cDrmBuffer *videoBuf = new cDrmBuffer(pbuf);
 			// use dimensions which have been set earlier
 			m_grabVideo.SetRect(m_lastVideoGrab.X(), m_lastVideoGrab.Y(), m_lastVideoGrab.Width(), m_lastVideoGrab.Height());
@@ -329,7 +329,7 @@ skip_video:
 			videoPlane->DumpParameters();
 
 		drmModeAtomicFree(modeReq);
-		LOGERROR("DisplayFrame: page flip failed (%d): %m", errno);
+		LOGERROR("videorender: %s: page flip failed (%d): %m", __FUNCTION__, errno);
 		return -2;
 	}
 
@@ -353,7 +353,7 @@ int cVideoRender::Sync(AVFrame *frame, int *skipVideo, cDrmBuffer **buf)
 	videoPts = frame->pts * 1000 * av_q2d(*m_timebase);
 
 	if(!m_startCounter && !m_closing) {
-		LOGDEBUG("Sync: start PTS %s", Timestamp2String(videoPts));
+		LOGDEBUG("videorender: %s: start PTS %s", __FUNCTION__, Timestamp2String(videoPts));
 		m_pAudio->Skip(frame->pts, 0);
 avready:
 		if (!m_pAudio->VideoReady(videoPts)) {
@@ -361,11 +361,11 @@ avready:
 
 			// check for close/flush request or pause
 			if (m_closing) {
-				LOGDEBUG2(L_DRM, "DisplayFrame: closing while sync, set a black FB");
+				LOGDEBUG2(L_DRM, "videorender: %s: closing while sync, set a black FB", __FUNCTION__);
 				*buf = &m_bufBlack;
 				return 1;
 			} else if (m_flushing) {
-				LOGDEBUG2(L_DRM, "DisplayFrame: flushing while sync, skip video");
+				LOGDEBUG2(L_DRM, "videorender: %s: flushing while sync, skip video", __FUNCTION__);
 				*skipVideo = 1;
 				return 1;
 			} else if (VideoIsPaused()) {
@@ -379,11 +379,11 @@ avready:
 audioclock:
 	// check for close/flush request or pause
 	if (m_closing) {
-		LOGDEBUG2(L_DRM, "DisplayFrame: closing while sync, set a black FB");
+		LOGDEBUG2(L_DRM, "videorender: %s: closing while sync, set a black FB", __FUNCTION__);
 		*buf = &m_bufBlack;
 		return 1;
 	} else if (m_flushing) {
-		LOGDEBUG2(L_DRM, "DisplayFrame: flushing while sync, skip video");
+		LOGDEBUG2(L_DRM, "videorender: %s: flushing while sync, skip video", __FUNCTION__);
 		*skipVideo = 1;
 		return 1;
 	} else if (VideoIsPaused()) {
@@ -482,7 +482,7 @@ void cVideoRender::SetFrameFlags(AVFrame *frame, int flags)
 	if (!frame->opaque_ref) {
 		frame->opaque_ref = av_buffer_allocz(sizeof(*frameFlags));
 		if (!frame->opaque_ref) {
-			LOGFATAL("%s: cannot allocate private frame data", __FUNCTION__);
+			LOGFATAL("videorender: %s: cannot allocate private frame data", __FUNCTION__);
 		}
 	}
 
@@ -575,7 +575,7 @@ cDrmBuffer *cVideoRender::GetBuffer(AVFrame *frame)
 				break;
 		}
 		if (m_buffer[i].IsDirty()) {
-			LOGDEBUG("GetBuffer: SHOULD NOT HAPPEN! no free buffer available!");
+			LOGDEBUG("videorender: %s: SHOULD NOT HAPPEN! no free buffer available!", __FUNCTION__);
 			return nullptr;
 		}
 
@@ -588,7 +588,7 @@ cDrmBuffer *cVideoRender::GetBuffer(AVFrame *frame)
 	}
 
 	if (buf == nullptr) {
-		LOGDEBUG("GetBuffer: SHOULD NOT HAPPEN! failed, no buffer found!");
+		LOGDEBUG("videorender: %s: SHOULD NOT HAPPEN! failed, no buffer found!", __FUNCTION__);
 		return nullptr;
 	}
 
@@ -633,13 +633,13 @@ int cVideoRender::DisplayFrame(void)
 	int ret;
 
 	if (ShouldClose()) {
-		LOGDEBUG2(L_DRM, "DisplayFrame: closing, set a black FB");
+		LOGDEBUG2(L_DRM, "videorender: %s: closing, set a black FB", __FUNCTION__);
 		buf = &m_bufBlack;
 		goto page_flip;
 	}
 
 	if (ShouldFlush()) {
-		LOGDEBUG2(L_DRM, "DisplayFrame: flushing, just skip video");
+		LOGDEBUG2(L_DRM, "videorender: %s: flushing, just skip video", __FUNCTION__);
 		skipVideo = 1;
 		goto page_flip;
 	}
@@ -649,25 +649,25 @@ dequeue:
 	// wait for a frame in the ringbuffer
 	while (!atomic_read(&m_framesFilled)) {
 		if (m_exitThread) {
-			LOGDEBUG2(L_DRM, "DisplayFrame -> Exit Thread");
+			LOGDEBUG2(L_DRM, "videorender: %s: -> Exit Thread", __FUNCTION__);
 			return 1;
 		}
 
 		if (ShouldClose()) {
-			LOGDEBUG2(L_DRM, "DisplayFrame: closing, set a black FB");
+			LOGDEBUG2(L_DRM, "videorender: %s: closing, set a black FB", __FUNCTION__);
 			buf = &m_bufBlack;
 			goto page_flip;
 		}
 
 		if (ShouldFlush()) {
-			LOGDEBUG2(L_DRM, "DisplayFrame: flushing, just skip video");
+			LOGDEBUG2(L_DRM, "videorender: %s: flushing, just skip video", __FUNCTION__);
 			skipVideo = 1;
 			goto page_flip;
 		}
 
 		if (VideoIsPaused()) {
 			usleep(10000);
-			// LOGDEBUG2(L_DRM, "DisplayFrame: paused, skip video");
+			// LOGDEBUG2(L_DRM, "videorender: %s: paused, skip video", __FUNCTION__);
 			skipVideo = 1;
 			goto page_flip;
 		}
@@ -675,13 +675,13 @@ dequeue:
 		// wait max. 15ms in case we have an osd
 		if (m_pBufOsd && m_pBufOsd->IsDirty() && !timeout--) {
 			skipVideo = 1;
-			LOGDEBUG2(L_DRM, "DisplayFrame: no video but osd, skip video");
+			LOGDEBUG2(L_DRM, "videorender: %s: no video but osd, skip video", __FUNCTION__);
 			goto page_flip;
 		}
 
 		if (m_startgrab) {
 			skipVideo = 1;
-			LOGDEBUG2(L_DRM, "DisplayFrame: grab requested, skip video");
+			LOGDEBUG2(L_DRM, "videorender: %s: grab requested, skip video", __FUNCTION__);
 			goto page_flip;
 		}
 
@@ -699,11 +699,11 @@ dequeue:
 	// advance frame
 	if (GetFrame(&frame)) {
 		if (IsStillpictureFrame(frame)) {
-			LOGDEBUG2(L_STILL, "DisplayFrame: Stillpicture has AV_NOPTS_VALUE, skip sync ...");
+			LOGDEBUG2(L_STILL, "videorender: %s: Stillpicture has AV_NOPTS_VALUE, skip sync ...", __FUNCTION__);
 			goto skip_sync;
 		} else {
 			// TODO: fast/soft sync
-			LOGDEBUG2(L_DRM, "DisplayFrame: no AV_NOPTS_VALUE, use next frame ...");
+			LOGDEBUG2(L_DRM, "videorender: %s: no AV_NOPTS_VALUE, use next frame ...", __FUNCTION__);
 			av_frame_free(&frame);
 			return 1;
 		}
@@ -761,7 +761,7 @@ page_flip:
 		SetVideoClock(frame->pts);
 
 	if (frame)
-		LOGDEBUG2(L_PACKET, "DisplayFrame:                 PTS %s", Timestamp2String(frame->pts / 90));
+		LOGDEBUG2(L_PACKET, "videorender: %s:                 PTS %s", __FUNCTION__, Timestamp2String(frame->pts / 90));
 
 	// new video frame was sent, rotate the frames
 	if (m_pLastFrame->frame) {
@@ -819,7 +819,7 @@ void cVideoRender::OsdClear(void)
 
 		buf = m_pDrmDevice->GetBufFromBo(m_pNextBo);
 		if (!buf) {
-			LOGERROR("Failed to get GL buffer");
+			LOGERROR("videorender: %s: Failed to get GL buffer", __FUNCTION__);
 			return;
 		}
 
@@ -833,7 +833,7 @@ void cVideoRender::OsdClear(void)
 		m_pOldBo = m_bo;
 		m_bo = m_pNextBo;
 
-		LOGDEBUG2(L_OPENGL, "OsdClear(GL): eglSwapBuffers m_eglDisplay %p eglSurface %p (%i x %i, %i)", m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->Width(), buf->Height(), buf->Pitch(0));
+		LOGDEBUG2(L_OPENGL, "videorender: %s: eglSwapBuffers m_eglDisplay %p eglSurface %p (%i x %i, %i)", __FUNCTION__, m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->Width(), buf->Height(), buf->Pitch(0));
 	}
 #else
 	memset((void *)m_pBufOsd->Plane(0), 0,
@@ -864,7 +864,7 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
 {
 #ifdef USE_GLES
 	if (m_disableOglOsd) {
-		LOGDEBUG2(L_OSD, "VideoOsdDrawARGB width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d",
+		LOGDEBUG2(L_OSD, "videorender: %s: width %d height %d pitch %d argb %p x %d y %d pitch buf %d xi %d yi %d", __FUNCTION__,
 			width, height, pitch, argb, x, y, m_pBufOsd->Pitch(0), xi, yi);
 		for (int i = 0; i < height; ++i) {
 			memcpy(m_pBufOsd->Plane(0) + x * 4 + (i + y) * m_pBufOsd->Pitch(0),
@@ -879,7 +879,7 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
 
 		buf = m_pDrmDevice->GetBufFromBo(m_pNextBo);
 		if (!buf) {
-			LOGERROR("Failed to get GL buffer");
+			LOGERROR("videorender: %s: Failed to get GL buffer", __FUNCTION__);
 			return;
 		}
 
@@ -893,7 +893,7 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
 		m_pOldBo = m_bo;
 		m_bo = m_pNextBo;
 
-		LOGDEBUG2(L_OPENGL, "OsdDrawARGB(GL): eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->Width(), buf->Height(), buf->Pitch(0));
+		LOGDEBUG2(L_OPENGL, "videorender: %s: eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", __FUNCTION__, m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->Width(), buf->Height(), buf->Pitch(0));
 	}
 #else
 	for (int i = 0; i < height; ++i) {
@@ -914,7 +914,7 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
  */
 void cVideoRender::ExitDecodingThread(void)
 {
-	LOGDEBUG("%s", __FUNCTION__);
+	LOGDEBUG("videorender: %s", __FUNCTION__);
 
 	if (m_pDecodingThread->Active())
 		m_pDecodingThread->Stop();
@@ -925,7 +925,7 @@ void cVideoRender::ExitDecodingThread(void)
  */
 void cVideoRender::WakeupDecodingThread(void)
 {
-	LOGDEBUG("%s", __FUNCTION__);
+	LOGDEBUG("videorender: %s", __FUNCTION__);
 	if (!m_pDecodingThread->Active())
 		m_pDecodingThread->Start();
 }
@@ -935,7 +935,7 @@ void cVideoRender::WakeupDecodingThread(void)
  */
 void cVideoRender::ExitDisplayThread(void)
 {
-	LOGDEBUG("%s", __FUNCTION__);
+	LOGDEBUG("videorender: %s", __FUNCTION__);
 
 	SetClosing(1);
 	if (m_pDisplayThread->Active()) {
@@ -949,7 +949,7 @@ void cVideoRender::ExitDisplayThread(void)
  */
 void cVideoRender::WakeupDisplayThread(void)
 {
-	LOGDEBUG("%s", __FUNCTION__);
+	LOGDEBUG("videorender: %s", __FUNCTION__);
 	if (!m_pDisplayThread->Active())
 		m_pDisplayThread->Start();
 }
@@ -987,17 +987,17 @@ void cVideoRender::EnqueueFB(AVFrame *inframe)
 				break;
 		}
 		if (m_buffer[i].IsDirty())
-			LOGFATAL("EnqueueFB: SHOULD NOT HAPPEN! no free buffer available!");
+			LOGFATAL("videorender: %s: SHOULD NOT HAPPEN! no free buffer available!");
 
 		buf = &m_buffer[i];
 		if (buf->Setup(fdDrm, (uint32_t)inframe->width, (uint32_t)inframe->height,
 		               DRM_FORMAT_NV12, NULL)) {
-			LOGERROR("EnqueueFB: SetupFB FB %i x %i failed", buf->Width(), buf->Height());
+			LOGERROR("videorender: %s: SetupFB FB %i x %i failed", __FUNCTION__, buf->Width(), buf->Height());
 		}
 
 		int primefd;
 		if (drmPrimeHandleToFD(fdDrm, buf->Handle(0), DRM_CLOEXEC | DRM_RDWR, &primefd))
-			LOGERROR("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+			LOGERROR("videorender: %s: Failed to retrieve the Prime FD (%d): %m", __FUNCTION__, errno);
 		buf->SetFdPrime(0, primefd);
 	} else {
 		// create some buffers up to VIDEO_SURFACES_MAX + 2
@@ -1016,14 +1016,14 @@ get_buffer:
 
 			if (buf->Setup(fdDrm, (uint32_t)inframe->width, (uint32_t)inframe->height,
 			               DRM_FORMAT_NV12, NULL)) {
-				LOGERROR("EnqueueFB: SetupFB FB %i x %i failed", buf->Width(), buf->Height());
+				LOGERROR("videorender: %s: SetupFB FB %i x %i failed", __FUNCTION__, buf->Width(), buf->Height());
 			}
 
 			m_numBuffers++;
 
 			int primefd;
 			if (drmPrimeHandleToFD(fdDrm, buf->Handle(0), DRM_CLOEXEC | DRM_RDWR, &primefd))
-				LOGERROR("EnqueueFB: Failed to retrieve the Prime FD (%d): %m", errno);
+				LOGERROR("videorender: %s: Failed to retrieve the Prime FD (%d): %m", __FUNCTION__, errno);
 			buf->SetFdPrime(0, primefd);
 		}
 	}
@@ -1098,7 +1098,7 @@ int cVideoRender::RenderFrame(AVCodecContext * videoCtx, AVFrame * frame)
 	}
 
 	if (frame->decode_error_flags || frame->flags & AV_FRAME_FLAG_CORRUPT) {
-		LOGWARNING("RenderFrame: error_flag or FRAME_FLAG_CORRUPT");
+		LOGWARNING("videorender: %s: error_flag or FRAME_FLAG_CORRUPT", __FUNCTION__);
 	}
 
 	if (m_closing || m_flushing) {
@@ -1125,7 +1125,7 @@ int cVideoRender::RenderFrame(AVCodecContext * videoCtx, AVFrame * frame)
 		// set the interlaced switch depending on an active deinterlace filter, if framerate is not available
 		if ((videoCtx->framerate.num == 0) &&
 		    !interlaced && m_pFilterThread->Active() && m_pFilterThread->IsInterlaceFilter()) {
-			LOGWARNING("RenderFrame: WARNING!!! frame without interlaced flag arrived while deinterlace filter is active (P %d)!", ++m_numWrongProgressive);
+			LOGWARNING("videorender: %s: WARNING!!! frame without interlaced flag arrived while deinterlace filter is active (P %d)!", __FUNCTION__, ++m_numWrongProgressive);
 			interlaced = 1;
 		}
 
@@ -1144,7 +1144,7 @@ int cVideoRender::RenderFrame(AVCodecContext * videoCtx, AVFrame * frame)
 		// AV_PIX_FMT_DRM_PRIME, interlaced, hw deinterlacer available -> hw deinterlacer
 		// -> put the frame into filter Rb
 		if (!m_pFilterThread->Active()) {
-			LOGDEBUG("RenderFrame: wakeup filter thread");
+			LOGDEBUG("videorender: %s: wakeup filter thread", __FUNCTION__);
 			if (m_pFilterThread->Init(videoCtx, frame, m_deintDisabled)) {
 				av_frame_free(&frame);
 				return 0;
@@ -1266,7 +1266,7 @@ void cVideoRender::StartVideo(void)
 {
 	ResumeVideo();
 	m_startCounter = 0;
-	LOGDEBUG("StartVideo: reset m_startCounter %d Closing %d TrickSpeed %d",
+	LOGDEBUG("videorender: %s: reset m_startCounter %d Closing %d TrickSpeed %d", __FUNCTION__,
 		m_startCounter, m_closing, GetTrickSpeed());
 }
 
@@ -1278,7 +1278,7 @@ void cVideoRender::StartVideo(void)
  */
 void cVideoRender::SetClosing(int black)
 {
-	LOGDEBUG("SetClosing: m_startCounter %d%s", m_startCounter, black ? " closing": " flushing");
+	LOGDEBUG("videorender: %s: m_startCounter %d%s", __FUNCTION__, m_startCounter, black ? " closing": " flushing");
 	if (!m_pDisplayThread->Active())
 		return;
 
@@ -1290,9 +1290,9 @@ void cVideoRender::SetClosing(int black)
 	if (VideoIsPaused())
 		ResumeVideo();
 
-	LOGDEBUG("SetClosing: wait for cleanup");
+	LOGDEBUG("videorender: %s: wait for cleanup", __FUNCTION__);
 	if (!m_waitCleanCondition.Wait(2000)) {
-		LOGERROR("%s: timeout while waiting for cleanup");
+		LOGERROR("videorender: %s: timeout while waiting for cleanup", __FUNCTION__);
 	}
 
 	m_startCounter = 0;
@@ -1308,7 +1308,7 @@ void cVideoRender::SetClosing(int black)
  */
 void cVideoRender::PauseVideo(void)
 {
-	LOGDEBUG("PauseVideo:");
+	LOGDEBUG("videorender: %s:", __FUNCTION__);
 	m_playbackMutex.Lock();
 	m_videoIsPaused = 1;
 	m_playbackMutex.Unlock();
@@ -1319,7 +1319,7 @@ void cVideoRender::PauseVideo(void)
  */
 void cVideoRender::ResumeVideo(void)
 {
-	LOGDEBUG("ResumeVideo:");
+	LOGDEBUG("videorender: %s:", __FUNCTION__);
 	m_playbackMutex.Lock();
 	m_videoIsPaused = 0;
 	m_playbackMutex.Unlock();
@@ -1348,7 +1348,7 @@ int cVideoRender::VideoIsPaused(void)
  */
 void cVideoRender::SetTrickSpeed(int speed, int forward)
 {
-	LOGDEBUG2(L_TRICK, "SetTrickSpeed: set trick speed %d %s", speed, forward ? "forward" : "backward");
+	LOGDEBUG2(L_TRICK, "videorender: %s: set trick speed %d %s", __FUNCTION__, speed, forward ? "forward" : "backward");
 	m_trickspeedMutex.Lock();
 	m_trickSpeed = speed;
 	m_trickCounter = speed;
@@ -1445,7 +1445,7 @@ int cVideoRender::TriggerGrab(void)
 	int err = 0;
 
 	if (!m_grabCond.TimedWait(mutex, timeout)) {
-		LOGWARNING("%s: timed out after %dms", __FUNCTION__, timeout);
+		LOGWARNING("videorender: %s: timed out after %dms", __FUNCTION__, timeout);
 		err = 1;
 	}
 
@@ -1470,7 +1470,7 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 	}
 
 	for (int plane = 0; plane < buf->NumPlanes(); plane++) {
-		LOGDEBUG2(L_GRAB, "ConvertVideoBufToRgb: VIDEO plane %d address %p pitch %d offset %d handle %d size %d",
+		LOGDEBUG2(L_GRAB, "videorender: %s: VIDEO plane %d address %p pitch %d offset %d handle %d size %d", __FUNCTION__,
 			   plane, buf->Plane(plane), buf->Pitch(plane), buf->Offset(plane), buf->Handle(plane), buf->Size(plane));
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
@@ -1504,7 +1504,7 @@ void cVideoRender::ConvertOsdBufToRgb(void)
 	}
 
 	for (int plane = 0; plane < buf->NumPlanes(); plane++) {
-		LOGDEBUG2(L_GRAB, "VideoGrab: OSD plane %d address %p pitch %d offset %d handle %d size %d",
+		LOGDEBUG2(L_GRAB, "videorender: %s: OSD plane %d address %p pitch %d offset %d handle %d size %d", __FUNCTION__,
 			   plane, buf->Plane(plane), buf->Pitch(plane), buf->Offset(plane), buf->Handle(plane), buf->Size(plane));
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
@@ -1545,7 +1545,7 @@ cSoftHdGrab *cVideoRender::GetGrab(int *size, int *width, int *height, int *x, i
 	else
 		grab = &m_grabVideo;
 
-	LOGDEBUG2(L_GRAB, "GetGrab: %s size %d %dx%d at %d|%d %p", isOsd ? "OSD" : "VIDEO", grab->GetSize(), grab->GetWidth(), grab->GetHeight(), grab->GetX(), grab->GetY(), grab->GetData());
+	LOGDEBUG2(L_GRAB, "videorender: %s: %s size %d %dx%d at %d|%d %p", isOsd ? "OSD" : "VIDEO", __FUNCTION__, grab->GetSize(), grab->GetWidth(), grab->GetHeight(), grab->GetX(), grab->GetY(), grab->GetData());
 
 	if (size)
 		*size = grab->GetSize();
@@ -1607,7 +1607,7 @@ static size_t ReadLineFromFile(char *buf, size_t size, const char * file)
 
 	fd = fopen(file, "r");
 	if (fd == NULL) {
-		LOGERROR("Can't open %s", file);
+		LOGERROR("videorender: %s: Can't open %s", __FUNCTION__, file);
 		return 0;
 	}
 
@@ -1654,26 +1654,26 @@ static int ReadHWPlatform(void)
 	}
 
 	read_ptr = txt_buf;
-	LOGDEBUG2(L_DRM, "ReadHWPlatform: found \"%s\", set hardware quirks", _txt_buf);
+	LOGDEBUG2(L_DRM, "videorender: %s: found \"%s\", set hardware quirks", __FUNCTION__, _txt_buf);
 
 	while(read_size) {
 		if (strstr(read_ptr, "bcm2837")) {
-			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2837 (Raspberry Pi 2/3) found");
+			LOGDEBUG2(L_DRM, "videorender: %s: bcm2837 (Raspberry Pi 2/3) found", __FUNCTION__);
 			hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "bcm2711")) {
-			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2711 (Raspberry Pi 4 Model B, Compute Module 4, Pi 400) found");
+			LOGDEBUG2(L_DRM, "videorender: %s: bcm2711 (Raspberry Pi 4 Model B, Compute Module 4, Pi 400) found", __FUNCTION__);
 			hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "bcm2712")) {
-			LOGDEBUG2(L_DRM, "ReadHWPlatform: bcm2712 (Raspberry Pi 5, Compute Module 5, Pi 500) found");
+			LOGDEBUG2(L_DRM, "videorender: %s: bcm2712 (Raspberry Pi 5, Compute Module 5, Pi 500) found", __FUNCTION__);
 			hardwareQuirks |= QUIRK_CODEC_FLUSH_WORKAROUND;
 			break;
 		}
 		if (strstr(read_ptr, "amlogic")) {
-			LOGDEBUG2(L_DRM, "ReadHWPlatform: amlogic found, disable HW deinterlacer");
+			LOGDEBUG2(L_DRM, "videorender: %s: amlogic found, disable HW deinterlacer", __FUNCTION__);
 			hardwareQuirks |= QUIRK_CODEC_NEEDS_EXT_INIT
 					   |  QUIRK_CODEC_SKIP_FIRST_FRAMES
 					   |  QUIRK_NO_HW_DEINT;
@@ -1694,7 +1694,7 @@ static int ReadHWPlatform(void)
 void cVideoRender::Init(void)
 {
 	if (m_pDrmDevice->Init())
-		LOGFATAL("VideoInit: failed");
+		LOGFATAL("videorender: %s: failed", __FUNCTION__);
 
 	cDrmPlane *videoPlane = m_pDrmDevice->VideoPlane();
 	cDrmPlane *osdPlane = m_pDrmDevice->OsdPlane();
@@ -1710,7 +1710,7 @@ void cVideoRender::Init(void)
 		m_pBufOsd = new cDrmBuffer();
 	
 	if (m_pBufOsd->Setup(m_pDrmDevice->Fd(), m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(), DRM_FORMAT_ARGB8888, NULL)) {
-		LOGFATAL("VideoOsdInit: SetupFB FB OSD failed!");
+		LOGFATAL("videorender: %s: SetupFB FB OSD failed!", __FUNCTION__);
 	}
 #else
 	if (m_disableOglOsd) {
@@ -1718,15 +1718,15 @@ void cVideoRender::Init(void)
 			m_pBufOsd = new cDrmBuffer();
 
 		if (m_pBufOsd->Setup(m_pDrmDevice->Fd(), m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(), DRM_FORMAT_ARGB8888, NULL)) {
-			LOGFATAL("VideoOsdInit: SetupFB FB OSD failed!");
+			LOGFATAL("videorender: %s: SetupFB FB OSD failed!", __FUNCTION__);
 		}
 	}
 #endif
 
 	// black fb
-	LOGDEBUG2(L_DRM, "Videoinit: Try to create a black FB");
+	LOGDEBUG2(L_DRM, "videorender: %s: Try to create a black FB", __FUNCTION__);
 	if (m_bufBlack.Setup(m_pDrmDevice->Fd(), m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(), DRM_FORMAT_NV12, NULL))
-		LOGFATAL("VideoInit: SetupFB black FB %i x %i failed", m_bufBlack.Width(), m_bufBlack.Height());
+		LOGFATAL("videorender: %s: SetupFB black FB %i x %i failed", __FUNCTION__, m_bufBlack.Width(), m_bufBlack.Height());
 	m_bufBlack.FillBlack();
 
 	// save actual modesetting
@@ -1737,9 +1737,9 @@ void cVideoRender::Init(void)
 	uint32_t modeID = 0;
 
 	if (m_pDrmDevice->CreatePropertyBlob(&modeID) != 0)
-		LOGFATAL("Failed to create mode property blob.");
+		LOGFATAL("videorender: %s: Failed to create mode property blob.", __FUNCTION__);
 	if (!(modeReq = drmModeAtomicAlloc()))
-		LOGFATAL("cannot allocate atomic request (%d): %m", errno);
+		LOGFATAL("videorender: %s: cannot allocate atomic request (%d): %m", __FUNCTION__, errno);
 
 	m_pDrmDevice->SetPropertyRequest(modeReq, m_pDrmDevice->CrtcId(),
 						DRM_MODE_OBJECT_CRTC, "MODE_ID", modeID);
@@ -1789,7 +1789,7 @@ void cVideoRender::Init(void)
 		videoPlane->DumpParameters();
 
 		drmModeAtomicFree(modeReq);
-		LOGFATAL("VideoInit: cannot set atomic mode (%d): %m", errno);
+		LOGFATAL("videorender: %s: cannot set atomic mode (%d): %m", __FUNCTION__, errno);
 	}
 
 	drmModeAtomicFree(modeReq);
@@ -1858,7 +1858,7 @@ void cVideoRender::SetVideoOutputPosition(const cRect &rect)
 	else
 		m_videoIsScaled = 1;
 
-	LOGDEBUG("SetVideoOutputPosition %d %d %d %d%s", rect.X(), rect.Y(), rect.Width(), rect.Height(), m_videoIsScaled ? ", video is scaled" : "");
+	LOGDEBUG("videorender: %s: %d %d %d %d%s", __FUNCTION__, rect.X(), rect.Y(), rect.Width(), rect.Height(), m_videoIsScaled ? ", video is scaled" : "");
 }
 
 /**

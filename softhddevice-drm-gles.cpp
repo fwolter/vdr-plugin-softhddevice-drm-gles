@@ -81,7 +81,7 @@ static const char *const MAINMENUENTRY = trNOOP("SHD Media Player");
  */
 cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("plugin: %s:", __FUNCTION__);
 
 	m_pConfig = new cSoftHdConfig();
 	m_pDevice = new cSoftHdDevice(m_pConfig);
@@ -96,7 +96,7 @@ cPluginSoftHdDevice::cPluginSoftHdDevice(void)
  */
 cPluginSoftHdDevice::~cPluginSoftHdDevice(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("plugin: %s:", __FUNCTION__);
 }
 
 /**
@@ -134,7 +134,7 @@ const char *cPluginSoftHdDevice::CommandLineHelp(void)
  */
 bool cPluginSoftHdDevice::ProcessArgs(int argc, char *argv[])
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("plugin: %s:", __FUNCTION__);
 
 	return m_pDevice->ProcessArgs(argc, argv);
 }
@@ -148,7 +148,7 @@ bool cPluginSoftHdDevice::ProcessArgs(int argc, char *argv[])
  */
 bool cPluginSoftHdDevice::Initialize(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("plugin: %s:", __FUNCTION__);
 
 	// nothing to do
 	return true;
@@ -166,8 +166,8 @@ bool cPluginSoftHdDevice::Start(void)
 			m_pDevice->DeviceNumber());
 		if (m_pConfig->ConfigMakePrimary) {
 			// Must be done in the main thread
-			LOGDEBUG("makeing softhddevice %d the primary device!",
-				m_pDevice->DeviceNumber());
+			LOGDEBUG("plugin: %s: making softhddevice %d the primary device!",
+				__FUNCTION__, m_pDevice->DeviceNumber());
 			m_doMakePrimary = m_pDevice->DeviceNumber() + 1;
 		}
 	}
@@ -183,7 +183,7 @@ bool cPluginSoftHdDevice::Start(void)
  */
 void cPluginSoftHdDevice::Stop(void)
 {
-	//LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("plugin: %s:", __FUNCTION__);
 
 	m_pDevice->Stop();
 }
@@ -193,7 +193,7 @@ void cPluginSoftHdDevice::Stop(void)
  */
 const char *cPluginSoftHdDevice::MainMenuEntry(void)
 {
-	//LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("plugin: %s:", __FUNCTION__);
 
 	return m_pConfig->ConfigHideMainMenuEntry ? NULL : tr(MAINMENUENTRY);
 }
@@ -203,7 +203,7 @@ const char *cPluginSoftHdDevice::MainMenuEntry(void)
  */
 cOsdObject *cPluginSoftHdDevice::MainMenuAction(void)
 {
-	//LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("plugin: %s:", __FUNCTION__);
 
 	return new cSoftHdMenu("SoftHdDevice", m_pDevice);
 }
@@ -213,7 +213,7 @@ cOsdObject *cPluginSoftHdDevice::MainMenuAction(void)
  */
 cMenuSetupPage *cPluginSoftHdDevice::SetupMenu(void)
 {
-	//LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("plugin: %s:", __FUNCTION__);
 
 	return new cMenuSetupSoft(m_pDevice);
 }
@@ -244,7 +244,7 @@ bool cPluginSoftHdDevice::SetupParse(const char *name, const char *value)
  */
 bool cPluginSoftHdDevice::Service(const char *id, void *data)
 {
-	//LOGDEBUG("%s: id %s", __FUNCTION__, id);
+	//LOGDEBUG("plugin: %s: id %s", __FUNCTION__, id);
 	(void)id;
 	(void)data;
 
@@ -286,7 +286,7 @@ cString cPluginSoftHdDevice::SVDRPCommand(const char *command,
 		__attribute__ ((unused)) int &reply_code)
 {
 	if (!strcasecmp(command, "PLAY")) {
-		LOGDEBUG2(L_MEDIA, "SVDRPCommand: %s %s", command, option);
+		LOGDEBUG2(L_MEDIA, "plugin: %s: SVDRPCommand: %s %s", __FUNCTION__, command, option);
 		cControl::Launch(new cSoftHdControl(option, m_pDevice));
 		return "PLAY url";
 	}

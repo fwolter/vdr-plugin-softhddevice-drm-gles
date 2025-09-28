@@ -46,7 +46,7 @@
 cSoftHdRingbuffer::cSoftHdRingbuffer(size_t size)
 {
 	if (!(m_pBuffer = (char *)malloc(size)))	// allocate buffer
-	LOGFATAL("%s: can't allocate memory for ringbuffer", __FUNCTION__);
+	LOGFATAL("ringbuffer: %s: can't allocate memory for ringbuffer", __FUNCTION__);
 
 	m_Size = size;
 	m_pBufferEnd = m_pBuffer + size;

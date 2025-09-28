@@ -72,7 +72,7 @@ cSoftHdPlayer::cSoftHdPlayer(const char *url, cSoftHdDevice *device)
 	Random = 0;
 	m_pDevice = device;
 	m_pAudio = m_pDevice->Audio();
-//	LOGDEBUG2(L_MEDIA, "cSoftHdPlayer: Player gestartet.");
+//	LOGDEBUG2(L_MEDIA, "mediaplayer: %s: Player gestartet.", __FUNCTION__);
 }
 
 cSoftHdPlayer::~cSoftHdPlayer()
@@ -88,19 +88,19 @@ cSoftHdPlayer::~cSoftHdPlayer()
 		}
 	}
 
-//	LOGDEBUG2(L_MEDIA, "cSoftHdPlayer: Player beendet.");
+//	LOGDEBUG2(L_MEDIA, "mediaplayer: %s: Player beendet.", __FUNCTION__);
 }
 
 void cSoftHdPlayer::Activate(bool On)
 {
-//	LOGDEBUG2(L_MEDIA, "cSoftHdPlayer: Activate %s", On ? "On" : "Off");
+//	LOGDEBUG2(L_MEDIA, "mediaplayer: %s: %s", __FUNCTION__, On ? "On" : "Off");
 	if (On)
 		Start();
 }
 
 void cSoftHdPlayer::Action(void)
 {
-//	LOGDEBUG2(L_MEDIA, "cSoftHdPlayer: Action");
+//	LOGDEBUG2(L_MEDIA, "mediaplayer: %s:", __FUNCTION__);
 	NoModify = 0;
 
 	if (strcasestr(m_pSource, ".M3U") && !strcasestr(m_pSource, ".M3U8")) {
@@ -140,7 +140,7 @@ void cSoftHdPlayer::ReadPL(const char *Playlist)
 
 	f.open(Playlist);
 	if (!f.good()) {
-		LOGERROR("Mediaplayer: open PL %s failed", Playlist);
+		LOGERROR("mediaplayer: %s: open PL %s failed", __FUNCTION__, Playlist);
 		return;
 	}
 
@@ -205,14 +205,14 @@ void cSoftHdPlayer::Player(const char *url)
 
 	AVFormatContext *format = avformat_alloc_context();
 	if (avformat_open_input(&format, url, NULL, NULL) != 0) {
-		LOGERROR("Mediaplayer: Could not open file '%s'", url);
+		LOGERROR("mediaplayer: %s: Could not open file '%s'", __FUNCTION__, url);
 		return;
 	}
 #ifdef MEDIA_DEBUG
 	av_dump_format(format, -1, url, 0);
 #endif
 	if (avformat_find_stream_info(format, NULL) < 0) {
-		LOGERROR("Mediaplayer: Could not retrieve stream info from file '%s'", url);
+		LOGERROR("mediaplayer: %s: Could not retrieve stream info from file '%s'", __FUNCTION__, url);
 		return;
 	}
 
@@ -229,7 +229,7 @@ void cSoftHdPlayer::Player(const char *url)
 		-1, -1, &video_codec, 0);
 
 	if (video_stream_index < 0) {
-		LOGDEBUG2(L_MEDIA, "Player: stream does not seem to contain video");
+		LOGDEBUG2(L_MEDIA, "mediaplayer: %s: stream does not seem to contain video", __FUNCTION__);
 	} else {
 		m_pDevice->SetVideoCodec(video_codec->id,
 			format->streams[video_stream_index]->codecpar,
@@ -261,7 +261,7 @@ repeat:
 				}
 			}
 		} else {
-			LOGDEBUG2(L_MEDIA, "Player: av_read_frame error: %s",
+			LOGDEBUG2(L_MEDIA, "mediaplayer: %s: av_read_frame error: %s", __FUNCTION__,
 				av_err2str(err));
 			StopPlay = 1;
 			continue;
@@ -328,12 +328,12 @@ cSoftHdControl::~cSoftHdControl()
 	delete m_pPlayer;
 	m_pPlayer = NULL;
 	m_pControl = NULL;
-	LOGDEBUG2(L_MEDIA, "cSoftHdControl: Player beendet.");
+	LOGDEBUG2(L_MEDIA, "mediaplayer: %s: Player beendet.", __FUNCTION__);
 }
 
 void cSoftHdControl::Hide(void)
 {
-	LOGDEBUG2(L_MEDIA, "[cSoftHdControl] Hide");
+	LOGDEBUG2(L_MEDIA, "mediaplayer: %s:", __FUNCTION__);
 	if (m_pOsd) {
 		delete m_pOsd;
 		m_pOsd = NULL;
@@ -343,7 +343,7 @@ void cSoftHdControl::Hide(void)
 void cSoftHdControl::ShowProgress(void)
 {
 	if (!m_pOsd) {
-		LOGDEBUG2(L_MEDIA, "[cSoftHdControl] ShowProgress get OSD");
+		LOGDEBUG2(L_MEDIA, "mediaplayer: %s: get OSD", __FUNCTION__);
 		m_pOsd = Skins.Current()->DisplayReplay(false);
 	}
 
@@ -438,7 +438,7 @@ cSoftHdMenu::cSoftHdMenu(const char *title, cSoftHdDevice *device,
 	m_pDevice = device;
 
 	if (cSoftHdControl::Control() && cSoftHdControl::Control()->Player()->FirstEntry) {
-		LOGDEBUG2(L_MEDIA, "cSoftHdMenu: pointer to cSoftHdControl exist.");
+		LOGDEBUG2(L_MEDIA, "mediaplayer: %s: pointer to cSoftHdControl exist.", __FUNCTION__);
 		PlayListMenu();		// Test if PL!!!
 	} else {
 		MainMenu();
@@ -503,7 +503,7 @@ void cSoftHdMenu::SelectPL(void)
 	int n, i;
 
 	if ((n = scandir(cPlugin::ConfigDirectory("softhddevice-drm-gles"), &DirList, NULL, alphasort)) == -1) {
-		LOGERROR("SelectPL: searching PL in %s failed (%d): %m",
+		LOGERROR("mediaplayer: %s: searching PL in %s failed (%d): %m", __FUNCTION__,
 			cPlugin::ConfigDirectory("softhddevice-drm-gles"), errno);
 	} else {
 		Clear();
@@ -540,13 +540,13 @@ void cSoftHdMenu::FindFile(string SearchPath, FILE *playlist)
 	}
 
 	if ((n = scandir(sp, &DirList, NULL, alphasort)) == -1) {
-		LOGERROR("FindFile: scanning directory %s failed (%d): %m", sp, errno);
+		LOGERROR("mediaplayer: %s: scanning directory %s failed (%d): %m", __FUNCTION__, sp, errno);
 	} else {
 		struct stat fileAttributs;
 		for (i = 0; i < n; i++) {
 			string str = SearchPath + "/" + DirList[i]->d_name;
 			if (stat(str.c_str(), &fileAttributs) == -1) {
-				LOGERROR("FindFile: stat on %s failed (%d): %m", str.c_str(), errno);
+				LOGERROR("mediaplayer: %s: stat on %s failed (%d): %m", __FUNCTION__, str.c_str(), errno);
 			} else {
 			if (S_ISDIR(fileAttributs.st_mode) && DirList[i]->d_name[0] != '.') {
 				if (playlist) {
@@ -561,7 +561,7 @@ void cSoftHdMenu::FindFile(string SearchPath, FILE *playlist)
 		for (i = 0; i < n; i++) {
 			string str = SearchPath + "/" + DirList[i]->d_name;
 			if (stat(str.c_str(), &fileAttributs) == -1) {
-				LOGERROR("FindFile: stat on %s failed (%d): %m", str.c_str(), errno);
+				LOGERROR("mediaplayer: %s: stat on %s failed (%d): %m", __FUNCTION__, str.c_str(), errno);
 			} else {
 			if (S_ISREG(fileAttributs.st_mode) && DirList[i]->d_name[0] != '.') {
 				if (playlist) {
@@ -734,7 +734,7 @@ void cSoftHdMenu::PlayMedia(const char *name)
 	if (!cSoftHdControl::Control()) {
 		cControl::Launch(new cSoftHdControl(aim.c_str(), m_pDevice));
 	} else {
-		LOGERROR("PlayMedia can't start %s",aim.c_str());
+		LOGERROR("mediaplayer: %s: can't start %s", __FUNCTION__, aim.c_str());
 	}
 }
 

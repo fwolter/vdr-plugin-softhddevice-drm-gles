@@ -60,7 +60,7 @@ extern "C" {
  */
 cVideoStream::cVideoStream(cSoftHdDevice *device)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("videostream %s:", __FUNCTION__);
 
 	m_pRender = device->Render();
 	m_pDecoder = nullptr;
@@ -73,7 +73,7 @@ cVideoStream::cVideoStream(cSoftHdDevice *device)
  */
 cVideoStream::~cVideoStream(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("videostream %s:", __FUNCTION__);
 }
 
 /**
@@ -86,7 +86,7 @@ void cVideoStream::InitPacketRb(void)
 
 		avpkt = &m_packetRb[i];
 		if (av_new_packet(avpkt, VIDEO_BUFFER_SIZE)) {
-			LOGFATAL("%s: out of memory", __FUNCTION__);
+			LOGFATAL("videostream %s: out of memory", __FUNCTION__);
 		}
 		avpkt->size = 0;
 	}
@@ -132,7 +132,7 @@ void cVideoStream::EnqueueInRb(int64_t pts, const void *data, int size)
 
 	if ((size_t)(avpkt->size + size) >= avpkt->buf->size) {
 		int pktSize = avpkt->size;
-		LOGWARNING("%s: packet buffer too small for %d", __FUNCTION__, avpkt->size + size);
+		LOGWARNING("videostream %s: packet buffer too small for %d", __FUNCTION__, avpkt->size + size);
 		av_grow_packet(avpkt, size);
 		avpkt->size = pktSize;
 	}
@@ -147,7 +147,7 @@ void cVideoStream::EnqueueInRb(int64_t pts, const void *data, int size)
  */
 void cVideoStream::Exit(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("videostream %s:", __FUNCTION__);
 
 	if (m_pDecoder) {
 		m_pDecoder->Close();
@@ -163,7 +163,7 @@ void cVideoStream::Exit(void)
  */
 void cVideoStream::Clear(void)
 {
-	LOGDEBUG("%s: packets %d", __FUNCTION__, atomic_read(&m_packetsFilled));
+	LOGDEBUG("videostream %s: packets %d", __FUNCTION__, atomic_read(&m_packetsFilled));
 
 	AVPacket *avpkt;
 	m_pktsMutex.Lock();
@@ -182,7 +182,7 @@ void cVideoStream::Clear(void)
  */
 void cVideoStream::CloseDecoder(void)
 {
-	LOGDEBUG2(L_CODEC, "%s", __FUNCTION__);
+	LOGDEBUG2(L_CODEC, "videostream %s", __FUNCTION__);
 
 	m_codecId = AV_CODEC_ID_NONE;
 	m_pDecoder->Close();
@@ -197,11 +197,11 @@ void cVideoStream::CloseDecoder(void)
  */
 void cVideoStream::FlushDecoder(void)
 {
-	LOGDEBUG2(L_CODEC, "%s", __FUNCTION__);
+	LOGDEBUG2(L_CODEC, "videostream %s", __FUNCTION__);
 
 	if (m_pRender->HardwareQuirks() & QUIRK_CODEC_FLUSH_WORKAROUND) {
 		if (m_pDecoder->ReopenCodec(m_codecId, m_pPar, &m_timebase, 0))
-			LOGFATAL("%s: Could not reopen the decoder (flush)!", __FUNCTION__);
+			LOGFATAL("videostream %s: Could not reopen the decoder (flush)!", __FUNCTION__);
 	} else {
 		m_pDecoder->FlushBuffers();
 	}
@@ -229,7 +229,7 @@ int cVideoStream::DecodeInput(void)
 	}
 
 	if (IsPaused()) {
-//		LOGINFO("%s: stream is paused", __FUNCTION__);
+//		LOGDEBUG2(L_CODEC, "videostream %s: stream is paused", __FUNCTION__);
 		m_pauseCondition.Broadcast();
 		return 1;
 	}
@@ -258,11 +258,11 @@ int cVideoStream::DecodeInput(void)
 			h264Parser.GetDimensions(&width, &height);
 			m_pktsMutex.Unlock();
 
-			LOGDEBUG2(L_CODEC, "%s: Parsed width %d height %d", __FUNCTION__, width, height);
+			LOGDEBUG2(L_CODEC, "videostream %s: Parsed width %d height %d", __FUNCTION__, width, height);
 		}
 
 		if (m_pDecoder->Open(m_codecId, m_pPar, &m_timebase, 0, width, height))
-			LOGFATAL("%s: Could not open the decoder!", __FUNCTION__);
+			LOGFATAL("videostream %s: Could not open the decoder!", __FUNCTION__);
 		m_newStream = 0;
 	}
 
@@ -313,10 +313,10 @@ receive_trickspeed:
 				while (m_pRender->GetTrickSpeed() && m_pRender->GetTrickCounter() > 0) {
 					AVFrame *trickframe = av_frame_clone(frame);
 					if (!trickframe) {
-						LOGERROR("%s: could not clone frame", __FUNCTION__);
+						LOGERROR("videostream %s: could not clone frame", __FUNCTION__);
 						break;
 					}
-					LOGDEBUG2(L_TRICK, "%s: Trickspeed, send another cloned trick frame %d %p", __FUNCTION__, m_pRender->GetTrickCounter(), trickframe);
+					LOGDEBUG2(L_TRICK, "videostream %s: Trickspeed, send another cloned trick frame %d %p", __FUNCTION__, m_pRender->GetTrickCounter(), trickframe);
 					m_pRender->MarkAsTrickspeedFrame(trickframe);
 					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), trickframe)) {
 						if (IsClosing()) {
@@ -396,7 +396,7 @@ int cVideoStream::GetPacketsFilled(void)
  */
 void cVideoStream::SetInterlaced(int interlaced)
 {
-//	LOGDEBUG("%s: %d", __FUNCTION__, m_interlaced);
+//	LOGDEBUG("videostream %s: %d", __FUNCTION__, m_interlaced);
 	m_interlaced = interlaced;
 }
 
@@ -423,9 +423,9 @@ void cVideoStream::Stop(void)
 	m_closing = 1;
 
 	if (!m_closeCondition.Wait(timeoutInMs))
-		LOGERROR("%s: Timeout while closing stream (%d ms)!", __FUNCTION__, timeoutInMs);
+		LOGERROR("videostream %s: Timeout while closing stream (%d ms)!", __FUNCTION__, timeoutInMs);
 
-	LOGDEBUG2(L_CODEC, "%s: stream is closing", __FUNCTION__);
+	LOGDEBUG2(L_CODEC, "videostream %s: stream is closing", __FUNCTION__);
 }
 
 /**
@@ -442,5 +442,5 @@ void cVideoStream::Pause(void)
 	cMutex mutex;
 	mutex.Lock();
 	if (!m_pauseCondition.TimedWait(mutex, timeoutInMs))
-		LOGERROR("%s: Timeout while pausing stream (%d ms)!", __FUNCTION__, timeoutInMs);
+		LOGERROR("videostream %s: Timeout while pausing stream (%d ms)!", __FUNCTION__, timeoutInMs);
 }

@@ -81,7 +81,7 @@ uint8_t *BufToRgb(cDrmBuffer *buf, int *size, int dstW, int dstH, enum AVPixelFo
 
 	enum AVPixelFormat src_pix_fmt = DrmFormatToAVFormat(buf);
 	if (src_pix_fmt == AV_PIX_FMT_NONE) {
-		LOGERROR("%s: pixel format is not supported!", __FUNCTION__);
+		LOGERROR("grab: %s: pixel format is not supported!", __FUNCTION__);
 		return NULL;
 	}
 
@@ -93,7 +93,7 @@ uint8_t *BufToRgb(cDrmBuffer *buf, int *size, int dstW, int dstH, enum AVPixelFo
 	// planes aren't mmapped, return
 	// this should be done before in VideoCloneBuf
 	if (!buf->Plane(0)) {
-		LOGERROR("%s: prime data is not mapped!", __FUNCTION__);
+		LOGERROR("grab: %s: prime data is not mapped!", __FUNCTION__);
 		return NULL;
 	}
 
@@ -102,13 +102,13 @@ uint8_t *BufToRgb(cDrmBuffer *buf, int *size, int dstW, int dstH, enum AVPixelFo
 	                        dstW, dstH, dstPixFmt,
 	                        SWS_BILINEAR, NULL, NULL, NULL);
 	if (!swsCtx) {
-		LOGERROR("%s: Could not create swsCtx", __FUNCTION__);
+		LOGERROR("grab: %s: Could not create swsCtx", __FUNCTION__);
 		munmap(buffer, buf->Size(0));
 		return NULL;
 	}
 
 	if ((ret = av_image_alloc(dstData, dstLinesize, dstW, dstH, dstPixFmt, 1)) < 0) {
-		LOGERROR("%s: Could not alloc dst image", __FUNCTION__);
+		LOGERROR("grab: %s: Could not alloc dst image", __FUNCTION__);
 		munmap(buffer, buf->Size(0));
 		sws_freeContext(swsCtx);
 		return NULL;
@@ -131,7 +131,7 @@ uint8_t *BufToRgb(cDrmBuffer *buf, int *size, int dstW, int dstH, enum AVPixelFo
 	sws_freeContext(swsCtx);
 	*size = dstBufsize;
 
-	LOGDEBUG2(L_GRAB, "%s: return image at %p size %d", __FUNCTION__, dstData[0], dstBufsize);
+	LOGDEBUG2(L_GRAB, "grab: %s: return image at %p size %d", __FUNCTION__, dstData[0], dstBufsize);
 	return dstData[0];
 }
 
@@ -164,12 +164,12 @@ uint8_t *ScaleRgb24(uint8_t *src, int *size, int srcW, int srcH, int dstW, int d
 	                        dstW, dstH, AV_PIX_FMT_RGB24,
 	                        SWS_BILINEAR, NULL, NULL, NULL);
 	if (!swsCtx) {
-		LOGERROR("%s: Could not create swsCtx", __FUNCTION__);
+		LOGERROR("grab: %s: Could not create swsCtx", __FUNCTION__);
 		return NULL;
 	}
 
 	if ((ret = av_image_alloc(dstData, dstLinesize, dstW, dstH, AV_PIX_FMT_RGB24, 1)) < 0) {
-		LOGERROR("%s: Could not alloc dst image", __FUNCTION__);
+		LOGERROR("grab: %s: Could not alloc dst image", __FUNCTION__);
 		sws_freeContext(swsCtx);
 		return NULL;
 	}
@@ -182,7 +182,7 @@ uint8_t *ScaleRgb24(uint8_t *src, int *size, int srcW, int srcH, int dstW, int d
 	sws_freeContext(swsCtx);
 	*size = dstBufsize;
 
-	LOGDEBUG2(L_GRAB, "%s: return scaled image at %p size %d", __FUNCTION__, dstData[0], dstBufsize);
+	LOGDEBUG2(L_GRAB, "grab: %s: return scaled image at %p size %d", __FUNCTION__, dstData[0], dstBufsize);
 	return dstData[0];
 }
 
@@ -284,9 +284,9 @@ uint8_t *BlitVideo(uint8_t *src, int dstW, int dstH, int dstX, int dstY, int src
  */
 void PrintStreamData(const uint8_t *data, int size)
 {
-	LOGDEBUG("%s: %02x %02x %02x %02x %02x %02x %02x %02x %02x "
+	LOGDEBUG("Stream: %02x %02x %02x %02x %02x %02x %02x %02x %02x "
 	         "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x "
-	         "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x size %d", __FUNCTION__,
+	         "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x size %d",
 	         data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7], data[8],
 	         data[9], data[10], data[11], data[12], data[13], data[14], data[15], data[16], data[17],
 	         data[18], data[19], data[20], data[21], data[22], data[23], data[24], data[25], data[26],

@@ -52,12 +52,12 @@ cAudioDecoder::cAudioDecoder(cSoftHdAudio *audio)
 	int mask = m_pAudio->GetPassthrough();
 
 	if (!(m_pFrame = av_frame_alloc()))
-		LOGFATAL("%s: can't allocate audio decoder frame buffer", __FUNCTION__);
+		LOGFATAL("audiocodec: %s: can't allocate audio decoder frame buffer", __FUNCTION__);
 
 	m_pAudioCtx = NULL;
 
 	m_passthroughMask = mask & (CODEC_PCM | CODEC_AC3 | CODEC_EAC3 | CODEC_DTS);
-	LOGDEBUG2(L_CODEC, "%s: Set passthrough mask %d", __FUNCTION__, m_passthroughMask);
+	LOGDEBUG2(L_CODEC, "audiocodec: %s: Set passthrough mask %d", __FUNCTION__, m_passthroughMask);
 }
 
 /**
@@ -82,32 +82,32 @@ void cAudioDecoder::Open(enum AVCodecID codecId, AVCodecParameters *par, AVRatio
 	// FIXME: errors shouldn't be fatal, maybe just disable audio
 	if (codecId == AV_CODEC_ID_AC3) {
 		if (!(codec = avcodec_find_decoder_by_name("ac3_fixed"))) {
-			LOGFATAL("%s: codec ac3_fixed ID %#06x not found", __FUNCTION__, codecId);
+			LOGFATAL("audiocodec: %s: codec ac3_fixed ID %#06x not found", __FUNCTION__, codecId);
 		}
 	} else if (codecId == AV_CODEC_ID_AAC) {
 		if (!(codec = avcodec_find_decoder_by_name("aac_fixed"))) {
-			LOGFATAL("%s: codec aac_fixed ID %#06x not found", __FUNCTION__, codecId);
+			LOGFATAL("audiocodec: %s: codec aac_fixed ID %#06x not found", __FUNCTION__, codecId);
 		}
 	} else {
 		if (!(codec = avcodec_find_decoder(codecId))) {
-			LOGFATAL("%s: codec %s ID %#06x not found", __FUNCTION__,
+			LOGFATAL("audiocodec: %s: codec %s ID %#06x not found", __FUNCTION__,
 			avcodec_get_name(codecId), codecId);
 		}
 	}
 
 	if (!(m_pAudioCtx = avcodec_alloc_context3(codec)))
-		LOGFATAL("%s: can't allocate audio codec context", __FUNCTION__);
+		LOGFATAL("audiocodec: %s: can't allocate audio codec context", __FUNCTION__);
 
 	m_pAudioCtx->pkt_timebase.num = timebase->num;
 	m_pAudioCtx->pkt_timebase.den = timebase->den;
 
 	if (par && ((avcodec_parameters_to_context(m_pAudioCtx, par)) < 0))
-		LOGERROR("%s: insert parameters to context failed!", __FUNCTION__);
+		LOGERROR("audiocodec: %s: insert parameters to context failed!", __FUNCTION__);
 
 	if (avcodec_open2(m_pAudioCtx, m_pAudioCtx->codec, NULL) < 0)
-		LOGFATAL("%s: can't open audio codec", __FUNCTION__);
+		LOGFATAL("audiocodec: %s: can't open audio codec", __FUNCTION__);
 
-	LOGDEBUG2(L_CODEC, "%s: Codec %s found, passthrough mask %d", __FUNCTION__, m_pAudioCtx->codec->long_name, m_passthroughMask);
+	LOGDEBUG2(L_CODEC, "audiocodec: %s: Codec %s found, passthrough mask %d", __FUNCTION__, m_pAudioCtx->codec->long_name, m_passthroughMask);
 
 	m_currentSampleRate = 0;
 	m_currentHwSampleRate = 0;
@@ -121,7 +121,7 @@ void cAudioDecoder::Open(enum AVCodecID codecId, AVCodecParameters *par, AVRatio
  */
 void cAudioDecoder::Close(void)
 {
-	LOGDEBUG2(L_CODEC, "%s", __FUNCTION__);
+	LOGDEBUG2(L_CODEC, "audiocodec: %s", __FUNCTION__);
 	if (m_pAudioCtx)
 		avcodec_free_context(&m_pAudioCtx);
 }
@@ -159,7 +159,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		int spdifSize = AC3_FRAME_SIZE * 4; // frames * channels * (samplesize / 8)
 
 		if (spdifSize < avpkt->size + 8) {
-			LOGERROR("%s: too much data for spdif buffer!", __FUNCTION__);
+			LOGERROR("audiocodec: %s: too much data for spdif buffer!", __FUNCTION__);
 			return -1;
 		}
 
@@ -189,7 +189,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		}
 
 		if (spdifSize < m_spdifIndex + avpkt->size + 8) {
-			LOGERROR("%s: too much data for spdif buffer!", __FUNCTION__);
+			LOGERROR("audiocodec: %s: too much data for spdif buffer!", __FUNCTION__);
 			return -1;
 		}
 
@@ -201,7 +201,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 			repeat = eac3_repeat[fscod2];
 		}
 
-//		LOGDEBUG2(L_CODEC, "%s: E-AC3: set repeat to %d (fscod = %d) avpkt->size %d (spdifSize %d)",
+//		LOGDEBUG2(L_CODEC, "audiocodec: %s: E-AC3: set repeat to %d (fscod = %d) avpkt->size %d (spdifSize %d)",
 //			__FUNCTION__, repeat, fscod2, avpkt->size, spdifSize);
 
 		// pack upto repeat EAC-3 pakets into one IEC 61937 burst
@@ -262,7 +262,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 
 		// build SPDIF header and append DTS audio data to it
 		if (burstSz < avpkt->size + 8) {
-			LOGERROR("%s: too much data for spdif buffer!", __FUNCTION__);
+			LOGERROR("audiocodec: %s: too much data for spdif buffer!", __FUNCTION__);
 			return -1;
 		}
 		spdif[0] = htole16(IEC61937_PREAMBLE1);
@@ -295,7 +295,7 @@ int cAudioDecoder::UpdateFormat(void)
 	int isPassthrough = 0;
 	int err;
 
-	LOGDEBUG2(L_SOUND, "%s: format change %s %dHz *%d channels%s%s%s%s%s%d", __FUNCTION__,
+	LOGDEBUG2(L_SOUND, "audiocodec: %s: format change %s %dHz *%d channels%s%s%s%s%s%d", __FUNCTION__,
 		av_get_sample_fmt_name(m_pAudioCtx->sample_fmt), m_pAudioCtx->sample_rate, m_pAudioCtx->ch_layout.nb_channels,
 		m_passthroughMask & CODEC_PCM ? " PCM" : "",
 		m_passthroughMask & CODEC_AC3 ? " AC3" : "",
@@ -333,7 +333,7 @@ int cAudioDecoder::UpdateFormat(void)
 
 			m_currentHwSampleRate = 0;
 			m_currentHwNumChannels = 0;
-			LOGERROR("%s: format change update error", __FUNCTION__);
+			LOGERROR("audiocodec: %s: format change update error", __FUNCTION__);
 			return err;
 		}
 	}
@@ -357,18 +357,18 @@ void cAudioDecoder::Decode(const AVPacket * avpkt)
 	do {
 		retSend = avcodec_send_packet(m_pAudioCtx, avpkt);
 		if (retSend < 0)
-			LOGERROR("%s: avcodec_send_packet error: %s", __FUNCTION__, av_err2str(retSend));
+			LOGERROR("audiocodec: %s: avcodec_send_packet error: %s", __FUNCTION__, av_err2str(retSend));
 
 		retRec = avcodec_receive_frame(m_pAudioCtx, frame);
 
 		if (retRec < 0) {
 			if (retRec != AVERROR(EAGAIN)) {
-				LOGERROR("%s: avcodec_receive_frame error: %s", __FUNCTION__, av_err2str(retRec));
+				LOGERROR("audiocodec: %s: avcodec_receive_frame error: %s", __FUNCTION__, av_err2str(retRec));
 			} else if (m_lastPts == (int64_t)AV_NOPTS_VALUE && avpkt->pts != (int64_t)AV_NOPTS_VALUE) {
 				// If multiple avpkt are needed for the first decoded frame (i.e. when m_lastPts == AV_NOPTS_VALUE),
 				// we remember the avpkt->pts if we have one and could use it for the frame->pts,
 				// if we don't get one after decode. This way, m_lastPts also gets set.
-				LOGDEBUG2(L_CODEC, "%s: New audio stream, set initial pts to avpkt->pts %s", __FUNCTION__,
+				LOGDEBUG2(L_CODEC, "audiocodec: %s: New audio stream, set initial pts to avpkt->pts %s", __FUNCTION__,
 					Timestamp2String(avpkt->pts * 1000 * av_q2d(m_pAudioCtx->pkt_timebase)));
 				m_initialAvpktPts = avpkt->pts;
 			}
@@ -378,7 +378,7 @@ void cAudioDecoder::Decode(const AVPacket * avpkt)
 				// Force frame->pts to be a valid pts.
 				// If we don't get a valid pts for the decoded frame and also can not set it to m_lastPts, because
 				// this is the first decoded frame, we use the pts of the initial avpkt.
-				LOGWARNING("%s: NO VALID PTS, set frame->pts to last known avpkt->pts %s", __FUNCTION__,
+				LOGWARNING("audiocodec: %s: NO VALID PTS, set frame->pts to last known avpkt->pts %s", __FUNCTION__,
 					Timestamp2String(m_initialAvpktPts * 1000 * av_q2d(m_pAudioCtx->pkt_timebase)));
 				frame->pts = m_initialAvpktPts;
 				m_initialAvpktPts = AV_NOPTS_VALUE;
@@ -399,7 +399,7 @@ void cAudioDecoder::Decode(const AVPacket * avpkt)
 			}
 
 			if (!m_currentHwNumChannels || !m_currentHwSampleRate) {
-				LOGERROR("%s: unsupported format!", __FUNCTION__);
+				LOGERROR("audiocodec: %s: unsupported format!", __FUNCTION__);
 				av_frame_unref(frame);
 				return;
 			}
@@ -420,7 +420,7 @@ void cAudioDecoder::Decode(const AVPacket * avpkt)
  */
 void cAudioDecoder::FlushBuffers(void)
 {
-	LOGDEBUG2(L_CODEC, "%s", __FUNCTION__);
+	LOGDEBUG2(L_CODEC, "audiocodec: %s", __FUNCTION__);
 	if (m_pAudioCtx)
 		avcodec_flush_buffers(m_pAudioCtx);
 
@@ -434,6 +434,6 @@ void cAudioDecoder::FlushBuffers(void)
  */
 void cAudioDecoder::SetPassthrough(int mask)
 {
-	LOGDEBUG2(L_CODEC, "%s: %d", __FUNCTION__, mask);
+	LOGDEBUG2(L_CODEC, "audiocodec: %s: %d", __FUNCTION__, mask);
 	m_passthroughMask = mask & (CODEC_PCM | CODEC_AC3 | CODEC_EAC3 | CODEC_DTS);
 }

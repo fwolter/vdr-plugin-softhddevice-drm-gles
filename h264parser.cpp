@@ -73,7 +73,7 @@ void cH264Parser::GetDimensions(int *width, int *height)
 		}
 	}
 	if (!m_pStart) {
-		LOGERROR("ParseResolutionH264: No m_pStart %p Pkt %p i %d", m_pStart, m_pAvpkt, i);
+		LOGERROR("H264Parser: %s: No m_pStart %p Pkt %p i %d", __FUNCTION__, m_pStart, m_pAvpkt, i);
 //		PrintStreamData(m_pAvpkt->data, m_pAvpkt->size);
 		return;
 	}

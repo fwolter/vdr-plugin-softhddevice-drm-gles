@@ -95,7 +95,7 @@ static enum AVPixelFormat GetFormat(AVCodecContext * videoCtx,
                                     const enum AVPixelFormat *fmt)
 {
 	while (*fmt != AV_PIX_FMT_NONE) {
-		LOGDEBUG2(L_CODEC, "%s: PixelFormat: %s videoCtx->pix_fmt: %s sw_pix_fmt: %s Codecname: %s",
+		LOGDEBUG2(L_CODEC, "videocodec: %s: PixelFormat: %s videoCtx->pix_fmt: %s sw_pix_fmt: %s Codecname: %s",
 			__FUNCTION__,
 			av_get_pix_fmt_name(*fmt), av_get_pix_fmt_name(videoCtx->pix_fmt),
 			av_get_pix_fmt_name(videoCtx->sw_pix_fmt), videoCtx->codec->name);
@@ -108,7 +108,7 @@ static enum AVPixelFormat GetFormat(AVCodecContext * videoCtx,
 		}
 		fmt++;
 	}
-	LOGWARNING("%s: No pixel format found! Set default format.", __FUNCTION__);
+	LOGWARNING("videocodec: %s: No pixel format found! Set default format.", __FUNCTION__);
 
 	return avcodec_default_get_format(videoCtx, fmt);
 }
@@ -133,7 +133,7 @@ static const AVCodecHWConfig *FindHWConfig(const AVCodec *codec)
 			return config;
 	}
 
-	LOGDEBUG2(L_CODEC, "%s: no HW config found for %s", __FUNCTION__, codec->long_name ? codec->long_name : codec->name);
+	LOGDEBUG2(L_CODEC, "videocodec: %s: no HW config found for %s", __FUNCTION__, codec->long_name ? codec->long_name : codec->name);
 	return NULL;
 }
 
@@ -168,7 +168,7 @@ static const AVCodec *FindDecoder(enum AVCodecID codecId, int forceSoftwareDecod
 	if (codec)
 		return codec;
 
-	LOGWARNING("%s: no decoder found", __FUNCTION__);
+	LOGWARNING("videocodec: %s: no decoder found", __FUNCTION__);
 	return NULL;
 }
 
@@ -224,22 +224,22 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 	if ((m_pRender->HardwareQuirks() & QUIRK_CODEC_DISABLE_H264_HW && codecId == AV_CODEC_ID_H264))
 		swcodec = 1;
 
-	LOGDEBUG2(L_CODEC, "%s: Try to open decoder for CodecID %s%s", __FUNCTION__,
+	LOGDEBUG2(L_CODEC, "videocodec: %s: Try to open decoder for CodecID %s%s", __FUNCTION__,
 		avcodec_get_name(codecId), swcodec ? " (sw decoding forced)" : "");
 
 	const AVCodec *codec = FindDecoder(codecId, swcodec);
 	if (!codec) {
-		LOGERROR("%s: Could not find any decoder for codec %s!", __FUNCTION__, avcodec_get_name(codecId));
+		LOGERROR("videocodec: %s: Could not find any decoder for codec %s!", __FUNCTION__, avcodec_get_name(codecId));
 		return -1;
 	}
 
-	LOGDEBUG2(L_CODEC, "%s: Codec %s for CodecID %s found%s", __FUNCTION__,
+	LOGDEBUG2(L_CODEC, "videocodec: %s: Codec %s for CodecID %s found%s", __FUNCTION__,
 		codec->long_name ? codec->long_name : codec->name,
 		avcodec_get_name(codecId), swcodec ? " (sw decoding forced)" : "");
 
 	m_pVideoCtx = avcodec_alloc_context3(codec);
 	if (!m_pVideoCtx) {
-		LOGERROR("%s: can't alloc codec context!", __FUNCTION__);
+		LOGERROR("videocodec: %s: can't alloc codec context!", __FUNCTION__);
 		return -1;
 	}
 
@@ -250,11 +250,11 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 		const char *type_name = av_hwdevice_get_type_name(config->device_type);
 		if (av_hwdevice_ctx_create(&hwDeviceCtx, config->device_type, NULL, NULL, 0) < 0) {
 			avcodec_free_context(&m_pVideoCtx);
-			LOGERROR("%s: Error creating HW context %s",__FUNCTION__,
+			LOGERROR("videocodec: %s: Error creating HW context %s",__FUNCTION__,
 				type_name ? type_name : "unknown");
 			return -1;
 		}
-		LOGDEBUG2(L_CODEC, "%s: Using %s HW codec", __FUNCTION__,
+		LOGDEBUG2(L_CODEC, "videocodec: %s: Using %s HW codec", __FUNCTION__,
 			type_name ? type_name : "unknown");
 		m_pVideoCtx->hw_device_ctx = av_buffer_ref(hwDeviceCtx);
 		m_pVideoCtx->pix_fmt = AV_PIX_FMT_DRM_PRIME;
@@ -262,7 +262,7 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 
 	if (par) {
 		if ((avcodec_parameters_to_context(m_pVideoCtx, par)) < 0)
-			LOGERROR("%s: insert parameters to context failed!", __FUNCTION__);
+			LOGERROR("videocodec: %s: insert parameters to context failed!", __FUNCTION__);
 	}
 
 	m_pVideoCtx->codec_id = codecId;
@@ -283,13 +283,13 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 			m_pVideoCtx->coded_height = par->height;
 			m_pVideoCtx->width = par->width;
 			m_pVideoCtx->height = par->height;
-			LOGDEBUG2(L_CODEC, "%s: Set width %d and height %d from par", __FUNCTION__, par->width, par->height);
+			LOGDEBUG2(L_CODEC, "videocodec: %s: Set width %d and height %d from par", __FUNCTION__, par->width, par->height);
 		} else if (width && height) {
 			m_pVideoCtx->coded_width = width;
 			m_pVideoCtx->coded_height = height;
 			m_pVideoCtx->width = width;
 			m_pVideoCtx->height = height;
-			LOGDEBUG2(L_CODEC, "%s: Set width %d and height %d forced", __FUNCTION__, width, height);
+			LOGDEBUG2(L_CODEC, "videocodec: %s: Set width %d and height %d forced", __FUNCTION__, width, height);
 		}
 	}
 
@@ -304,29 +304,29 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 /*
 	if (strstr(codec->name, "_v4l2")) {
 		if (av_opt_set_int(m_pVideoCtx->priv_data, "num_capture_buffers", NUM_CAPTURE_BUFFERS, 0) < 0) {
-			LOGERROR("%s: can't set %d num_capture_buffers", __FUNCTION__, NUM_CAPTURE_BUFFERS);
+			LOGERROR("videocodec: %s: can't set %d num_capture_buffers", __FUNCTION__, NUM_CAPTURE_BUFFERS);
 		}
 		LOGDEBUG2(L_CODEC, "cVideoDecoder::Open: set num_capture_buffers %d", NUM_CAPTURE_BUFFERS);
 		if (av_opt_set_int(m_pVideoCtx->priv_data, "num_output_buffers", NUM_OUTPUT_BUFFERS, 0) < 0) {
-			LOGERROR("%s: can't set %d num_output_buffers", __FUNCTION__, NUM_OUTPUT_BUFFERS);
+			LOGERROR("videocodec: %s: can't set %d num_output_buffers", __FUNCTION__, NUM_OUTPUT_BUFFERS);
 		}
-		LOGDEBUG2(L_CODEC, "%s: set num_output_buffers %d", __FUNCTION__, NUM_OUTPUT_BUFFERS);
+		LOGDEBUG2(L_CODEC, "videocodec: %s: set num_output_buffers %d", __FUNCTION__, NUM_OUTPUT_BUFFERS);
 	}
 */
 	int err = avcodec_open2(m_pVideoCtx, m_pVideoCtx->codec, NULL);
 	if (err < 0) {
 		avcodec_free_context(&m_pVideoCtx);
 		if (forceSoftwareDecoder) {
-			LOGERROR("%s: Error opening the decoder: %s", __FUNCTION__, av_err2str(err));
+			LOGERROR("videocodec: %s: Error opening the decoder: %s", __FUNCTION__, av_err2str(err));
 			return -1;
 		}
-		LOGDEBUG2(L_CODEC, "%s: Could not open %s decoder, try opening software decoder",
+		LOGDEBUG2(L_CODEC, "videocodec: %s: Could not open %s decoder, try opening software decoder",
 			__FUNCTION__, codec->long_name ? codec->long_name : codec->name);
 
 		return Open(codecId, par, timebase, 1, 0, 0);
 	}
 
-	LOGDEBUG2(L_CODEC, "%s: Codec %s for CodecID %s opened%s, using %d threads",
+	LOGDEBUG2(L_CODEC, "videocodec: %s: Codec %s for CodecID %s opened%s, using %d threads",
 		__FUNCTION__,
 		codec->long_name ? codec->long_name : codec->name,
 		avcodec_get_name(codecId),
@@ -345,7 +345,7 @@ void cVideoDecoder::Close(void)
 {
 	m_mutex.Lock();
 	if (m_pVideoCtx != nullptr) {
-		LOGDEBUG2(L_CODEC, "%s: m_pVideoCtx %p", __FUNCTION__, m_pVideoCtx);
+		LOGDEBUG2(L_CODEC, "videocodec: %s: m_pVideoCtx %p", __FUNCTION__, m_pVideoCtx);
 		m_lastCodedWidth = m_pVideoCtx->coded_width;
 		m_lastCodedHeight = m_pVideoCtx->coded_height;
 		avcodec_free_context(&m_pVideoCtx);
@@ -373,13 +373,13 @@ int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
 
 	f = av_bsf_get_by_name("extract_extradata");
 	if (!f) {
-		LOGERROR("%s: extradata av_bsf_get_by_name failed!", __FUNCTION__);
+		LOGERROR("videocodec: %s: extradata av_bsf_get_by_name failed!", __FUNCTION__);
 		return -1;
 	}
 
 	ret = av_bsf_alloc(f, &bsfCtx);
 	if (ret < 0) {
-		LOGERROR("%s: extradata av_bsf_alloc failed!", __FUNCTION__);
+		LOGERROR("videocodec: %s: extradata av_bsf_alloc failed!", __FUNCTION__);
 		return ret;
 	}
 
@@ -387,7 +387,7 @@ int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
 
 	ret = av_bsf_init(bsfCtx);
 	if (ret < 0) {
-		LOGERROR("%s: extradata av_bsf_init failed!", __FUNCTION__);
+		LOGERROR("videocodec: %s: extradata av_bsf_init failed!", __FUNCTION__);
 		av_bsf_free(&bsfCtx);
 		return ret;
 	}
@@ -396,14 +396,14 @@ int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
 	AVPacket *pktRef = dstPkt;
 
 	if (!dstPkt) {
-		LOGERROR("%s: extradata av_packet_alloc failed!", __FUNCTION__);
+		LOGERROR("videocodec: %s: extradata av_packet_alloc failed!", __FUNCTION__);
 		av_bsf_free(&bsfCtx);
 		return -1;
 	}
 
 	ret = av_packet_ref(pktRef, avpkt);
 	if (ret < 0) {
-		LOGERROR("%s: extradata av_packet_ref failed!", __FUNCTION__);
+		LOGERROR("videocodec: %s: extradata av_packet_ref failed!", __FUNCTION__);
 		av_packet_free(&dstPkt);
 		av_bsf_free(&bsfCtx);
 		return ret;
@@ -411,7 +411,7 @@ int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
 
 	ret = av_bsf_send_packet(bsfCtx, pktRef);
 	if (ret < 0) {
-		LOGERROR("%s: extradata av_bsf_send_packet failed!", __FUNCTION__);
+		LOGERROR("videocodec: %s: extradata av_bsf_send_packet failed!", __FUNCTION__);
 		av_packet_unref(pktRef);
 		av_packet_free(&dstPkt);
 		av_bsf_free(&bsfCtx);
@@ -420,7 +420,7 @@ int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
 
 	ret = av_bsf_receive_packet(bsfCtx, pktRef);
 	if (ret < 0) {
-		LOGERROR("%s: extradata av_bsf_send_packet failed!", __FUNCTION__);
+		LOGERROR("videocodec: %s: extradata av_bsf_send_packet failed!", __FUNCTION__);
 		av_packet_unref(pktRef);
 		av_packet_free(&dstPkt);
 		av_bsf_free(&bsfCtx);
@@ -458,7 +458,7 @@ int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 
 	// force a flush, if avpkt is NULL, this initiates a decoder drain
 	if (!avpkt) {
-		LOGDEBUG2(L_CODEC, "%s: send NULL packet, flush reqeusted", __FUNCTION__);
+		LOGDEBUG2(L_CODEC, "videocodec: %s: send NULL packet, flush reqeusted", __FUNCTION__);
 		m_mutex.Lock();
 		avcodec_send_packet(m_pVideoCtx, NULL);
 		m_mutex.Unlock();
@@ -471,7 +471,7 @@ int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 	// get extradata, if not yet done
 	if (!m_pVideoCtx->extradata_size) {
 		if (!GetExtraData(avpkt))
-			LOGDEBUG2(L_CODEC, "%s: set extradata %p %d", __FUNCTION__, m_pVideoCtx->extradata, m_pVideoCtx->extradata_size);
+			LOGDEBUG2(L_CODEC, "videocodec: %s: set extradata %p %d", __FUNCTION__, m_pVideoCtx->extradata, m_pVideoCtx->extradata_size);
 	}
 
 	m_mutex.Lock();
@@ -479,12 +479,12 @@ int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 	m_mutex.Unlock();
 	if (ret) {
 		if (ret != AVERROR(EAGAIN))
-			LOGDEBUG2(L_CODEC, "%s: send_packet ret: %s", __FUNCTION__, av_err2str(ret));
+			LOGDEBUG2(L_CODEC, "videocodec: %s: send_packet ret: %s", __FUNCTION__, av_err2str(ret));
 		return ret;
 	}
 
 	m_cntPacketsSent++;
-	LOGDEBUG2(L_PACKET, "%s:   %6d PTS %s <<---", __FUNCTION__, m_cntPacketsSent, Timestamp2String(avpkt->pts / 90));
+	LOGDEBUG2(L_PACKET, "videocodec: %s:   %6d PTS %s <<---", __FUNCTION__, m_cntPacketsSent, Timestamp2String(avpkt->pts / 90));
 	return 0;
 }
 
@@ -508,7 +508,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 		return AVERROR(EINVAL);
 
 	if (!(pFrame = av_frame_alloc()))
-		LOGFATAL("%s: can't allocate decoder frame", __FUNCTION__);
+		LOGFATAL("videocodec: %s: can't allocate decoder frame", __FUNCTION__);
 
 	m_mutex.Lock();
 	ret = avcodec_receive_frame(m_pVideoCtx, pFrame);
@@ -516,15 +516,15 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 
 	if (ret) {
 		if (ret == AVERROR_EOF)
-			LOGDEBUG2(L_CODEC, "%s: receive_frame ret: AVERROR_EOF", __FUNCTION__);
+			LOGDEBUG2(L_CODEC, "videocodec: %s: receive_frame ret: AVERROR_EOF", __FUNCTION__);
 		else if (ret != AVERROR(EAGAIN))
-			LOGDEBUG2(L_CODEC, "%s: receive_frame ret: %s", __FUNCTION__, av_err2str(ret));
+			LOGDEBUG2(L_CODEC, "videocodec: %s: receive_frame ret: %s", __FUNCTION__, av_err2str(ret));
 		av_frame_free(&pFrame);
 		return ret;
 	}
 
 	if (pFrame->flags == AV_FRAME_FLAG_CORRUPT)
-		LOGDEBUG2(L_CODEC, "%s: AV_FRAME_FLAG_CORRUPT", __FUNCTION__);
+		LOGDEBUG2(L_CODEC, "videocodec: %s: AV_FRAME_FLAG_CORRUPT", __FUNCTION__);
 
 	if (noDeint) {
 #if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
@@ -532,7 +532,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 #else
 		pFrame->flags &= ~AV_FRAME_FLAG_INTERLACED;
 #endif
-		LOGDEBUG2(L_CODEC, "%s: interlaced_frame = 0", __FUNCTION__);
+		LOGDEBUG2(L_CODEC, "videocodec: %s: interlaced_frame = 0", __FUNCTION__);
 	}
 
 	// codec artifacts workaround for amlogic H264:
@@ -541,11 +541,11 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 	   (m_pRender->HardwareQuirks() & QUIRK_CODEC_SKIP_FIRST_FRAMES) && m_cntStartKeyFrames) {
 #if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
 		if (pFrame->key_frame) {
-			LOGDEBUG2(L_CODEC, "%s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,
+			LOGDEBUG2(L_CODEC, "videocodec: %s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,
 				pFrame->interlaced_frame ? "interlaced" : "progressive", m_cntStartKeyFrames);
 #else
 		if (pFrame->flags & AV_FRAME_FLAG_KEY) {
-			LOGDEBUG2(L_CODEC, "%s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,
+			LOGDEBUG2(L_CODEC, "videocodec: %s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,
 				pFrame->flags & AV_FRAME_FLAG_INTERLACED ? "interlaced" : "progressive", m_cntStartKeyFrames);
 #endif
 			if (m_cntStartKeyFrames++ > QUIRK_CODEC_SKIP_NUM_FRAMES - 1)
@@ -559,7 +559,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 	*frame = pFrame;
 
 	m_cntFramesReceived++;
-	LOGDEBUG2(L_PACKET, "%s: %6d PTS %s --->> (%2d)", __FUNCTION__,
+	LOGDEBUG2(L_PACKET, "videocodec: %s: %6d PTS %s --->> (%2d)", __FUNCTION__,
 		m_cntFramesReceived, Timestamp2String(pFrame->pts / 90), m_cntPacketsSent - m_cntFramesReceived);
 	return 0;
 }
@@ -586,7 +586,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 int cVideoDecoder::ReopenCodec(enum AVCodecID codecId, AVCodecParameters *par,
                                AVRational *timebase, int forceSoftwareDecoding)
 {
-	LOGDEBUG2(L_CODEC, "%s: m_pVideoCtx %p", __FUNCTION__, m_pVideoCtx);
+	LOGDEBUG2(L_CODEC, "videocodec: %s: m_pVideoCtx %p", __FUNCTION__, m_pVideoCtx);
 	if (m_pVideoCtx) {
 		Close();
 		if (Open(codecId, par, timebase, forceSoftwareDecoding, m_lastCodedWidth, m_lastCodedHeight))
@@ -603,7 +603,7 @@ int cVideoDecoder::ReopenCodec(enum AVCodecID codecId, AVCodecParameters *par,
  */
 void cVideoDecoder::FlushBuffers(void)
 {
-	LOGDEBUG2(L_CODEC, "%s: m_pVideoCtx %p", __FUNCTION__, m_pVideoCtx);
+	LOGDEBUG2(L_CODEC, "videocodec: %s: m_pVideoCtx %p", __FUNCTION__, m_pVideoCtx);
 	m_mutex.Lock();
 	if (m_pVideoCtx)
 		avcodec_flush_buffers(m_pVideoCtx);

@@ -48,7 +48,7 @@ cSoftOsd::cSoftOsd(int left, int top, uint level, cSoftHdDevice *device)
 :cOsd(left, top, level)
 {
 	// FIXME: OsdWidth/OsdHeight not correct!
-	LOGDEBUG2(L_OSD, "OSD %s: %dx%d%+d%+d, %d", __FUNCTION__, OsdWidth(), OsdHeight(), left, top, level);
+	LOGDEBUG2(L_OSD, "osd: %s: %dx%d%+d%+d, %d", __FUNCTION__, OsdWidth(), OsdHeight(), left, top, level);
 
 	m_pDevice = device;
 	m_osdLevel = level;
@@ -61,7 +61,7 @@ cSoftOsd::cSoftOsd(int left, int top, uint level, cSoftHdDevice *device)
  */
 cSoftOsd::~cSoftOsd(void)
 {
-	LOGDEBUG2(L_OSD, "OSD %s: level %d", __FUNCTION__, m_osdLevel);
+	LOGDEBUG2(L_OSD, "osd: %s: level %d", __FUNCTION__, m_osdLevel);
 
 	SetActive(false);	// done by SetActive(): OsdClose();
 }
@@ -76,7 +76,7 @@ cSoftOsd::~cSoftOsd(void)
  */
 void cSoftOsd::SetActive(bool on)
 {
-	LOGDEBUG2(L_OSD, "OSD %s: %d level %d", __FUNCTION__, on, m_osdLevel);
+	LOGDEBUG2(L_OSD, "osd: %s: %d level %d", __FUNCTION__, on, m_osdLevel);
 
 	if (Active() == on) {
 		return;				// already active, no action
@@ -99,7 +99,7 @@ void cSoftOsd::SetActive(bool on)
  */
 eOsdError cSoftOsd::SetAreas(const tArea * areas, int n)
 {
-	LOGDEBUG2(L_OSD, "OSD %s: %d areas", __FUNCTION__, n);
+	LOGDEBUG2(L_OSD, "osd: %s: %d areas", __FUNCTION__, n);
 
 	// clear old OSD, when new areas are set
 	if (!IsTrueColor()) {
@@ -125,7 +125,7 @@ void cSoftOsd::Flush(void)
 {
 	cPixmapMemory *pm;
 
-	LOGDEBUG2(L_OSD, "OSD %s: level %d active %d", __FUNCTION__, m_osdLevel,
+	LOGDEBUG2(L_OSD, "osd: %s: level %d active %d", __FUNCTION__, m_osdLevel,
 	Active());
 
 	if (!Active()) {	// this osd is not active
@@ -139,7 +139,7 @@ void cSoftOsd::Flush(void)
 		static char warned;
 
 		if (!warned) {
-			LOGDEBUG2(L_OSD, "OSD %s: FIXME: should be truecolor", __FUNCTION__);
+			LOGDEBUG2(L_OSD, "osd: %s: FIXME: should be truecolor", __FUNCTION__);
 			warned = 1;
 		}
 
@@ -216,7 +216,7 @@ void cSoftOsd::Flush(void)
 			}
 
 			if (w > bitmap->Width() || h > bitmap->Height())
-				LOGDEBUG2(L_OSD, ": dirty area too big");
+				LOGDEBUG2(L_OSD, "osd: %s: dirty area too big", __FUNCTION__);
 
 			argb = (uint8_t *) malloc(w * h * sizeof(uint32_t));
 			for (y = y1; y <= y2; ++y) {
@@ -225,7 +225,7 @@ void cSoftOsd::Flush(void)
 					bitmap->GetColor(x, y);
 				}
 			}
-			LOGDEBUG2(L_OSD, "OSD %s: draw %dx%d%+d%+d bm", __FUNCTION__, w, h, xs + x1, ys + y1);
+			LOGDEBUG2(L_OSD, "osd: %s: draw %dx%d%+d%+d bm", __FUNCTION__, w, h, xs + x1, ys + y1);
 			m_pDevice->OsdDrawARGB(0, 0, w, h, w * sizeof(uint32_t), argb, xs + x1, ys + y1);
 
 			bitmap->Clean();
@@ -298,7 +298,7 @@ void cSoftOsd::Flush(void)
 		if (h > height - y)
 			h = height - y;
 
-		LOGDEBUG2(L_OSD, "OSD %s: draw %dx%d%+d%+d*%d -> %+d%+d %p", __FUNCTION__, w, h, xp, yp, stride, x, y, pm->Data());
+		LOGDEBUG2(L_OSD, "osd: %s: draw %dx%d%+d%+d*%d -> %+d%+d %p", __FUNCTION__, w, h, xp, yp, stride, x, y, pm->Data());
 		m_pDevice->OsdDrawARGB(xp, yp, w, h, stride, pm->Data(), x, y);
 
 		DestroyPixmap(pm);
@@ -315,8 +315,7 @@ void cSoftOsd::Flush(void)
  */
 cSoftOsdProvider::cSoftOsdProvider(cSoftHdDevice *device) : cOsdProvider()
 {
-	LOGDEBUG("%s:", __FUNCTION__);
-	LOGDEBUG2(L_OSD, "OSD %s:", __FUNCTION__);
+	LOGDEBUG2(L_OSD, "osdprovider: %s:", __FUNCTION__);
 	m_pDevice = device;
 
 #ifdef USE_GLES
@@ -330,7 +329,7 @@ cSoftOsdProvider::cSoftOsdProvider(cSoftHdDevice *device) : cOsdProvider()
  */
 cSoftOsdProvider::~cSoftOsdProvider()
 {
-	LOGDEBUG2(L_OSD, "%s:", __FUNCTION__);
+	LOGDEBUG2(L_OSD, "osdprovider %s:", __FUNCTION__);
 #ifdef USE_GLES
 	if (!m_pDevice->OglOsdIsDisabled())
 		StopOpenGlThread();
@@ -350,20 +349,20 @@ cOsd *cSoftOsdProvider::CreateOsd(int left, int top, uint level)
 {
 #ifdef USE_GLES
 	if (m_pDevice->OglOsdIsDisabled()) {
-		LOGDEBUG("OSD %s: %d, %d, %d, OpenGL disabled, using software rendering", __FUNCTION__, left, top, level);
+		LOGDEBUG("osdprovider: %s: %d, %d, %d, OpenGL disabled, using software rendering", __FUNCTION__, left, top, level);
 		return m_pOsd = new cSoftOsd(left, top, level, m_pDevice);
 	}
 
 	if (StartOpenGlThread()) {
-		LOGDEBUG2(L_OSD, "OSD %s: %d, %d, %d, using OpenGL OSD support", __FUNCTION__, left, top, level);
+		LOGDEBUG2(L_OSD, "osdprovider: %s: %d, %d, %d, using OpenGL OSD support", __FUNCTION__, left, top, level);
 		return m_pOsd = new cOglOsd(left, top, level, m_pOglThread, m_pDevice);
 	}
 
-	LOGDEBUG("OSD %s: %d, %d, %d, OpenGL failed, using software rendering", __FUNCTION__, left, top, 999);
+	LOGDEBUG("osdprovider: %s: %d, %d, %d, OpenGL failed, using software rendering", __FUNCTION__, left, top, 999);
 	m_pDevice->SetDisableOglOsd();
 	return m_pOsd = new cSoftOsd(left, top, 999, m_pDevice);
 #else
-	LOGDEBUG2(L_OSD, "OSD %s: %d, %d, %d", __FUNCTION__, left, top, level);
+	LOGDEBUG2(L_OSD, "osdprovider: %s: %d, %d, %d", __FUNCTION__, left, top, level);
 	return m_pOsd = new cSoftOsd(left, top, level, m_pDevice);
 #endif
 }
@@ -394,7 +393,7 @@ void cSoftOsdProvider::OsdSizeChanged(void) {
  */
 bool cSoftOsdProvider::StartOpenGlThread(void) {
 	if (m_pDevice->OglOsdIsDisabled()) {
-		LOGDEBUG2(L_OPENGL, "OpenGL OSD disabled, OpenGL worker thread NOT started");
+		LOGDEBUG2(L_OPENGL, "osdprovider: %s: OpenGL OSD disabled, OpenGL worker thread NOT started", __FUNCTION__);
 		return false;
 	}
 
@@ -405,7 +404,7 @@ bool cSoftOsdProvider::StartOpenGlThread(void) {
 		m_pOglThread.reset();
 	}
 	cCondWait wait;
-	LOGDEBUG2(L_OPENGL, "Trying to start OpenGL worker thread");
+	LOGDEBUG2(L_OPENGL, "osdprovider: %s: Trying to start OpenGL worker thread", __FUNCTION__);
 	m_pOglThread.reset(new cOglThread(&wait, m_pDevice->MaxSizeGPUImageCache(), m_pDevice));
 	wait.Wait();
 
@@ -414,7 +413,7 @@ bool cSoftOsdProvider::StartOpenGlThread(void) {
 		return true;
 	}
 
-	LOGDEBUG2(L_OPENGL, "OpenGL worker thread NOT started");
+	LOGDEBUG2(L_OPENGL, "osdprovider: %s: OpenGL worker thread NOT started", __FUNCTION__);
 	return false;
 }
 
@@ -422,7 +421,7 @@ bool cSoftOsdProvider::StartOpenGlThread(void) {
  * Stop the OpenGL thread
  */
 void cSoftOsdProvider::StopOpenGlThread(void) {
-	LOGDEBUG2(L_OPENGL, "stopping OpenGL worker thread");
+	LOGDEBUG2(L_OPENGL, "osdprovider: %s: stopping OpenGL worker thread", __FUNCTION__);
 	if (m_pOglThread) {
 		m_pOglThread->Stop();
 	}

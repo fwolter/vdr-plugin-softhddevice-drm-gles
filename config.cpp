@@ -53,7 +53,7 @@ cSoftHdConfig::~cSoftHdConfig(void)
  */
 bool cSoftHdConfig::SetupParse(const char *name, const char *value, cSoftHdDevice *device, cSoftHdAudio *audio)
 {
-	//LOGDEBUG("%s: '%s' = '%s'", __FUNCTION__, name, value);
+	//LOGDEBUG("config: %s: '%s' = '%s'", __FUNCTION__, name, value);
 
 	if        (!strcasecmp(name, "MakePrimary"))           { ConfigMakePrimary = atoi(value);
 #ifdef USE_GLES

@@ -194,7 +194,7 @@ void cSoftHdAudio::Normalize(uint16_t *samples, int count)
 			} else {
 				factor = 1000;
 			}
-			LOGDEBUG2(L_SOUND, "%s: avg %8d, fac=%6.3f, norm=%6.3f", __FUNCTION__,
+			LOGDEBUG2(L_SOUND, "audio: %s: avg %8d, fac=%6.3f, norm=%6.3f", __FUNCTION__,
 					  avg, factor / 1000.0, m_normalizeFactor / 1000.0);
 			}
 
@@ -273,7 +273,7 @@ void cSoftHdAudio::Compress(uint16_t *samples, int count)
 		return;				// silent nothing todo
 	}
 
-	LOGDEBUG2(L_SOUND, "%s: max %5d, fac=%6.3f, com=%6.3f", __FUNCTION__, maxSample,
+	LOGDEBUG2(L_SOUND, "audio: %s: max %5d, fac=%6.3f, com=%6.3f", __FUNCTION__, maxSample,
 	          factor / 1000.0, m_compressionFactor / 1000.0);
 
 	// apply compression factor
@@ -342,7 +342,7 @@ void cSoftHdAudio::SetEq(int band[17], int onoff)
 {
 	int i;
 /*
-	LOGDEBUG2(L_SOUND, "%s: %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i onoff %d", __FUNCTION__,
+	LOGDEBUG2(L_SOUND, "audio: %s: %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i %i onoff %d", __FUNCTION__,
 	          band[0], band[1], band[2], band[3], band[4], band[5], band[6], band[7],
 	          band[8], band[9], band[10], band[11], band[12], band[13], band[14],
 	          band[15], band[16], band[17], onoff);
@@ -442,17 +442,17 @@ int cSoftHdAudio::InitFilter(AVCodecContext *audioCtx)
 #endif
 
 	if (!(m_pFilterGraph = avfilter_graph_alloc()))
-		LOGERROR("%s: Unable to create filter graph.", __FUNCTION__);
+		LOGERROR("audio: %s: Unable to create filter graph.", __FUNCTION__);
 
 	// input buffer
 	if (!(abuffer = avfilter_get_by_name("abuffer")))
-		LOGWARNING("%s: Could not find the abuffer filter.", __FUNCTION__);
+		LOGWARNING("audio: %s: Could not find the abuffer filter.", __FUNCTION__);
 	if (!(m_pBuffersrcCtx = avfilter_graph_alloc_filter(m_pFilterGraph, abuffer, "src")))
-		LOGWARNING("%s: Could not allocate the m_pBuffersrcCtx instance.", __FUNCTION__);
-	
+		LOGWARNING("audio: %s: Could not allocate the m_pBuffersrcCtx instance.", __FUNCTION__);
+
 	av_channel_layout_describe(&audioCtx->ch_layout, channelLayout, sizeof(channelLayout));
 	
-	LOGDEBUG2(L_SOUND, "%s: IN channelLayout %s sample_fmt %s sample_rate %d channels %d", __FUNCTION__,
+	LOGDEBUG2(L_SOUND, "audio: %s: IN channelLayout %s sample_fmt %s sample_rate %d channels %d", __FUNCTION__,
 	          channelLayout, av_get_sample_fmt_name(audioCtx->sample_fmt), audioCtx->sample_rate, audioCtx->ch_layout.nb_channels);
 	
 	av_opt_set    (m_pBuffersrcCtx, "channel_layout", channelLayout,                                AV_OPT_SEARCH_CHILDREN);
@@ -463,14 +463,14 @@ int cSoftHdAudio::InitFilter(AVCodecContext *audioCtx)
 	
 	// initialize the filter with NULL options, set all options above.
 	if (avfilter_init_str(m_pBuffersrcCtx, NULL) < 0)
-		LOGWARNING("%s: Could not initialize the abuffer filter.", __FUNCTION__);
+		LOGWARNING("audio: %s: Could not initialize the abuffer filter.", __FUNCTION__);
 
 	// superequalizer
 	if (m_useEqualizer) {
 		if (!(eq = avfilter_get_by_name("superequalizer")))
-			LOGWARNING("%s: Could not find the superequalizer filter.", __FUNCTION__);
+			LOGWARNING("audio: %s: Could not find the superequalizer filter.", __FUNCTION__);
 		if (!(pfilterCtx[numFilter] = avfilter_graph_alloc_filter(m_pFilterGraph, eq, "superequalizer")))
-			LOGWARNING("%s: Could not allocate the superequalizer instance.", __FUNCTION__);
+			LOGWARNING("audio: %s: Could not allocate the superequalizer instance.", __FUNCTION__);
 		snprintf(optionsStr, sizeof(optionsStr),"1b=%.2f:2b=%.2f:3b=%.2f:4b=%.2f:5b=%.2f"
 			":6b=%.2f:7b=%.2f:8b=%.2f:9b=%.2f:10b=%.2f:11b=%.2f:12b=%.2f:13b=%.2f:14b=%.2f:"
 			"15b=%.2f:16b=%.2f:17b=%.2f:18b=%.2f ", m_equalizerBand[0], m_equalizerBand[1],
@@ -479,7 +479,7 @@ int cSoftHdAudio::InitFilter(AVCodecContext *audioCtx)
 			m_equalizerBand[10], m_equalizerBand[11], m_equalizerBand[12], m_equalizerBand[13],
 			m_equalizerBand[14], m_equalizerBand[15], m_equalizerBand[16], m_equalizerBand[17]);
 		if (avfilter_init_str(pfilterCtx[numFilter], optionsStr) < 0)
-			LOGWARNING("%s: Could not initialize the superequalizer filter.", __FUNCTION__);
+			LOGWARNING("audio: %s: Could not initialize the superequalizer filter.", __FUNCTION__);
 		numFilter++;
 	}
 
@@ -489,26 +489,26 @@ int cSoftHdAudio::InitFilter(AVCodecContext *audioCtx)
 	av_channel_layout_describe(&channel_layout, channelLayout, sizeof(channelLayout));
 	av_channel_layout_uninit(&channel_layout);
 	// should use IN layout if more then 2 ch!?
-	LOGDEBUG2(L_SOUND, "%s: OUT m_downmix %d m_hwNumChannels %d m_hwSampleRate %d channelLayout %s bytes_per_sample %d",
+	LOGDEBUG2(L_SOUND, "audio: %s: OUT m_downmix %d m_hwNumChannels %d m_hwSampleRate %d channelLayout %s bytes_per_sample %d",
 			  __FUNCTION__, m_downmix, m_hwNumChannels, m_hwSampleRate, channelLayout, av_get_bytes_per_sample(AV_SAMPLE_FMT_S16));
 	if (!(aformat = avfilter_get_by_name("aformat")))
-		LOGWARNING("%s: Could not find the aformat filter.", __FUNCTION__);
+		LOGWARNING("audio: %s: Could not find the aformat filter.", __FUNCTION__);
 	if (!(pfilterCtx[numFilter] = avfilter_graph_alloc_filter(m_pFilterGraph, aformat, "aformat")))
-		LOGWARNING("%s: Could not allocate the aformat instance.", __FUNCTION__);
+		LOGWARNING("audio: %s: Could not allocate the aformat instance.", __FUNCTION__);
 	snprintf(optionsStr, sizeof(optionsStr),
 		"sample_fmts=%s:sample_rates=%d:channel_layouts=%s",
 		av_get_sample_fmt_name(AV_SAMPLE_FMT_S16), m_hwSampleRate, channelLayout);
 	if (avfilter_init_str(pfilterCtx[numFilter], optionsStr) < 0)
-		LOGWARNING("%s: Could not initialize the aformat filter.", __FUNCTION__);
+		LOGWARNING("audio: %s: Could not initialize the aformat filter.", __FUNCTION__);
 	numFilter++;
 
 	// abuffersink
 	if (!(abuffersink = avfilter_get_by_name("abuffersink")))
-		LOGWARNING("%s: Could not find the abuffersink filter.", __FUNCTION__);
+		LOGWARNING("audio: %s: Could not find the abuffersink filter.", __FUNCTION__);
 	if (!(pfilterCtx[numFilter] = avfilter_graph_alloc_filter(m_pFilterGraph, abuffersink, "sink")))
-		LOGWARNING("%s: Could not allocate the abuffersink instance.", __FUNCTION__);
+		LOGWARNING("audio: %s: Could not allocate the abuffersink instance.", __FUNCTION__);
 	if (avfilter_init_str(pfilterCtx[numFilter], NULL) < 0)
-		LOGWARNING("%s: Could not initialize the abuffersink instance.", __FUNCTION__);
+		LOGWARNING("audio: %s: Could not initialize the abuffersink instance.", __FUNCTION__);
 	numFilter++;
 
 	// Connect the filters
@@ -520,11 +520,11 @@ int cSoftHdAudio::InitFilter(AVCodecContext *audioCtx)
 		}
 	}
 	if (err < 0)
-		LOGWARNING("%s: Error connecting audio filters", __FUNCTION__);
+		LOGWARNING("audio: %s: Error connecting audio filters", __FUNCTION__);
 
 	// Configure the graph.
 	if (avfilter_graph_config(m_pFilterGraph, NULL) < 0)
-		LOGWARNING("%s: Error configuring the audio filter graph", __FUNCTION__);
+		LOGWARNING("audio: %s: Error configuring the audio filter graph", __FUNCTION__);
 
 	m_pBuffersinkCtx = pfilterCtx[numFilter - 1];
 	m_filterChanged = 0;
@@ -575,7 +575,7 @@ void cSoftHdAudio::EnqueueFrame(AVFrame *frame)
 	buffer = (uint16_t *)frame->data[0];
 
 	if (!m_alsaPlayerRunning) {
-//		LOGDEBUG2(L_SOUND, "%s: Alsa player is not running!", __FUNCTION__);
+//		LOGDEBUG2(L_SOUND, "audio: %s: Alsa player is not running!", __FUNCTION__);
 		return;
 	}
 
@@ -604,7 +604,7 @@ void cSoftHdAudio::EnqueueFrame(AVFrame *frame)
 void cSoftHdAudio::EnqueueRawData(uint16_t *buffer, int count, AVFrame *frame)
 {
 	if (!m_alsaPlayerRunning) {
-//		LOGDEBUG2(L_SOUND, "%s: Alsa player is not running!", __FUNCTION__);
+//		LOGDEBUG2(L_SOUND, "audio: %s: Alsa player is not running!", __FUNCTION__);
 		return;
 	}
 
@@ -627,7 +627,7 @@ void cSoftHdAudio::Enqueue(uint16_t *buffer, int count, AVFrame *frame)
 	m_rbMutex.Lock();
 	n = m_pRingbuffer->Write((const uint16_t *)buffer, count);
 	if (n != (size_t) count)
-		LOGERROR("%s: can't place %d samples in ring buffer", __FUNCTION__, count);
+		LOGERROR("audio: %s: can't place %d samples in ring buffer", __FUNCTION__, count);
 
 	m_pts = frame->pts + (frame->nb_samples * m_pTimebase->den /
 		m_pTimebase->num / frame->sample_rate);
@@ -646,7 +646,7 @@ void cSoftHdAudio::StartAudioThread(AVFrame *frame)
 	skip = m_skip;
 	// FIXME: round to packet size
 
-	LOGDEBUG2(L_AV_SYNC, "%s: start? in Rb %4zdms to skip %dms nb_samples %d",
+	LOGDEBUG2(L_AV_SYNC, "audio: %s: start? in Rb %4zdms to skip %dms nb_samples %d",
 		__FUNCTION__,
 		n * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
 		skip * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
@@ -664,12 +664,12 @@ void cSoftHdAudio::StartAudioThread(AVFrame *frame)
 	if ((m_videoIsReady && m_startThreshold < n) ||	m_startThreshold * 4 < n) {
 		// restart play-back
 		// no lock needed, can wakeup next time
-		LOGDEBUG2(L_AV_SYNC, "%s: start play-back Threshold %ums RingBuffer %zums m_videoIsReady %d", __FUNCTION__,
+		LOGDEBUG2(L_AV_SYNC, "audio: %s: start play-back Threshold %ums RingBuffer %zums m_videoIsReady %d", __FUNCTION__,
 			m_startThreshold * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
 			n * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
 			m_videoIsReady);
 		m_running = 1;
-		LOGDEBUG2(L_SOUND, "%s: start thread", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: start thread", __FUNCTION__);
 		m_pAudioThread->SendStartSignal();
 	}
 }
@@ -696,7 +696,7 @@ int cSoftHdAudio::Setup(AVCodecContext *ctx, int samplerate, int channels, int p
 
 		err = AlsaSetup(channels, samplerate, passthrough);
 		if (err) {
-			LOGERROR("%s: failed!", __FUNCTION__);
+			LOGERROR("audio: %s: failed!", __FUNCTION__);
 			return err;
 		}
 	}
@@ -721,13 +721,13 @@ void cSoftHdAudio::Filter(AVFrame *inframe, AVCodecContext *ctx)
 	int err_count = 0;
 
 	if (!inframe) {
-//		LOGDEBUG2(L_SOUND, "%s: NO inframe!", __FUNCTION__);
+//		LOGDEBUG2(L_SOUND, "audio: %s: NO inframe!", __FUNCTION__);
 		goto get_frame;
 	}
 in:
 	if (m_filterReady && m_filterChanged) {
 
-//		LOGDEBUG2(L_SOUND, "%s: m_filterReady %d sink_links_count %d channels %d nb_filters %d nb_outputs %d channels %d m_filterChanged %d",
+//		LOGDEBUG2(L_SOUND, "audio: %s: m_filterReady %d sink_links_count %d channels %d nb_filters %d nb_outputs %d channels %d m_filterChanged %d",
 //			__FUNCTION__, m_filterReady,
 //			m_pFilterGraph->sink_links_count, m_pFilterGraph->sink_links[0]->channels,
 //			m_pFilterGraph->filters[m_pFilterGraph->nb_filters - 1]->nb_outputs,
@@ -736,13 +736,13 @@ in:
 
 		avfilter_graph_free(&m_pFilterGraph);
 		m_filterReady = 0;
-		LOGDEBUG2(L_SOUND, "%s: Free the filter graph.", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: Free the filter graph.", __FUNCTION__);
 	}
 
 	if (!m_filterReady) {
 		err = InitFilter(ctx);
 		if (err) {
-			LOGDEBUG2(L_SOUND, "%s: Audiom_filterReady failed!", __FUNCTION__);
+			LOGDEBUG2(L_SOUND, "audio: %s: Audiom_filterReady failed!", __FUNCTION__);
 			av_frame_unref(inframe);
 			return;
 		}
@@ -752,14 +752,14 @@ in:
 		if (err_count) {
 			char errbuf[128];
 			av_strerror(err, errbuf, sizeof(errbuf));
-			LOGERROR("%s: Error submitting the frame to the filter fmt %s channels %d %s", __FUNCTION__,
+			LOGERROR("audio: %s: Error submitting the frame to the filter fmt %s channels %d %s", __FUNCTION__,
 				av_get_sample_fmt_name(ctx->sample_fmt), ctx->ch_layout.nb_channels, errbuf);
 			av_frame_unref(inframe);
 			return;
 		} else {
 			m_filterChanged = 1;
 			err_count++;
-			LOGDEBUG2(L_SOUND, "%s: m_filterChanged %d  err_count %d", __FUNCTION__, m_filterChanged, err_count);
+			LOGDEBUG2(L_SOUND, "audio: %s: m_filterChanged %d  err_count %d", __FUNCTION__, m_filterChanged, err_count);
 			goto in;
 		}
 	}
@@ -769,13 +769,13 @@ get_frame:
 	err = av_buffersink_get_frame(m_pBuffersinkCtx, outframe);
 
 	if (err == AVERROR(EAGAIN)) {
-//		LOGERROR("%s: Error filtering AVERROR(EAGAIN)", __FUNCTION__);
+//		LOGERROR("audio: %s: Error filtering AVERROR(EAGAIN)", __FUNCTION__);
 		av_frame_free(&outframe);
 	} else if (err == AVERROR_EOF) {
-		LOGERROR("%s: Error filtering AVERROR_EOF", __FUNCTION__);
+		LOGERROR("audio: %s: Error filtering AVERROR_EOF", __FUNCTION__);
 		av_frame_free(&outframe);
 	} else if (err < 0) {
-		LOGERROR("%s: Error filtering the data", __FUNCTION__);
+		LOGERROR("audio: %s: Error filtering the data", __FUNCTION__);
 		av_frame_free(&outframe);
 	}
 
@@ -804,13 +804,13 @@ int cSoftHdAudio::VideoReady(int64_t videoPts)
 	int skip;
 
 	if (m_running) {
-		LOGDEBUG2(L_SOUND, "%s: Audio is already running?", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: Audio is already running?", __FUNCTION__);
 		return 1;
 	}
 
 	// no valid audio known
 	if (m_pts == AV_NOPTS_VALUE) {
-		LOGDEBUG2(L_SOUND, "%s: can't do a/v start, no valid PTS", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: can't do a/v start, no valid PTS", __FUNCTION__);
 		return 0;
 	}
 
@@ -831,7 +831,7 @@ int cSoftHdAudio::VideoReady(int64_t videoPts)
 			m_skip = skip - used;
 			skip = used;
 		}
-		LOGDEBUG2(L_AV_SYNC, "%s: RB %" PRId64 "ms skip %dms to skip %dms", __FUNCTION__,
+		LOGDEBUG2(L_AV_SYNC, "audio: %s: RB %" PRId64 "ms skip %dms to skip %dms", __FUNCTION__,
 			used * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
 			skip * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
 			m_skip * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample);
@@ -843,7 +843,7 @@ int cSoftHdAudio::VideoReady(int64_t videoPts)
 	// enough audio buffered
 	if (m_startThreshold < used) {
 		m_running = 1;
-		LOGDEBUG2(L_SOUND, "%s: start thread", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: start thread", __FUNCTION__);
 		m_pAudioThread->SendStartSignal();
 	}
 	m_videoIsReady = 1;
@@ -863,13 +863,13 @@ int cSoftHdAudio::Skip(int64_t videoPts, int full)
 
 	// no valid audio pts known
 	if (m_pts == AV_NOPTS_VALUE) {
-		LOGDEBUG2(L_AV_SYNC, "%s: can't do skip, no valid audio PTS", __FUNCTION__);
+		LOGDEBUG2(L_AV_SYNC, "audio: %s: can't do skip, no valid audio PTS", __FUNCTION__);
 		return -1;
 	}
 
 	// no valid video pts
 	if (videoPts == AV_NOPTS_VALUE) {
-		LOGDEBUG2(L_AV_SYNC, "%s: can't do skip, no valid video PTS", __FUNCTION__);
+		LOGDEBUG2(L_AV_SYNC, "audio: %s: can't do skip, no valid video PTS", __FUNCTION__);
 		return -1;
 	}
 
@@ -896,7 +896,7 @@ int cSoftHdAudio::Skip(int64_t videoPts, int full)
 		if ((unsigned)skip >= used)
 			skip = used - (1 - full) * m_hwNumChannels * m_bytesPerSample;
 
-		LOGDEBUG2(L_AV_SYNC, "%s: RB %" PRId64 "ms skip %dms audio %s -> %s video %s", __FUNCTION__,
+		LOGDEBUG2(L_AV_SYNC, "audio: %s: RB %" PRId64 "ms skip %dms audio %s -> %s video %s", __FUNCTION__,
 			used * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
 			skip * 1000 / m_hwSampleRate / m_hwNumChannels / m_bytesPerSample,
 			Timestamp2String(audioPts),
@@ -917,7 +917,7 @@ int cSoftHdAudio::Skip(int64_t videoPts, int full)
  */
 void cSoftHdAudio::FlushBuffers(void)
 {
-	LOGDEBUG2(L_SOUND, "%s", __FUNCTION__);
+	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 
 	if (m_running)
 		m_alsaPlayerRunning = 0;
@@ -973,12 +973,12 @@ int64_t cSoftHdAudio::GetClock(void)
 	// delay in frames in alsa + kernel buffers
 	if (snd_pcm_delay(m_pAlsaPCMHandle, &delay) < 0) {
 		if (!m_paused)
-			LOGDEBUG2(L_SOUND, "%s: no hw delay", __FUNCTION__);
+			LOGDEBUG2(L_SOUND, "audio: %s: no hw delay", __FUNCTION__);
 		delay = 0L;
 	}
 
 	if (delay < 0) {
-		LOGDEBUG2(L_SOUND, "%s: delay < 0", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: delay < 0", __FUNCTION__);
 		delay = 0L;
 	}
 
@@ -1027,23 +1027,23 @@ void cSoftHdAudio::Resume(void)
 	int err;
 
 	if (!m_paused && !m_alsaCanPause) {
-		LOGDEBUG2(L_SOUND, "%s: not paused, check the code", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: not paused, check the code", __FUNCTION__);
 		return;
 	}
-	LOGDEBUG2(L_SOUND, "%s", __FUNCTION__);
+	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 	if (m_alsaCanPause) {
 		snd_pcm_state_t state;
 		state = snd_pcm_state(m_pAlsaPCMHandle);
 		if (state == SND_PCM_STATE_PAUSED) {
-			LOGDEBUG2(L_SOUND, "%s: state paused, try snd_pcm_pause(0)!", __FUNCTION__);
+			LOGDEBUG2(L_SOUND, "audio: %s: state paused, try snd_pcm_pause(0)!", __FUNCTION__);
 			if ((err = snd_pcm_pause(m_pAlsaPCMHandle, 0))) {
-				LOGERROR("%s: snd_pcm_pause(): %s", __FUNCTION__, snd_strerror(err));
+				LOGERROR("audio: %s: snd_pcm_pause(): %s", __FUNCTION__, snd_strerror(err));
 			}
 		}
 	} else {
 		m_paused = 0;
 		if (m_startThreshold < m_pRingbuffer->UsedBytes()) {
-			LOGDEBUG2(L_SOUND, "%s: start thread", __FUNCTION__);
+			LOGDEBUG2(L_SOUND, "audio: %s: start thread", __FUNCTION__);
 			m_pAudioThread->SendStartSignal();
 		}
 	}
@@ -1057,18 +1057,18 @@ void cSoftHdAudio::Pause(void)
 	int err;
 
 	if (m_paused) {
-		LOGDEBUG2(L_SOUND, "%s: already paused, check the code", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: already paused, check the code", __FUNCTION__);
 		return;
 	}
 
-	LOGDEBUG2(L_SOUND, "%s", __FUNCTION__);
+	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 	if (m_alsaCanPause) {
 		snd_pcm_state_t state;
 		state = snd_pcm_state(m_pAlsaPCMHandle);
 		if (state == SND_PCM_STATE_RUNNING) {
-			LOGDEBUG2(L_SOUND, "%s: state running, try snd_pcm_pause(1)!", __FUNCTION__);
+			LOGDEBUG2(L_SOUND, "audio: %s: state running, try snd_pcm_pause(1)!", __FUNCTION__);
 			if ((err = snd_pcm_pause(m_pAlsaPCMHandle, 1))) {
-				LOGERROR("%s: snd_pcm_pause(): %s", __FUNCTION__, snd_strerror(err));
+				LOGERROR("audio: %s: snd_pcm_pause(): %s", __FUNCTION__, snd_strerror(err));
 			}
 		}
 	} else {
@@ -1265,7 +1265,7 @@ void cSoftHdAudio::XrunRecovery(void)
 	err = snd_pcm_prepare(m_pAlsaPCMHandle);
 	if (err < 0) {
 		state = snd_pcm_state(m_pAlsaPCMHandle);
-		LOGERROR("%s: Can't recovery from xrun: %s pcm state: %s", __FUNCTION__,
+		LOGERROR("audio: %s: Can't recovery from xrun: %s pcm state: %s", __FUNCTION__,
 			snd_strerror(err), snd_pcm_state_name(state));
 	}
 }
@@ -1278,17 +1278,17 @@ void cSoftHdAudio::FlushAlsaBuffers(void)
 	int err;
 	snd_pcm_state_t state;
 
-	LOGDEBUG2(L_SOUND, "%s", __FUNCTION__);
+	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 
 	state = snd_pcm_state(m_pAlsaPCMHandle);
 	if (state != SND_PCM_STATE_OPEN) {
 		if ((err = snd_pcm_drop(m_pAlsaPCMHandle)) < 0)
-			LOGERROR("%s: snd_pcm_drop(): %s", __FUNCTION__, snd_strerror(err));
+			LOGERROR("audio: %s: snd_pcm_drop(): %s", __FUNCTION__, snd_strerror(err));
 		// alsa crash, when in open state here ?
 		if ((err = snd_pcm_prepare(m_pAlsaPCMHandle)) < 0)
-			LOGERROR("%s: snd_pcm_prepare(): %s", __FUNCTION__, snd_strerror(err));
+			LOGERROR("audio: %s: snd_pcm_prepare(): %s", __FUNCTION__, snd_strerror(err));
 		state = snd_pcm_state(m_pAlsaPCMHandle);
-		LOGDEBUG2(L_SOUND, "%s: pcm state %s", __FUNCTION__, snd_pcm_state_name(state));
+		LOGDEBUG2(L_SOUND, "audio: %s: pcm state %s", __FUNCTION__, snd_pcm_state_name(state));
 	}
 
 	m_pRingbuffer->Reset();
@@ -1323,9 +1323,9 @@ int cSoftHdAudio::PlayWithAlsa(void)
 
 		// wait for space in kernel buffers
 		if ((err = snd_pcm_wait(m_pAlsaPCMHandle, 150)) < 0) {
-//			LOGERROR("%s: snd_pcm_wait error? '%s'", __FUNCTION__, snd_strerror(err));
+//			LOGERROR("audio: %s: snd_pcm_wait error? '%s'", __FUNCTION__, snd_strerror(err));
 			err = snd_pcm_recover(m_pAlsaPCMHandle, err, 0);
-//			LOGERROR("%s: snd_pcm_wait error: snd_pcm_recover %s", __FUNCTION__, snd_strerror(err));
+//			LOGERROR("audio: %s: snd_pcm_wait error: snd_pcm_recover %s", __FUNCTION__, snd_strerror(err));
 		}
 
 		if (m_paused || !m_alsaPlayerRunning)
@@ -1342,19 +1342,19 @@ int cSoftHdAudio::PlayWithAlsa(void)
 			if (err >= 0) {
 				continue;
 			}
-			LOGERROR("%s: snd_pcm_avail_update(): %s", __FUNCTION__, snd_strerror(n));
+			LOGERROR("audio: %s: snd_pcm_avail_update(): %s", __FUNCTION__, snd_strerror(n));
 			return -1;
 		}
 		avail = snd_pcm_frames_to_bytes(m_pAlsaPCMHandle, n);
 		if (avail < 256) {		// too much overhead
-			LOGDEBUG2(L_SOUND, "%s: break state '%s' avail %d", __FUNCTION__,
+			LOGDEBUG2(L_SOUND, "audio: %s: break state '%s' avail %d", __FUNCTION__,
 				snd_pcm_state_name(snd_pcm_state(m_pAlsaPCMHandle)), avail);
 			break;
 		}
 
 		n = m_pRingbuffer->GetReadPointer(&p);
 		if (!n) { // ring buffer empty
-			LOGWARNING("%s: ring buffer empty Videopkts: %d", __FUNCTION__,
+			LOGWARNING("audio: %s: ring buffer empty Videopkts: %d", __FUNCTION__,
 			           m_pDevice->VideoStream()->GetPacketsFilled());
 		}
 		if (n < avail) { // not enough bytes in ring buffer
@@ -1385,16 +1385,16 @@ int cSoftHdAudio::PlayWithAlsa(void)
 				if (err == -EAGAIN) {
 					continue;
 				}
-				LOGWARNING("%s: writei underrun error? '%s'", __FUNCTION__, snd_strerror(err));
+				LOGWARNING("audio: %s: writei underrun error? '%s'", __FUNCTION__, snd_strerror(err));
 				err = snd_pcm_recover(m_pAlsaPCMHandle, err, 0);
 				if (err >= 0) {
 					continue;
 				}
-				LOGERROR("%s: snd_pcm_writei failed: %s", __FUNCTION__, snd_strerror(err));
+				LOGERROR("audio: %s: snd_pcm_writei failed: %s", __FUNCTION__, snd_strerror(err));
 				return -1;
 			}
 			// this could happen, if underrun happened
-			LOGWARNING("%s: not all frames written", __FUNCTION__);
+			LOGWARNING("audio: %s: not all frames written", __FUNCTION__);
 			avail = snd_pcm_frames_to_bytes(m_pAlsaPCMHandle, err);
 			break;
 		}
@@ -1418,7 +1418,7 @@ char *cSoftHdAudio::OpenAlsaDevice(const char *device, int passthrough)
 	if (!device)
 		return NULL;
 
-	LOGDEBUG2(L_SOUND, "%s: try opening %sdevice '%s'", __FUNCTION__, passthrough ? "pass-through " : "", device);
+	LOGDEBUG2(L_SOUND, "audio: %s: try opening %sdevice '%s'", __FUNCTION__, passthrough ? "pass-through " : "", device);
 
 	if (passthrough && m_appendAES) {
 		if (!(strchr(device, ':'))) {
@@ -1434,7 +1434,7 @@ char *cSoftHdAudio::OpenAlsaDevice(const char *device, int passthrough)
 				IEC958_AES1_CON_ORIGINAL | IEC958_AES1_CON_PCM_CODER,
 				IEC958_AES3_CON_FS_48000);
 		}
-		LOGDEBUG2(L_SOUND, "%s: auto append AES: %s -> %s", __FUNCTION__, device, tmp);
+		LOGDEBUG2(L_SOUND, "audio: %s: auto append AES: %s -> %s", __FUNCTION__, device, tmp);
 	} else {
 		sprintf(tmp, "%s", device);
 	}
@@ -1443,11 +1443,11 @@ char *cSoftHdAudio::OpenAlsaDevice(const char *device, int passthrough)
 	if ((err = snd_pcm_open(&m_pAlsaPCMHandle, tmp, SND_PCM_STREAM_PLAYBACK,
 		SND_PCM_NONBLOCK)) < 0) {
 
-		LOGWARNING("%s: could not open device '%s' error: %s", __FUNCTION__, device, snd_strerror(err));
+		LOGWARNING("audio: %s: could not open device '%s' error: %s", __FUNCTION__, device, snd_strerror(err));
 		return NULL;
 	}
 
-	LOGDEBUG2(L_SOUND, "%s: opened %sdevice '%s'", __FUNCTION__, passthrough ? "pass-through " : "", device);
+	LOGDEBUG2(L_SOUND, "audio: %s: opened %sdevice '%s'", __FUNCTION__, passthrough ? "pass-through " : "", device);
 
 	return (char *)device;
 }
@@ -1471,7 +1471,7 @@ char *cSoftHdAudio::FindAlsaDevice(const char *devname, const char *hint, int pa
 
 	err = snd_device_name_hint(-1, devname, (void ***)&hints);
 	if (err != 0) {
-		LOGWARNING("%s: Cannot get device names for %s!", __FUNCTION__, hint);
+		LOGWARNING("audio: %s: Cannot get device names for %s!", __FUNCTION__, hint);
 		return NULL;
 	}
 
@@ -1504,7 +1504,7 @@ void cSoftHdAudio::AlsaInitPCMDevice(void)
 {
 	char *device = NULL;
 	int err;
-	LOGDEBUG2(L_SOUND, "%s: passthrough %d", __FUNCTION__, m_passthrough);
+	LOGDEBUG2(L_SOUND, "audio: %s: passthrough %d", __FUNCTION__, m_passthrough);
 
 	// try user set device
 	if (m_passthrough)
@@ -1521,40 +1521,40 @@ void cSoftHdAudio::AlsaInitPCMDevice(void)
 
 	// walkthrough hdmi: devices
 	if (!device) {
-		LOGDEBUG2(L_SOUND, "%s: Try hdmi: devices...", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: Try hdmi: devices...", __FUNCTION__);
 		device = FindAlsaDevice("pcm", "hdmi:", m_passthrough);
 	}
 
 	// walkthrough default: devices
 	if (!device) {
-		LOGDEBUG2(L_SOUND, "%s: Try default: devices...", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: Try default: devices...", __FUNCTION__);
 		device = FindAlsaDevice("pcm", "default:", m_passthrough);
 	}
 
 	// try default device
 	if (!device) {
-		LOGDEBUG2(L_SOUND, "%s: Try default device...", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: Try default device...", __FUNCTION__);
 		device = OpenAlsaDevice("default", m_passthrough);
 	}
 
 	// use null device
 	if (!device) {
-		LOGDEBUG2(L_SOUND, "%s: Try null device...", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: Try null device...", __FUNCTION__);
 		device = OpenAlsaDevice("null", m_passthrough);
 	}
 
 	if (!device)
-		LOGFATAL("%s: could not open any device, abort!", __FUNCTION__);
+		LOGFATAL("audio: %s: could not open any device, abort!", __FUNCTION__);
 
 	if (!strcmp(device, "null"))
-		LOGWARNING("%s: using %sdevice '%s'", __FUNCTION__,
+		LOGWARNING("audio: %s: using %sdevice '%s'", __FUNCTION__,
 			m_passthrough ? "pass-through " : "", device);
 	else
-		LOGINFO("%s: using %sdevice '%s'", __FUNCTION__,
+		LOGINFO("audio: using %sdevice '%s'",
 			m_passthrough ? "pass-through " : "", device);
 
 	if ((err = snd_pcm_nonblock(m_pAlsaPCMHandle, 0)) < 0) {
-		LOGERROR("%s: can't set block mode: %s", __FUNCTION__, snd_strerror(err));
+		LOGERROR("audio: %s: can't set block mode: %s", __FUNCTION__, snd_strerror(err));
 	}
 }
 
@@ -1584,7 +1584,7 @@ void cSoftHdAudio::AlsaInitMixer(void)
 			channel = "PCM";
 		}
 	}
-	LOGDEBUG2(L_SOUND, "%s: mixer %s - %s open", __FUNCTION__, device, channel);
+	LOGDEBUG2(L_SOUND, "audio: %s: mixer %s - %s open", __FUNCTION__, device, channel);
 	snd_mixer_open(&alsaMixer, 0);
 	if (alsaMixer && snd_mixer_attach(alsaMixer, device) >= 0
 		&& snd_mixer_selem_register(alsaMixer, NULL, NULL) >= 0
@@ -1600,7 +1600,7 @@ void cSoftHdAudio::AlsaInitMixer(void)
 			if (!strcasecmp(name, alsaMixerElem_name)) {
 				snd_mixer_selem_get_playback_volume_range(alsaMixerElem, &alsaMixerElemMin, &alsaMixerElemMax);
 				m_alsaRatio = 1000 * (alsaMixerElemMax - alsaMixerElemMin);
-				LOGDEBUG2(L_SOUND, "%s: %s mixer found %ld - %ld ratio %d", __FUNCTION__, channel, alsaMixerElemMin, alsaMixerElemMax, m_alsaRatio);
+				LOGDEBUG2(L_SOUND, "audio: %s: %s mixer found %ld - %ld ratio %d", __FUNCTION__, channel, alsaMixerElemMin, alsaMixerElemMax, m_alsaRatio);
 				break;
 			}
 
@@ -1610,7 +1610,7 @@ void cSoftHdAudio::AlsaInitMixer(void)
 		m_pAlsaMixer = alsaMixer;
 		m_pAlsaMixerElem = alsaMixerElem;
 	} else {
-		LOGERROR("%s: can't open mixer '%s'", __FUNCTION__, device);
+		LOGERROR("audio: %s: can't open mixer '%s'", __FUNCTION__, device);
 	}
 }
 
@@ -1653,19 +1653,19 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 	m_downmix = 0;
 
 	if (m_running) {
-		LOGDEBUG2(L_SOUND, "%s: Audio is Running -> FlushBuffers", __FUNCTION__);
+		LOGDEBUG2(L_SOUND, "audio: %s: Audio is Running -> FlushBuffers", __FUNCTION__);
 		FlushBuffers();
 	}
 
 	state = snd_pcm_state(m_pAlsaPCMHandle);
 	if (state == SND_PCM_STATE_XRUN) {
-		LOGERROR("%s: recover from xrun pcm state: %s", __FUNCTION__, snd_pcm_state_name(state));
+		LOGERROR("audio: %s: recover from xrun pcm state: %s", __FUNCTION__, snd_pcm_state_name(state));
 		XrunRecovery();
 	}
 
 	snd_pcm_hw_params_alloca(&hwparams);
 	if ((err = snd_pcm_hw_params_any(m_pAlsaPCMHandle, hwparams)) < 0) {
-		LOGERROR("%s: Read HW config failed! %s", __FUNCTION__, snd_strerror(err));
+		LOGERROR("audio: %s: Read HW config failed! %s", __FUNCTION__, snd_strerror(err));
 		return -1;
 	}
 
@@ -1675,30 +1675,30 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 
 	m_hwSampleRate = sample_rate;
 	if ((err = snd_pcm_hw_params_set_rate_near(m_pAlsaPCMHandle, hwparams, &m_hwSampleRate, 0) < 0)) {
-		LOGERROR("%s: SampleRate %d not supported! %s", __FUNCTION__, sample_rate, snd_strerror(err));
+		LOGERROR("audio: %s: SampleRate %d not supported! %s", __FUNCTION__, sample_rate, snd_strerror(err));
 		return -1;
 	}
 	if ((int)m_hwSampleRate != sample_rate) {
-		LOGDEBUG2(L_SOUND, "%s: sample_rate %d m_hwSampleRate %d", __FUNCTION__, sample_rate, m_hwSampleRate);
+		LOGDEBUG2(L_SOUND, "audio: %s: sample_rate %d m_hwSampleRate %d", __FUNCTION__, sample_rate, m_hwSampleRate);
 	}
 
 	m_hwNumChannels = channels;
 	if ((err = snd_pcm_hw_params_set_channels_near(m_pAlsaPCMHandle, hwparams, &m_hwNumChannels)) < 0) {
-		LOGWARNING("%s: %d channels not supported! %s", __FUNCTION__, m_hwNumChannels, snd_strerror(err));
+		LOGWARNING("audio: %s: %d channels not supported! %s", __FUNCTION__, m_hwNumChannels, snd_strerror(err));
 	}
 	if ((int)m_hwNumChannels != channels && !passthrough) {
 		m_downmix = 1;
 	}
 
 	if ((err = snd_pcm_hw_params_set_buffer_time_near(m_pAlsaPCMHandle, hwparams, &bufferTime, NULL)) < 0) {
-		LOGWARNING("%s: bufferTime %d not supported! %s", __FUNCTION__, bufferTime, snd_strerror(err));
+		LOGWARNING("audio: %s: bufferTime %d not supported! %s", __FUNCTION__, bufferTime, snd_strerror(err));
 	}
 
 	m_alsaCanPause = snd_pcm_hw_params_can_pause(hwparams);
 
 /*	err = snd_pcm_hw_params_test_format(m_pAlsaPCMHandle, hwparams, SND_PCM_FORMAT_S16);
 	if (err < 0)	// err == 0 if is supported
-		LOGERROR("%s: SND_PCM_FORMAT_S16 not supported! %s", __FUNCTION__,
+		LOGERROR("audio: %s: SND_PCM_FORMAT_S16 not supported! %s", __FUNCTION__,
 			snd_strerror(err));
 */
 	if ((err = snd_pcm_set_params(m_pAlsaPCMHandle, SND_PCM_FORMAT_S16,
@@ -1706,7 +1706,7 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 		SND_PCM_ACCESS_RW_INTERLEAVED, m_hwNumChannels, m_hwSampleRate, 1, bufferTime))) {
 
 		state = snd_pcm_state(m_pAlsaPCMHandle);
-		LOGERROR("%s: set params error: %s\n"
+		LOGERROR("audio: %s: set params error: %s\n"
 			"           Channels %d SampleRate %d\n"
 			"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
 			"           Supports pause: %s mmap: %s\n"
@@ -1735,12 +1735,11 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 		m_startThreshold = m_ringBufferSize / 3;
 	}
 
-	LOGINFO("%s: alsa set up:\n"
+	LOGINFO("audio: alsa set up:\n"
 		"           Channels %d SampleRate %d%s\n"
 		"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
 		"           Supports pause: %s mmap: %s\n"
 		"           AlsaBufferTime %dms m_bufferTimeInMs %dms Threshold %ums",
-		__FUNCTION__,
 		channels, sample_rate, passthrough ? " -> passthrough" : "",
 		m_hwNumChannels, m_hwSampleRate,
 		snd_pcm_format_name(SND_PCM_FORMAT_S16),

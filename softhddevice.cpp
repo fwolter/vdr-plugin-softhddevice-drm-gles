@@ -196,7 +196,7 @@ static int MpegCheck(const uint8_t * data, int size)
 	if (FastMpegCheck(data + frameSize)) {
 		return frameSize;
 	} else {
-		LOGDEBUG("MpegCheck: after this frame NO new mpeg frame starts");
+		LOGDEBUG("device: %s: after this frame NO new mpeg frame starts", __FUNCTION__);
 		PrintStreamData(data + frameSize, frameSize);
 	}
 
@@ -495,7 +495,7 @@ uint8_t *CreateJpeg(uint8_t * image, int raw_size, int *size, int quality,
  */
 cSoftHdDevice::cSoftHdDevice(cSoftHdConfig *config)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	m_pSpuDecoder = NULL;
 
 	m_pConfig = config;
@@ -514,7 +514,7 @@ cSoftHdDevice::cSoftHdDevice(cSoftHdConfig *config)
  */
 cSoftHdDevice::~cSoftHdDevice(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	Exit();
 
 	delete m_pVideoStream;
@@ -522,7 +522,7 @@ cSoftHdDevice::~cSoftHdDevice(void)
 	delete m_pRender;
 
 	delete m_pSpuDecoder;
-	LOGDEBUG("%s: deleted", __FUNCTION__);
+	LOGDEBUG("device: %s: deleted", __FUNCTION__);
 }
 
 /**
@@ -540,7 +540,7 @@ void cSoftHdDevice::Init()
  */
 void cSoftHdDevice::Exit(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	m_pAudio->Exit();
 	if (m_pAudioDecoder) {
 		m_pAudioDecoder->Close();
@@ -552,7 +552,7 @@ void cSoftHdDevice::Exit(void)
 	m_pRender->Exit();
 	m_pVideoStream->Exit();
 
-	LOGDEBUG("%s: exited", __FUNCTION__);
+	LOGDEBUG("device: %s: exited", __FUNCTION__);
 }
 
 /**
@@ -563,7 +563,7 @@ void cSoftHdDevice::Exit(void)
  */
 void cSoftHdDevice::Start(void)
 {
-	LOGDEBUG("Start(void):");
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	if (!m_pAudioDecoder) {
 
 		// audio
@@ -598,7 +598,7 @@ void cSoftHdDevice::Start(void)
  */
 void cSoftHdDevice::Stop(void)
 {
-	LOGDEBUG("Stop(void): nothing to do");
+	LOGDEBUG("device: %s: nothing to do", __FUNCTION__);
 }
 
 /**
@@ -609,7 +609,7 @@ void cSoftHdDevice::Stop(void)
 void cSoftHdDevice::ClearAudio(void)
 {
 	if (!m_skipAudio) {
-		LOGDEBUG("ClearAudio()");
+		LOGDEBUG("device: %s:", __FUNCTION__);
 		m_pAudioDecoder->FlushBuffers();
 		m_pAudio->FlushBuffers();
 		m_newAudioStream = 1;
@@ -623,7 +623,7 @@ void cSoftHdDevice::ClearAudio(void)
  */
 void cSoftHdDevice::MakePrimaryDevice(bool on)
 {
-	LOGDEBUG("%s: %d", __FUNCTION__, on);
+	LOGDEBUG("device: %s: %d", __FUNCTION__, on);
 	if (!on)
 		Exit();
 	else
@@ -642,7 +642,7 @@ void cSoftHdDevice::MakePrimaryDevice(bool on)
  */
 cSpuDecoder *cSoftHdDevice::GetSpuDecoder(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	if (!m_pSpuDecoder && IsPrimaryDevice())
 		m_pSpuDecoder = new cDvbSpuDecoder();
 
@@ -662,7 +662,7 @@ bool cSoftHdDevice::HasDecoder(void) const
  */
 bool cSoftHdDevice::CanReplay(void) const
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	return true;
 }
 
@@ -673,7 +673,7 @@ bool cSoftHdDevice::CanReplay(void) const
  */
 bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 {
-	LOGDEBUG("%s: %d", __FUNCTION__, play_mode);
+	LOGDEBUG("device: %s: %d", __FUNCTION__, play_mode);
 
 	switch (play_mode) {
 	// no audio/video
@@ -705,7 +705,7 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 		break;
 	// audio only (black screen)
 	case 3:
-		LOGDEBUG("softhddev: FIXME: audio only, silence video errors");
+		LOGDEBUG("device: %s: FIXME: audio only, silence video errors");
 		m_pRender->WakeupDecodingThread();
 		m_pRender->WakeupDisplayThread();
 		break;
@@ -715,7 +715,7 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 		m_pRender->WakeupDisplayThread();
 		break;
 	default:
-		LOGERROR("SetPlayMode: playmode not supported %d", play_mode);
+		LOGERROR("device: %s: playmode not supported %d", play_mode);
 		return 0;
 		break;
 	}
@@ -734,7 +734,7 @@ int64_t cSoftHdDevice::GetSTC(void)
 		return m_pRender->GetVideoClock();
 
 	// could happen during dettached
-	LOGWARNING("softhddev: %s called without hw decoder", __FUNCTION__);
+	LOGWARNING("device: %s: called without hw decoder", __FUNCTION__);
 	return AV_NOPTS_VALUE;
 }
 
@@ -749,7 +749,7 @@ int64_t cSoftHdDevice::GetSTC(void)
  */
 void cSoftHdDevice::TrickSpeed(int speed, bool forward)
 {
-	LOGDEBUG("%s: %d %s", __FUNCTION__, speed, forward ? "forward" : "backward");
+	LOGDEBUG("device: %s: %d %s", __FUNCTION__, speed, forward ? "forward" : "backward");
 
 	m_pVideoStream->Start();     // start stream if closed
 	m_pVideoStream->Resume();   // start stream if paused
@@ -775,7 +775,7 @@ void cSoftHdDevice::TrickSpeed(int speed, bool forward)
  */
 void cSoftHdDevice::Clear(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	cDevice::Clear();
 
 	m_pVideoStream->Stop();
@@ -803,7 +803,7 @@ void cSoftHdDevice::Clear(void)
  */
 void cSoftHdDevice::Play(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	cDevice::Play();
 
 	m_pVideoStream->Start();
@@ -821,7 +821,7 @@ void cSoftHdDevice::Play(void)
  */
 void cSoftHdDevice::Freeze(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	cDevice::Freeze();
 
 	// pause video stream
@@ -842,7 +842,7 @@ void cSoftHdDevice::Freeze(void)
  */
 void cSoftHdDevice::Mute(void)
 {
-	LOGDEBUG("%s:", __FUNCTION__);
+	LOGDEBUG("device: %s:", __FUNCTION__);
 	cDevice::Mute();
 
 	m_skipAudio = 1;
@@ -861,7 +861,7 @@ void cSoftHdDevice::StillPicture(const uchar *data, int size)
 		return;
 	}
 
-	LOGDEBUG("%s: %s %p %d", __FUNCTION__, data[0] == 0x47 ? "ts" : "pes", data, size);
+	LOGDEBUG("device: %s: %s %p %d", __FUNCTION__, data[0] == 0x47 ? "ts" : "pes", data, size);
 	AVPacket *avpkt;
 	AVFrame *frame;
 
@@ -914,11 +914,11 @@ void cSoftHdDevice::StillPicture(const uchar *data, int size)
 			}
 		}
 
-		LOGDEBUG2(L_STILL, "StillPicture: memcpy avpkt.size %d size %d sizeRest %d peslength %d headlength %d I %d",
+		LOGDEBUG2(L_STILL, "device: %s: memcpy avpkt.size %d size %d sizeRest %d peslength %d headlength %d I %d", __FUNCTION__,
 		                    avpkt->size, size, sizeRest, pesLength, headLength, i);
 		if ((size_t)(avpkt->size + pesLength - headLength - i) >= avpkt->buf->size) {
 			int pkt_size = avpkt->size;
-			LOGWARNING("video: packet buffer too small for %d",
+			LOGWARNING("device: %s: packet buffer too small for %d", __FUNCTION__,
 			avpkt->size + pesLength - headLength - i);
 			av_grow_packet(avpkt, pesLength - headLength - i);
 			avpkt->size = pkt_size;
@@ -942,7 +942,7 @@ void cSoftHdDevice::StillPicture(const uchar *data, int size)
 	// open the decoder if we have none (context flag is set)
 	if (!m_pVideoStream->Decoder()->GetContext()) {
 		if (m_pVideoStream->Decoder()->Open(codec, NULL, NULL, 0, 0, 0))
-			LOGFATAL("StillPicture: Could not open the decoder!");
+			LOGFATAL("device: %s: Could not open the decoder!", __FUNCTION__);
 		context = 1;
 	}
 	m_pAudio->Pause();
@@ -950,9 +950,9 @@ void cSoftHdDevice::StillPicture(const uchar *data, int size)
 	int ret = 0;
 	ret = m_pVideoStream->Decoder()->SendPacket(avpkt);
 	if (ret)
-		LOGDEBUG2(L_STILL, "StillPicture: SendPacket(avpkt) returned %d", ret);
+		LOGDEBUG2(L_STILL, "device: %s: SendPacket(avpkt) returned %d", __FUNCTION__, ret);
 	else
-		LOGDEBUG2(L_STILL, "StillPicture: avpkt sent");
+		LOGDEBUG2(L_STILL, "device: %s: avpkt sent", __FUNCTION__);
 
 	// force decoder to enter draining because we only want 1 avpkt to be decoded
 	m_pVideoStream->Decoder()->SendPacket(NULL);
@@ -961,7 +961,7 @@ receive:
 	ret = m_pVideoStream->Decoder()->ReceiveFrame(1, &frame);
 	if (!ret) {
 		// frame received, render it and try another one (should end up with AVERROR_EOF)
-		LOGDEBUG2(L_STILL, "StillPicture: frame received");
+		LOGDEBUG2(L_STILL, "device: %s: frame received", __FUNCTION__);
 		m_pRender->MarkAsStillpictureFrame(frame);
 		while (m_pRender->RenderFrame(m_pVideoStream->Decoder()->GetContext(), frame)) {
 			if (m_pVideoStream->IsClosing()) {
@@ -975,7 +975,7 @@ receive:
 		m_pVideoStream->FlushDecoder();
 	} else {
 		// sth went wrong or AVERROR(EAGAIN)
-		LOGDEBUG2(L_STILL, "StillPicture: Receive Frame returned %d, should not happen!", ret);
+		LOGDEBUG2(L_STILL, "device: %s: Receive Frame returned %d, should not happen!", __FUNCTION__, ret);
 	}
 
 	// close the decoder, if it was opened by StillPicture
@@ -1006,7 +1006,7 @@ receive:
  */
 bool cSoftHdDevice::Poll(__attribute__ ((unused)) cPoller & poller, int timeout)
 {
-//	LOGDEBUG("%s: timeout %d", __FUNCTION__, timeout_ms);
+//	LOGDEBUG("device: %s: timeout %d", __FUNCTION__, timeout_ms);
 
 	for (;;) {
 		int full;
@@ -1014,7 +1014,7 @@ bool cSoftHdDevice::Poll(__attribute__ ((unused)) cPoller & poller, int timeout)
 		int used;
 		int filled;
 
-//		LOGDEBUG("Poll: timeout %d", timeout);
+//		LOGDEBUG("device: %s: timeout %d", __FUNCTION__, timeout);
 
 		used = m_pAudio->GetUsedBytes();
 		// FIXME: no video!
@@ -1044,7 +1044,7 @@ bool cSoftHdDevice::Poll(__attribute__ ((unused)) cPoller & poller, int timeout)
  */
 bool cSoftHdDevice::Flush(int timeout)
 {
-	LOGDEBUG("%s: timeout %d ms", __FUNCTION__, timeout);
+	LOGDEBUG("device: %s: timeout %d ms", __FUNCTION__, timeout);
 	if (m_pVideoStream->GetPacketsFilled()) {
 		if (timeout) {			// let display thread work
 			usleep(timeout * 1000);
@@ -1063,7 +1063,7 @@ bool cSoftHdDevice::Flush(int timeout)
  */
 void cSoftHdDevice::SetVideoDisplayFormat(eVideoDisplayFormat videoDisplayFormat)
 {
-	LOGDEBUG("%s: %d", __FUNCTION__, videoDisplayFormat);
+	LOGDEBUG("device: %s: %d", __FUNCTION__, videoDisplayFormat);
 
 	cDevice::SetVideoDisplayFormat(videoDisplayFormat);
 }
@@ -1080,7 +1080,7 @@ void cSoftHdDevice::SetVideoDisplayFormat(eVideoDisplayFormat videoDisplayFormat
  */
 void cSoftHdDevice::SetVideoFormat(bool videoFormat16_9)
 {
-	LOGDEBUG("%s: %d", __FUNCTION__, videoFormat16_9);
+	LOGDEBUG("device: %s: %d", __FUNCTION__, videoFormat16_9);
 
 	// FIXME: 4:3 / 16:9 video format not supported.
 	SetVideoDisplayFormat(eVideoDisplayFormat(Setup.VideoDisplayFormat));
@@ -1096,7 +1096,7 @@ void cSoftHdDevice::SetVideoFormat(bool videoFormat16_9)
  */
 void cSoftHdDevice::GetVideoSize(int &width, int &height, double &aspectRatio)
 {
-//	LOGDEBUG("%s: %d x %d @ %f", __FUNCTION__, *width, *height, *aspectRatio);
+//	LOGDEBUG("device: %s: %d x %d @ %f", __FUNCTION__, *width, *height, *aspectRatio);
 
 	m_pVideoStream->Decoder()->GetVideoSize(&width, &height, &aspectRatio);
 }
@@ -1120,7 +1120,7 @@ void cSoftHdDevice::GetOsdSize(int &width, int &height, double &aspectRatio)
  */
 int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 {
-//	LOGDEBUG("%s: %p %p %d %d", __FUNCTION__, this, data, length, id);
+//	LOGDEBUG("device: %s: %p %p %d %d", __FUNCTION__, this, data, length, id);
 
 	int n;
 	const uint8_t *p;
@@ -1131,24 +1131,24 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	m_pAudioAvPkt->pts = AV_NOPTS_VALUE;
 
 	if (m_pVideoStream->IsPaused()) {	// stream is paused, don't accept new audio data
-		LOGDEBUG("PlayAudio: Stream is paused");
+		LOGDEBUG("device: %s: Stream is paused", __FUNCTION__);
 		return 0;
 	}
 
 	if (m_skipAudio) {	// skip audio
-		LOGDEBUG("PlayAudio: skip audio");
+		LOGDEBUG("device: %s: skip audio", __FUNCTION__);
 		return size;
 	}
 
 	// hard limit buffer full: don't overrun audio buffers on replay
 	if (m_pAudio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE){
-//		LOGDEBUG("PlayAudio: Buffer is Full (%d|%d)!", m_pAudio->GetFreeBytes(), AUDIO_MIN_BUFFER_FREE);
+//		LOGDEBUG("device: %s: Buffer is Full (%d|%d)!", __FUNCTION__, m_pAudio->GetFreeBytes(), AUDIO_MIN_BUFFER_FREE);
 		return 0;
 	}
 
 	if (m_newAudioStream) {
 		// this clears the audio ringbuffer indirect, open and setup does it
-		LOGDEBUG("PlayAudio: m_newAudioStream");
+		LOGDEBUG("device: %s: m_newAudioStream", __FUNCTION__);
 		m_pAudioDecoder->Close();
 //		FlushBuffers();
 //		SetBufferTimeInMs(m_pConfig->ConfigAudioBufferTime);		// ???
@@ -1161,18 +1161,18 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	// ID 0xBD 0xC0-0xCF
 	// must be a PES start code
 	if (size < 9 || !data || data[0] || data[1] || data[2] != 0x01) {
-		LOGERROR("invalid PES audio packet");
+		LOGERROR("device: %s: invalid PES audio packet", __FUNCTION__);
 		return size;
 	}
 	n = data[8];			// header size
 
 	if (size < 9 + n + 4) {		// wrong size
 		if (size == 9 + n) {
-			LOGWARNING("empty audio packet");
+			LOGWARNING("device: %s: empty audio packet", __FUNCTION__);
 		} else {
-			LOGERROR("invalid audio packet %d bytes", size);
+			LOGERROR("device: %s: invalid audio packet %d bytes", __FUNCTION__, size);
 		}
-		LOGINFO("PlayAudio: wrong size");
+		LOGINFO("device: %s: wrong size", __FUNCTION__);
 		return size;
 	}
 
@@ -1182,15 +1182,15 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 		                               (data[11] & 0xFE) << 14 |
 		                                data[12] << 7 |
 		                               (data[13] & 0xFE) >> 1;
-	//LOGDEBUG("audio: pts %#012" PRIx64 "\n", m_pAudioAvPkt->pts);
+	//LOGDEBUG("device: %s: pts %#012" PRIx64 "\n", __FUNCTION__, m_pAudioAvPkt->pts);
 	} else {
-		LOGINFO("PlayAudio: No PTS!");
+		LOGINFO("device: %s: No PTS!", __FUNCTION__);
 	}
 
 	p = data + 9 + n;
 	n = size - 9 - n;			// skip pes header
 	if (n + m_pAudioAvPkt->stream_index > m_pAudioAvPkt->size) {
-		LOGERROR("audio buffer too small needed %d avail %d",
+		LOGERROR("device: %s: audio buffer too small needed %d avail %d", __FUNCTION__,
 		n + m_pAudioAvPkt->stream_index, m_pAudioAvPkt->size);
 		m_pAudioAvPkt->stream_index = 0;
 	}
@@ -1198,13 +1198,13 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	if (m_audioChannelID != id) {		// id changed audio track changed
 		m_audioChannelID = id;
 		m_audioCodecID = AV_CODEC_ID_NONE;
-		LOGDEBUG("audio/demux: new channel id");
+		LOGDEBUG("device: %s: new channel id", __FUNCTION__);
 	}
 
 	// Private stream + LPCM ID
 	if ((id & 0xF0) == 0xA0) {
 		if (n < 7) {
-			LOGERROR("invalid LPCM audio packet %d bytes", size);
+			LOGERROR("device: %s: invalid LPCM audio packet %d bytes", __FUNCTION__, size);
 			return size;
 		}
 
@@ -1283,7 +1283,7 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 			}
 			avpkt = av_packet_alloc();
 			if (avpkt == NULL) {
-				LOGERROR("avpkt allocation failed");
+				LOGERROR("device: %s: avpkt allocation failed", __FUNCTION__);
 				continue;
 			};
 			avpkt->data = (uint8_t *)p;
@@ -1311,23 +1311,23 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 
 void cSoftHdDevice::SetAudioTrackDevice( __attribute__ ((unused)) eTrackType type)
 {
-	//LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("device: %s:", __FUNCTION__);
 }
 
 void cSoftHdDevice::SetDigitalAudioDevice( __attribute__ ((unused)) bool on)
 {
-	//LOGDEBUG("%s: %s", __FUNCTION__, on ? "true" : "false");
+	//LOGDEBUG("device: %s: %s", __FUNCTION__, on ? "true" : "false");
 }
 
 void cSoftHdDevice::SetAudioChannelDevice( __attribute__ ((unused))
 	int audio_channel)
 {
-	//LOGDEBUG("%s: %d", __FUNCTION__, audio_channel);
+	//LOGDEBUG("device: %s: %d", __FUNCTION__, audio_channel);
 }
 
 int cSoftHdDevice::GetAudioChannelDevice(void)
 {
-	//LOGDEBUG("%s:", __FUNCTION__);
+	//LOGDEBUG("device: %s:", __FUNCTION__);
 	return 0;
 }
 
@@ -1338,7 +1338,7 @@ int cSoftHdDevice::GetAudioChannelDevice(void)
  */
 void cSoftHdDevice::SetVolumeDevice(int volume)
 {
-	LOGDEBUG("%s: %d", __FUNCTION__, volume);
+	LOGDEBUG("device: %s: %d", __FUNCTION__, volume);
 	m_pAudio->SetVolume((volume * 1000) / 255);
 }
 
@@ -1360,7 +1360,7 @@ int cSoftHdDevice::PesHeadLength(const uint8_t *p)
  */
 static void PrintStreamData10(const uchar *data, int offset)
 {
-	LOGDEBUG2(L_CODEC, "video: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
+	LOGDEBUG2(L_CODEC, "Stream: 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x",
 		data[offset],
 		data[offset + 1],
 		data[offset + 2],
@@ -1382,7 +1382,7 @@ static void PrintStreamData10(const uchar *data, int offset)
  */
 int cSoftHdDevice::PlayVideo(const uchar * data, int size)
 {
-	//LOGDEBUG("%s: %p %d", __FUNCTION__, data, length);
+	//LOGDEBUG("device: %s: %p %d", __FUNCTION__, data, length);
 
 	int64_t pts = AV_NOPTS_VALUE;
 	int i, n;
@@ -1414,21 +1414,21 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
 			if (m_pVideoStream->GetCodecId() == AV_CODEC_ID_NONE) {
 				if (data[i + n + 3] == 0xb3) {
 					// MPEG2 I-Frame
-					LOGDEBUG("PlayVideo: mpeg2 detected");
+					LOGDEBUG("device: %s: mpeg2 detected", __FUNCTION__);
 					PrintStreamData10(data, i + n);
 					m_pVideoStream->SetCodecId(AV_CODEC_ID_MPEG2VIDEO);
 					m_pVideoStream->SetTrickpkts(1);
 					goto newstream;
 				} else if (data[i + n + 3] == 0x09 && (data[i + n + 4] == 0x10 || data[i + n + 4] == 0xF0 || data[i + n + 10] == 0x64)) {
 					// H264 I-Frame
-					LOGDEBUG("PlayVideo: H264 detected");
+					LOGDEBUG("device: %s: H264 detected", __FUNCTION__);
 					PrintStreamData10(data, i + n);
 					m_pVideoStream->SetCodecId(AV_CODEC_ID_H264);
 					m_pVideoStream->SetTrickpkts(2);
 					goto newstream;
 				} else if (data[i + n + 3] == 0x46 && (data[i + n + 5] == 0x10 || data[i + n + 5] == 0x50 || data[i + n + 10] == 0x40)) {
 					// HEVC I-Frame
-					LOGDEBUG("PlayVideo: hevc detected");
+					LOGDEBUG("device: %s: hevc detected", __FUNCTION__);
 					PrintStreamData10(data, i + n);
 					m_pVideoStream->SetCodecId(AV_CODEC_ID_HEVC);
 					m_pVideoStream->SetTrickpkts(2);
@@ -1475,12 +1475,12 @@ newstream:
 uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, int height)
 {
 	if (m_grabActive) {
-		LOGWARNING("%s: wait for the last grab to be finished - skip!", __FUNCTION__);
+		LOGWARNING("device: %s: wait for the last grab to be finished - skip!", __FUNCTION__);
 		return NULL;
 	}
 
 	if (!width || !height) {
-		LOGERROR("%s: Width or height must be not 0!", __FUNCTION__);
+		LOGERROR("device: %s: Width or height must be not 0!", __FUNCTION__);
 		return NULL;
 	}
 
@@ -1488,7 +1488,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 		quality = 95;
 	}
 
-	LOGDEBUG2(L_GRAB, "%s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg, quality, width, height);
+	LOGDEBUG2(L_GRAB, "device: %s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg, quality, width, height);
 
 	// 1. Trigger grab in render thread and wait for the buffers to be cloned
 	m_grabActive = 1;
@@ -1527,7 +1527,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 	if (videoGrab->GetSize())
 	video = videoGrab->GetData();
 	if (!video) {
-		LOGDEBUG2(L_GRAB, "GrabImage: video is NULL, create black screen!");
+		LOGDEBUG2(L_GRAB, "device: %s: video is NULL, create black screen!", __FUNCTION__);
 		video = (uint8_t *)calloc(1, screensize);
 	}
 
@@ -1538,7 +1538,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 	if (osdGrab->GetSize())
 	osd = osdGrab->GetData();;
 	if (!osd)
-		LOGDEBUG2(L_GRAB, "GrabImage: osd is NULL, skip it");
+		LOGDEBUG2(L_GRAB, "device: %s: osd is NULL, skip it", __FUNCTION__);
 
 	// 7. blit the video into a full black screen if scaled
 	uint8_t *scaledvideo;
@@ -1583,7 +1583,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 		size = scaledsize + n;
 	}
 	free(scaledresult);
-	LOGDEBUG2(L_GRAB, "GrabImage: finished %s image (%dx%d, quality %d) at %p (size %d)", jpeg ? "jpg" : "pnm", grabwidth, grabheight, jpeg ? quality : 0, grabbedimage, size);
+	LOGDEBUG2(L_GRAB, "device: %s: finished %s image (%dx%d, quality %d) at %p (size %d)", __FUNCTION__, jpeg ? "jpg" : "pnm", grabwidth, grabheight, jpeg ? quality : 0, grabbedimage, size);
 
 	m_grabActive = 0;
 	return grabbedimage;
@@ -1611,7 +1611,7 @@ cRect cSoftHdDevice::CanScaleVideo(const cRect & rect, __attribute__ ((unused)) 
  */
 void cSoftHdDevice::ScaleVideo(const cRect & rect)
 {
-	LOGDEBUG2(L_OSD, "OSD %s: %dx%d%+d%+d",
+	LOGDEBUG2(L_OSD, "device: %s: %dx%d%+d%+d",
 		__FUNCTION__, rect.Width(), rect.Height(), rect.X(), rect.Y());
 
 	if (m_pRender)
@@ -1855,7 +1855,7 @@ void cSoftHdDevice::SetVideoCodec(enum AVCodecID codecId, AVCodecParameters * pa
 int cSoftHdDevice::PlayAudioPkts(AVPacket * pkt)
 {
 	if (m_pAudio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
-//		LOGERROR("PlayAudioPkts: m_pAudio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE!");
+//		LOGERROR("device: %s: m_pAudio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE!", __FUNCTION__);
 		return 0;
 	}
 	m_pAudioDecoder->Decode(pkt);
@@ -1883,7 +1883,7 @@ int cSoftHdDevice::PlayVideoPkts(AVPacket * pkt)
 	m_pVideoStream->IncreasePacketsFilled();
 
 	if ((size_t)pkt->size > avpkt->buf->size) {
-		LOGINFO("PlayVideoPkts: grow packet buffer size by %d",
+		LOGINFO("device: %s: grow packet buffer size by %d", __FUNCTION__,
 			(int)(pkt->size - avpkt->buf->size + AV_INPUT_BUFFER_PADDING_SIZE));
 		av_grow_packet(avpkt, pkt->size - avpkt->buf->size +
 			AV_INPUT_BUFFER_PADDING_SIZE);
