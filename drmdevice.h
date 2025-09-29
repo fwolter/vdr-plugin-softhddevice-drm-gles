@@ -84,9 +84,7 @@ public:
 	void Close(void);
 
 	// setters and getters
-	void SetUserReqDisplayWidth(int width) { m_userReqDisplayWidth = width; };
-	void SetUserReqDisplayHeight(int height) { m_userReqDisplayHeight = height; };
-	void SetUserReqDisplayRefreshRate(int refreshRate) { m_userReqDisplayRefreshRate = refreshRate; };
+	void SetUserReqDisplayParams(int, int, int);
 	uint32_t ConnectorId(void) { return m_connectorId; };
 
 	uint64_t DisplayWidth(void) { return m_drmModeInfo.hdisplay; };

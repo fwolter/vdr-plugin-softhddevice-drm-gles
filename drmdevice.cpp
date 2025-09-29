@@ -969,3 +969,17 @@ void cDrmDevice::InitEvent(void)
 	memset(&m_drmEventCtx, 0, sizeof(m_drmEventCtx));
 	m_drmEventCtx.version = 2;
 }
+
+/**
+ * Set the user requested display parameters
+ *
+ * @param width           width
+ * @param height          height
+ * @param refreshRate     refresh rate
+ */
+void cDrmDevice::SetUserReqDisplayParams(int width, int height, int refreshRate)
+{
+	m_userReqDisplayWidth = width;
+	m_userReqDisplayHeight = height;
+	m_userReqDisplayRefreshRate = refreshRate;
+}

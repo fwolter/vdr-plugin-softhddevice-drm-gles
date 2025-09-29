@@ -128,9 +128,7 @@ void cVideoRender::SetDisplayResolution(const char* resolution)
 
 	sscanf(resolution, "%dx%d@%d", &userReqDisplayWidth, &userReqDisplayHeight, &userReqDisplayRefreshRate);
 
-	m_pDrmDevice->SetUserReqDisplayWidth(userReqDisplayWidth);
-	m_pDrmDevice->SetUserReqDisplayHeight(userReqDisplayHeight);
-	m_pDrmDevice->SetUserReqDisplayRefreshRate(userReqDisplayRefreshRate);
+	m_pDrmDevice->SetUserReqDisplayParams(userReqDisplayWidth, userReqDisplayHeight, userReqDisplayRefreshRate);
 }
 
 /**
@@ -1700,9 +1698,6 @@ void cVideoRender::Init(void)
 	cDrmPlane *osdPlane = m_pDrmDevice->OsdPlane();
 
 	m_hardwareQuirks = ReadHWPlatform();
-
-//	m_buffer[0]->Init(0, 0, DRM_FORMAT_NV12, m_pDrmDevice->Fd());
-//	m_buffer[1]->Init(0, 0, DRM_FORMAT_NV12, m_pDrmDevice->Fd());
 
 	// osd FB
 #ifndef USE_GLES
