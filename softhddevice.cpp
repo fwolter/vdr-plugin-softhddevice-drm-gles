@@ -1619,14 +1619,6 @@ void cSoftHdDevice::ScaleVideo(const cRect & rect)
 }
 
 /**
- * Can play IBP frames in fast forward trickspeed
- */
-bool cSoftHdDevice::HasIBPTrickSpeed(void) const
-{
-	return false;
-}
-
-/**
  * Return command line help string.
  */
 const char *cSoftHdDevice::CommandLineHelp(void)

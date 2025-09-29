@@ -73,7 +73,6 @@ public:
 	virtual int64_t GetSTC(void);
 	virtual cRect CanScaleVideo(const cRect &, int taCenter);
 	virtual void ScaleVideo(const cRect & = cRect::Null);
-	virtual bool HasIBPTrickSpeed(void) const;
 	virtual void TrickSpeed(int, bool);
 	virtual void Clear(void);
 	virtual void Play(void);
