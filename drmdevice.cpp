@@ -813,10 +813,13 @@ cDrmBuffer *cDrmDevice::GetBufFromBo(struct gbm_bo *bo)
 			LOGDEBUG2(L_DRM, "drmdevice: %s: Modifiers failed!", __FUNCTION__);
 
 		buf->SetNumPlanes(1);
-		memcpy(buf->Handle(), (uint32_t [4]){ gbm_bo_get_handle(bo).u32, 0, 0, 0}, 16);
-		memcpy(buf->Pitch(), (uint32_t [4]){ gbm_bo_get_stride(bo), 0, 0, 0}, 16);
+		uint32_t tmpHandle[4] = { gbm_bo_get_handle(bo).u32, 0, 0, 0};
+		uint32_t tmpStride[4] = { gbm_bo_get_stride(bo), 0, 0, 0};
+		uint32_t tmpSize[4]   = { buf->Height() * buf->Width() * buf->Pitch(0), 0, 0, 0};
+		memcpy(buf->Handle(), tmpHandle, sizeof(tmpHandle));
+		memcpy(buf->Pitch(), tmpStride, sizeof(tmpStride));
+		memcpy(buf->Size(), tmpSize, sizeof(tmpSize));
 		memset(buf->Offset(), 0, 16);
-		memcpy(buf->Size(), (uint32_t [4]){ buf->Height() * buf->Width() * buf->Pitch(0), 0, 0, 0}, 16);
 		buf->SetNumObjects(1);
 		buf->SetObjectIndex(0, 0);
 		buf->SetFdPrime(0, gbm_bo_get_fd(bo));
