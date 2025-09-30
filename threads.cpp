@@ -94,10 +94,10 @@ void cDisplayThread::Action(void)
 	while(Running()) {
 		int ret = m_pRender->DisplayFrame();
 
-		if (!ret) {
-			if (m_pRender->DrmHandleEvent() != 0)
+		if (ret)
+			usleep(1000);
+		else if (m_pRender->DrmHandleEvent() != 0)
 			LOGERROR("threads: display thread: drmHandleEvent failed!");
-		}
 
 		if (m_pRender->ShouldClose() || m_pRender->ShouldFlush())
 			m_pRender->CleanUp();
