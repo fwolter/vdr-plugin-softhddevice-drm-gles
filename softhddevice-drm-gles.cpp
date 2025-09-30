@@ -81,10 +81,8 @@ static const char *const MAINMENUENTRY = trNOOP("SHD Media Player");
  */
 cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 {
-	LOGDEBUG("plugin: %s:", __FUNCTION__);
-
 	m_pConfig = new cSoftHdConfig();
-	m_pDevice = new cSoftHdDevice(m_pConfig);
+	m_pDevice = new cSoftHdDevice(m_pConfig); // no need to delete m_pDevice, because VDR does it for us
 	m_pAudio = m_pDevice->Audio();
 	m_pDevice->Init();
 }
@@ -97,6 +95,7 @@ cPluginSoftHdDevice::cPluginSoftHdDevice(void)
 cPluginSoftHdDevice::~cPluginSoftHdDevice(void)
 {
 	LOGDEBUG("plugin: %s:", __FUNCTION__);
+	delete m_pConfig;
 }
 
 /**

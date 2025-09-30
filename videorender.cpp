@@ -1461,7 +1461,7 @@ int cVideoRender::TriggerGrab(void)
 */
 void cVideoRender::ConvertVideoBufToRgb(void)
 {
-	int size;
+	int size = 0;
 	cSoftHdGrab *grab = &m_grabVideo;
 	cDrmBuffer *buf = grab->GetBuf();
 
@@ -1478,14 +1478,9 @@ void cVideoRender::ConvertVideoBufToRgb(void)
 	}
 	// result's width and height are original dimensions how buffer is presented on the screen
 	uint8_t * result = BufToRgb(buf, &size, grab->GetWidth(), grab->GetHeight(), AV_PIX_FMT_RGB24);
-	if (result) {
-		grab->SetData(result);
-		grab->SetSize(size);
-		grab->FreeBuf();
-	} else {
-		grab->SetData(NULL);
-		grab->SetSize(0);
-	}
+	grab->SetData(result);
+	grab->SetSize(size);
+	grab->FreeBuf();
 
 	return;
 }

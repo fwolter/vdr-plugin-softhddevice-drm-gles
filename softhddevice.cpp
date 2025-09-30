@@ -1527,7 +1527,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 	cSoftHdGrab *videoGrab = m_pRender->GetGrab(&video_size, &video_width, &video_height, &video_x, &video_y, 0);
 	uint8_t *video = NULL;
 	if (videoGrab->GetSize())
-	video = videoGrab->GetData();
+		video = videoGrab->GetData();
 	if (!video) {
 		LOGDEBUG2(L_GRAB, "device: %s: video is NULL, create black screen!", __FUNCTION__);
 		video = (uint8_t *)calloc(1, screensize);
@@ -1538,7 +1538,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 	cSoftHdGrab *osdGrab = m_pRender->GetGrab(NULL, NULL, NULL, NULL, NULL, 1);
 	uint8_t *osd = NULL;
 	if (osdGrab->GetSize())
-	osd = osdGrab->GetData();;
+		osd = osdGrab->GetData();;
 	if (!osd)
 		LOGDEBUG2(L_GRAB, "device: %s: osd is NULL, skip it", __FUNCTION__);
 

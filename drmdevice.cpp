@@ -737,7 +737,7 @@ static void drm_fb_destroy_callback(struct gbm_bo *bo, void *data)
 	if (buf->Id())
 		drmModeRmFB(drm_fd, buf->Id());
 
-	free(buf);
+	delete(buf);
 }
 
 __attribute__ ((weak)) union gbm_bo_handle
