@@ -268,7 +268,12 @@ int cVideoStream::DecodeInput(void)
 
 	if (m_codecId != AV_CODEC_ID_NONE) {
 		m_pktsMutex.Lock();
-		// in trickspeed wait for minimum pkts needed to decode a frame
+		// wait for m_trickpkts packets
+		//
+		// m_trickpkts is the number of packets we need to have in the ringbuffer
+		// while in interlaced trickspeed mode, needed to get a frame.
+		// This guarantees, that we don't drain the decoder too early, but exactly after
+		// m_trickpkts sent packets 
 		int minPkts = (m_pRender->GetTrickSpeed() && m_interlaced) ? m_trickpkts : 1;
 		if (atomic_read(&m_packetsFilled) < minPkts) {
 			m_pktsMutex.Unlock();
@@ -276,7 +281,7 @@ int cVideoStream::DecodeInput(void)
 		}
 		avpkt = &m_packetRb[m_packetRead];
 
-		// try sending packet to decoder
+		// send packet to decoder
 		ret = m_pDecoder->SendPacket(avpkt);
 		if (ret != AVERROR(EAGAIN)) { // something went wrong or packet was sent, advance packet
 			m_packetRead = (m_packetRead + 1) % VIDEO_PACKET_MAX;
@@ -292,10 +297,12 @@ int cVideoStream::DecodeInput(void)
 		}
 		m_pktsMutex.Unlock();
 
-		// this is normal Playback
+		// receive frame from decoder
 		if (!m_pRender->GetTrickSpeed()) {
+			// this is normal Playback
 			if (!m_newStream) { // this is for mediaplayer ?
-				if (!m_pDecoder->ReceiveFrame(0, &frame)) {
+				ret = m_pDecoder->ReceiveFrame(0, &frame);
+				if (ret == 0) {
 					while (m_pRender->RenderFrame(m_pDecoder->GetContext(), frame)) {
 						if (IsClosing()) {
 							av_frame_free(&frame);
@@ -304,12 +311,10 @@ int cVideoStream::DecodeInput(void)
 					}
 				}
 			}
-		// this is TrickSpeed
 		} else {
-receive_trickspeed:
-			// try receiving frame from decoder
+			// ths is TrickSpeed
 			ret = m_pDecoder->ReceiveFrame(1, &frame);
-			if (ret == 0) {
+			while (ret == 0) {
 				while (m_pRender->GetTrickSpeed() && m_pRender->GetTrickCounter() > 0) {
 					AVFrame *trickframe = av_frame_clone(frame);
 					if (!trickframe) {
@@ -339,12 +344,15 @@ receive_trickspeed:
 				int trickSpeed = m_pRender->GetTrickSpeed();
 				m_pRender->SetTrickCounter(trickSpeed);
 
-				goto receive_trickspeed; // try to get another frame
-			} else if (ret == AVERROR_EOF) { // needs flush / reopen
+				// try receiving another frame from decoder, should end up with AVERROR_EOF
+				ret = m_pDecoder->ReceiveFrame(1, &frame);
+			}
+
+			if (ret == AVERROR_EOF) { // needs flush / reopen
 				FlushDecoder();
 				sent = 0;
 			}
-		}
+		} // end receive frame
 		return 0;
 	}
 
