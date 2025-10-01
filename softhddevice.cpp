@@ -959,20 +959,23 @@ void cSoftHdDevice::StillPicture(const uchar *data, int size)
 	// force decoder to enter draining because we only want 1 avpkt to be decoded
 	m_pVideoStream->Decoder()->SendPacket(NULL);
 
-receive:
 	ret = m_pVideoStream->Decoder()->ReceiveFrame(1, &frame);
-	if (!ret) {
-		// frame received, render it and try another one (should end up with AVERROR_EOF)
+	// we got a frame, so try to render it and try another one (should end up with AVERROR_EOF)
+	while (!ret) {
 		LOGDEBUG2(L_STILL, "device: %s: frame received", __FUNCTION__);
 		m_pRender->MarkAsStillpictureFrame(frame);
 		while (m_pRender->RenderFrame(m_pVideoStream->Decoder()->GetContext(), frame)) {
 			if (m_pVideoStream->IsClosing()) {
-			av_frame_free(&frame);
-			break;
+				av_frame_free(&frame);
+				break;
 			}
 		}
-		goto receive;
-	} else if (ret == AVERROR_EOF) {
+		// try to get another frame
+		ret = m_pVideoStream->Decoder()->ReceiveFrame(1, &frame);
+	}
+
+	// no more frames available or error
+	if (ret == AVERROR_EOF) {
 		// AVERROR_EOF, flush needed
 		m_pVideoStream->FlushDecoder();
 	} else {
@@ -1376,8 +1379,19 @@ static void PrintStreamData10(const uchar *data, int offset)
 		data[offset + 10]);
 }
 
+void cSoftHdDevice::SetCodecAndEnqueue(const uchar *data, int offset, int size,
+                                          enum AVCodecID codecId, int64_t pts)
+{
+	PrintStreamData10(data, offset);
+	m_pVideoStream->SetCodecId(codecId);
+	m_pVideoStream->SetTrickpkts(codecId == AV_CODEC_ID_MPEG2VIDEO ? 1 : 2);
+	m_pVideoStream->Open();
+	m_pVideoStream->SetTimebase(1, 90000);
+	m_pVideoStream->EnqueueInRb(pts, data + offset, size - offset);
+}
+
 /**
-** Play a video packet
+ * Play a video packet
  *
  * @param data  exactly one complete PES packet (which is incomplete)
  * @param size  length of PES packet
@@ -1411,36 +1425,25 @@ int cSoftHdDevice::PlayVideo(const uchar * data, int size)
 	n = PesHeadLength(data);	// PES header size
 
 	for (i = 0; (i < 2) && (i + 4 < size); i++) {
+		int offset = i + n;
 		// ES start code 0x00 0x00 0x01
-		if (!data[i + n] && !data[i + n + 1] && data[i + n + 2] == 0x01) {
+		if (!data[offset] && !data[offset + 1] && data[offset + 2] == 0x01) {
 			if (m_pVideoStream->GetCodecId() == AV_CODEC_ID_NONE) {
-				if (data[i + n + 3] == 0xb3) {
+				if (data[offset + 3] == 0xb3) {
 					// MPEG2 I-Frame
 					LOGDEBUG("device: %s: mpeg2 detected", __FUNCTION__);
-					PrintStreamData10(data, i + n);
-					m_pVideoStream->SetCodecId(AV_CODEC_ID_MPEG2VIDEO);
-					m_pVideoStream->SetTrickpkts(1);
-					goto newstream;
-				} else if (data[i + n + 3] == 0x09 && (data[i + n + 4] == 0x10 || data[i + n + 4] == 0xF0 || data[i + n + 10] == 0x64)) {
+					SetCodecAndEnqueue(data, offset, size, AV_CODEC_ID_MPEG2VIDEO, pts);
+				} else if (data[offset + 3] == 0x09 && (data[offset + 4] == 0x10 || data[offset + 4] == 0xF0 || data[offset + 10] == 0x64)) {
 					// H264 I-Frame
 					LOGDEBUG("device: %s: H264 detected", __FUNCTION__);
-					PrintStreamData10(data, i + n);
-					m_pVideoStream->SetCodecId(AV_CODEC_ID_H264);
-					m_pVideoStream->SetTrickpkts(2);
-					goto newstream;
-				} else if (data[i + n + 3] == 0x46 && (data[i + n + 5] == 0x10 || data[i + n + 5] == 0x50 || data[i + n + 10] == 0x40)) {
+					SetCodecAndEnqueue(data, offset, size, AV_CODEC_ID_H264, pts);
+				} else if (data[i + n + 3] == 0x46 && (data[offset + 5] == 0x10 || data[offset + 5] == 0x50 || data[offset + 10] == 0x40)) {
 					// HEVC I-Frame
 					LOGDEBUG("device: %s: hevc detected", __FUNCTION__);
-					PrintStreamData10(data, i + n);
-					m_pVideoStream->SetCodecId(AV_CODEC_ID_HEVC);
-					m_pVideoStream->SetTrickpkts(2);
-newstream:
-					m_pVideoStream->Open();
-					m_pVideoStream->SetTimebase(1, 90000);
-					m_pVideoStream->EnqueueInRb(pts, data + i + n, size - i - n);
+					SetCodecAndEnqueue(data, offset, size, AV_CODEC_ID_HEVC, pts);
 				}
 			} else {
-				m_pVideoStream->EnqueueInRb(pts, data + i + n, size - i - n);
+				m_pVideoStream->EnqueueInRb(pts, data + offset, size - offset);
 			}
 			return size;
 		}
