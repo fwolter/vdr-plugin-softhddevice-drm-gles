@@ -248,6 +248,10 @@ private:
 
 	void SetVideoClock(int64_t);
 	int ShouldWaitForAudio(void);
+
+	int WaitForAudioReady(int64_t, int64_t, int *, cDrmBuffer **);
+	int WaitForAudioClock(int64_t *, int *, cDrmBuffer **);
+	int HandleDropDup(int64_t, int64_t);
 };
 
 #endif

@@ -337,64 +337,101 @@ skip_video:
 }
 
 /**
- * Sync the frames
+ * Wait for audio to be ready
  *
- * @retval 1     close or flush requested, skip video or show black frame
- * @retval 0     nothing to sync or paused
- * @retval -1    drop frame
+ * If a video is started, wait until we have audio running.
+ * The function only finished, if we got a valid audio or if a video close
+ * or flush is requested or if the video is paused.
+ *
+ * @param[in] videoPts       video pts
+ * @param[in] framePts       AVFrame pts
+ * @param[out] skipVideo     skip the video if closing
+ * @param[buf] buf           set black buffer if flushing
+ *
+ * @retval 1                 close or flush requested, skip video or show black frame
+ * @retval 0                 nothing to sync or paused
  */
-int cVideoRender::Sync(AVFrame *frame, int *skipVideo, cDrmBuffer **buf)
+int cVideoRender::WaitForAudioReady(int64_t videoPts, int64_t framePts, int *skipVideo, cDrmBuffer **buf)
 {
-	int64_t audioPts;
-	int64_t videoPts;
-
-	videoPts = frame->pts * 1000 * av_q2d(*m_timebase);
-
 	if(!m_startCounter && !m_closing) {
 		LOGDEBUG("videorender: %s: start PTS %s", __FUNCTION__, Timestamp2String(videoPts));
-		m_pAudio->Skip(frame->pts, 0);
-avready:
-		if (!m_pAudio->VideoReady(videoPts)) {
-			usleep(10000);
+		m_pAudio->Skip(framePts, 0);
 
+		while (!m_pAudio->VideoReady(videoPts)) {
+			usleep(10000);
 			// check for close/flush request or pause
 			if (m_closing) {
 				LOGDEBUG2(L_DRM, "videorender: %s: closing while sync, set a black FB", __FUNCTION__);
 				*buf = &m_bufBlack;
 				return 1;
-			} else if (m_flushing) {
+			}
+
+			if (m_flushing) {
 				LOGDEBUG2(L_DRM, "videorender: %s: flushing while sync, skip video", __FUNCTION__);
 				*skipVideo = 1;
 				return 1;
-			} else if (VideoIsPaused()) {
-				return 0;
 			}
 
-			goto avready;
+			if (VideoIsPaused()) {
+				return 0;
+			}
 		}
 	}
 
-audioclock:
+	return 0;
+}
+
+/**
+ * Wait for audio clock
+ *
+ * @param[out] audioPts      audio pts
+ * @param[out] skipVideo     skip the video if closing
+ * @param[out] buf           set black buffer if flushing
+ *
+ * @retval 1                 close or flush requested, skip video or show black frame
+ * @retval 0                 paused or valid audio clock
+ */
+int cVideoRender::WaitForAudioClock(int64_t *audioPts, int *skipVideo, cDrmBuffer **buf)
+{
+	*audioPts = m_pAudio->GetClock();
+
 	// check for close/flush request or pause
-	if (m_closing) {
-		LOGDEBUG2(L_DRM, "videorender: %s: closing while sync, set a black FB", __FUNCTION__);
-		*buf = &m_bufBlack;
-		return 1;
-	} else if (m_flushing) {
-		LOGDEBUG2(L_DRM, "videorender: %s: flushing while sync, skip video", __FUNCTION__);
-		*skipVideo = 1;
-		return 1;
-	} else if (VideoIsPaused()) {
-		return 0;
-	}
+	while (*audioPts == (int64_t)AV_NOPTS_VALUE) {
+		if (m_closing) {
+			LOGDEBUG2(L_DRM, "videorender: %s: closing while sync, set a black FB", __FUNCTION__);
+			*buf = &m_bufBlack;
+			return 1;
+		}
 
-	audioPts = m_pAudio->GetClock();
+		if (m_flushing) {
+			LOGDEBUG2(L_DRM, "videorender: %s: flushing while sync, skip video", __FUNCTION__);
+			*skipVideo = 1;
+			return 1;
+		}
 
-	if (audioPts == (int64_t)AV_NOPTS_VALUE) {
+		if (VideoIsPaused()) {
+			return 0;
+		}
+
 		usleep(20000);
-		goto audioclock;
-	}
+		*audioPts = m_pAudio->GetClock();
+	};
 
+	return 0;
+}
+
+/**
+ * Drop or dup a frame
+ *
+ * @param videoPts       video pts
+ * @param audioPts       AVFrame pts
+ *
+ * @retval 1             dup a frame
+ * @retval -1            drop a frame
+ * @retval 0             we are in sync
+ */
+int cVideoRender::HandleDropDup(int64_t videoPts, int64_t audioPts)
+{
 	int diff = videoPts - audioPts - m_pDevice->GetVideoAudioDelay();
 
 	if (abs(diff) > 5000) {	// more than 5s
@@ -427,10 +464,40 @@ audioclock:
 
 		m_framesDuped++;
 		usleep(20000);
-		goto audioclock;
+		return 1;
 	}
 
 	return 0;
+}
+
+/**
+ * Sync the frames
+ *
+ * @param[in] frame          AVFrame to sync
+ * @param[out] skipVideo     skip the video if closing
+ * @param[buf] buf           set black buffer if flushing
+ *
+ * @retval 1                 close or flush requested, skip video or show black frame
+ * @retval 0                 nothing to sync or paused
+ * @retval -1                drop frame
+ */
+int cVideoRender::Sync(AVFrame *frame, int *skipVideo, cDrmBuffer **buf)
+{
+	int64_t audioPts;
+	int64_t videoPts;
+
+	videoPts = frame->pts * 1000 * av_q2d(*m_timebase);
+	if (WaitForAudioReady(videoPts, frame->pts, skipVideo, buf))
+		return 1;
+
+	int ret = 1;
+	while (ret == 1) {
+		if (WaitForAudioClock(&audioPts, skipVideo, buf))
+			return 1;
+		ret = HandleDropDup(videoPts, audioPts);
+	}
+
+	return ret;
 }
 
 /**
