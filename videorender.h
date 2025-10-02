@@ -144,11 +144,7 @@ public:
 	// Frame and buffer
 	int RenderFrame(AVCodecContext *, AVFrame *);
 	int DisplayFrame(void);
-	int Sync(AVFrame *, int *, cDrmBuffer **);
 	void EnqueueFB(AVFrame *);
-	int CommitBuffer(cDrmBuffer *, int);
-	int GetFrame(AVFrame **);
-	cDrmBuffer *GetBuffer(AVFrame *);
 	int GetFramesFilled(void) { return atomic_read(&m_framesFilled); };
 	void RbPushFrame(AVFrame *);
 	AVFrame *RbGetFrame(void);
@@ -245,13 +241,24 @@ private:
 #endif
 	int GetFrameFlags(AVFrame *);
 	void SetFrameFlags(AVFrame *, int);
-
 	void SetVideoClock(int64_t);
 	int ShouldWaitForAudio(void);
-
-	int WaitForAudioReady(int64_t, int64_t, int *, cDrmBuffer **);
-	int WaitForAudioClock(int64_t *, int *, cDrmBuffer **);
+	int GetFrame(AVFrame **);
+	int WaitForFrames(void);
+	int WaitForAudioReady(int64_t, int64_t);
+	int WaitForAudioClock(int64_t *);
 	int HandleDropDup(int64_t, int64_t);
+	int Sync(AVFrame *);
+	int NeedsSync(AVFrame *);
+	int PageFlip(AVFrame *, cDrmBuffer *, int);
+	int PageFlipBlack(void);
+	int PageFlipOsd(void);
+	int PageFlipVideo(AVFrame *, cDrmBuffer *);
+	cDrmBuffer *GetBuffer(AVFrame *);
+	int SetOsdBuffer(drmModeAtomicReqPtr);
+	void SetVideoBuffer(cDrmBuffer *);
+	int CommitBuffer(cDrmBuffer *, int);
+	void Grab(cDrmBuffer *);
 };
 
 #endif

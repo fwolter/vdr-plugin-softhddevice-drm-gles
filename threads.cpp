@@ -427,10 +427,8 @@ void cFilterThread::Action(void)
 			// set flag of the filtered frame (scale filter and AV_PIX_FMT_YUV420P)
 			if (m_filterTrick)
 				m_pRender->MarkAsTrickspeedFrame(filtFrame);
-			if (m_filterStill) {
+			if (m_filterStill)
 				m_pRender->MarkAsStillpictureFrame(filtFrame);
-				filtFrame->pts = AV_NOPTS_VALUE;
-			}
 
 			// put frame into display queue
 			enqueued = 0;

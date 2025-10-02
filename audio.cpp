@@ -890,6 +890,9 @@ int cSoftHdAudio::VideoReady(int64_t videoPts)
  * Skip Audio if it's behind video
  *
  * @param videoPts   real video presentation timestamp
+ * @param full       if true, skip all audio frames
+ *                   if false, keep one byte left
+ *                   this is a workaround to avoid empty audio ringbuffer
  */
 int cSoftHdAudio::Skip(int64_t videoPts, int full)
 {
