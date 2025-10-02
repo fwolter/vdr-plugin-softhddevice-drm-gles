@@ -299,22 +299,19 @@ int cDrmDevice::Init(void)
 	if (!drmmode) {
 		j = 0;
 		int width;
-find_mode:
-		for (i = 0, width = 0; i < connector->count_modes; i++) {
-			drmModeModeInfo *current_mode = &connector->modes[i];
-			if (preferred_hz[j] && current_mode->vrefresh != preferred_hz[j])
-				continue;
+		while (!drmmode && preferred_hz[j]) {
+			for (i = 0, width = 0; i < connector->count_modes; i++) {
+				drmModeModeInfo *current_mode = &connector->modes[i];
+				if (preferred_hz[j] && current_mode->vrefresh != preferred_hz[j])
+					continue;
 
-			int current_width = current_mode->hdisplay;
-			if (current_width > width) {
-				drmmode = current_mode;
-				width = current_width;
+				int current_width = current_mode->hdisplay;
+				if (current_width > width) {
+					drmmode = current_mode;
+					width = current_width;
+				}
 			}
-		}
-
-		if (!drmmode && preferred_hz[j]) {
 			j++;
-			goto find_mode;
 		}
 
 		if (drmmode)
