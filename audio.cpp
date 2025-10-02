@@ -569,19 +569,24 @@ void cSoftHdAudio::ExitRingbuffer(void)
  */
 void cSoftHdAudio::EnqueueFrame(AVFrame *frame)
 {
+	if (!frame)
+		return;
+
 	uint16_t *buffer;
 
 	int count = frame->nb_samples * frame->ch_layout.nb_channels * m_bytesPerSample;
 	buffer = (uint16_t *)frame->data[0];
 
 	if (!m_alsaPlayerRunning) {
+		av_frame_free(&frame);
 //		LOGDEBUG2(L_SOUND, "audio: %s: Alsa player is not running!", __FUNCTION__);
 		return;
 	}
 
 	if (m_compression) {		// in place operation
 		Compress(buffer, count);
-	}	if (m_normalize) {			// in place operation
+	}
+	if (m_normalize) {			// in place operation
 		Normalize(buffer, count);
 	}
 	ReorderAudioFrame(buffer, count, frame->ch_layout.nb_channels);
@@ -589,6 +594,8 @@ void cSoftHdAudio::EnqueueFrame(AVFrame *frame)
 	Enqueue((uint16_t *)buffer, count, frame);
 	if (!m_running && !m_paused)		// check, if we can start the thread
 		StartAudioThread(frame);
+
+	av_frame_free(&frame);
 }
 
 /**
@@ -706,67 +713,20 @@ int cSoftHdAudio::Setup(AVCodecContext *ctx, int samplerate, int channels, int p
 }
 
 /**
- * Send audio frame to filter and enqueue it
+ * Get frame from filter sink
  *
- * @param inframe   incoming audio frame to be filtered
- * @param ctx       AVCodec audio decoding context
- *
- * @retval 1        error, send again
- * @retval 0        running
+ * @returns       pointer to AVFrame if success, NULL otherwise
  */
-void cSoftHdAudio::Filter(AVFrame *inframe, AVCodecContext *ctx)
+AVFrame *cSoftHdAudio::FilterGetFrame(void)
 {
-	AVFrame *outframe = NULL;
-	int err;
-	int err_count = 0;
-
-	if (!inframe) {
-//		LOGDEBUG2(L_SOUND, "audio: %s: NO inframe!", __FUNCTION__);
-		goto get_frame;
-	}
-in:
-	if (m_filterReady && m_filterChanged) {
-
-//		LOGDEBUG2(L_SOUND, "audio: %s: m_filterReady %d sink_links_count %d channels %d nb_filters %d nb_outputs %d channels %d m_filterChanged %d",
-//			__FUNCTION__, m_filterReady,
-//			m_pFilterGraph->sink_links_count, m_pFilterGraph->sink_links[0]->channels,
-//			m_pFilterGraph->filters[m_pFilterGraph->nb_filters - 1]->nb_outputs,
-//			m_pFilterGraph->nb_filters, m_pFilterGraph->filters[m_pFilterGraph->nb_filters - 1]->outputs[m_pFilterGraph->filters[m_pFilterGraph->nb_filters - 1]->nb_outputs - 1]->channels,
-//			m_filterChanged);
-
-		avfilter_graph_free(&m_pFilterGraph);
-		m_filterReady = 0;
-		LOGDEBUG2(L_SOUND, "audio: %s: Free the filter graph.", __FUNCTION__);
+	AVFrame *outframe = nullptr;
+	outframe = av_frame_alloc();
+	if (!outframe) {
+		LOGERROR("audio: %s: Error allocating frame", __FUNCTION__);
+		return NULL;
 	}
 
-	if (!m_filterReady) {
-		err = InitFilter(ctx);
-		if (err) {
-			LOGDEBUG2(L_SOUND, "audio: %s: Audiom_filterReady failed!", __FUNCTION__);
-			av_frame_unref(inframe);
-			return;
-		}
-	}
-
-	if ((err = av_buffersrc_add_frame(m_pBuffersrcCtx, inframe)) < 0) {
-		if (err_count) {
-			char errbuf[128];
-			av_strerror(err, errbuf, sizeof(errbuf));
-			LOGERROR("audio: %s: Error submitting the frame to the filter fmt %s channels %d %s", __FUNCTION__,
-				av_get_sample_fmt_name(ctx->sample_fmt), ctx->ch_layout.nb_channels, errbuf);
-			av_frame_unref(inframe);
-			return;
-		} else {
-			m_filterChanged = 1;
-			err_count++;
-			LOGDEBUG2(L_SOUND, "audio: %s: m_filterChanged %d  err_count %d", __FUNCTION__, m_filterChanged, err_count);
-			goto in;
-		}
-	}
-
-get_frame:
-	outframe  = av_frame_alloc();
-	err = av_buffersink_get_frame(m_pBuffersinkCtx, outframe);
+	int err = av_buffersink_get_frame(m_pBuffersinkCtx, outframe);
 
 	if (err == AVERROR(EAGAIN)) {
 //		LOGERROR("audio: %s: Error filtering AVERROR(EAGAIN)", __FUNCTION__);
@@ -779,10 +739,86 @@ get_frame:
 		av_frame_free(&outframe);
 	}
 
-	if (outframe) {
-		EnqueueFrame(outframe);
-		av_frame_free(&outframe);
+	return outframe;
+}
+
+/**
+ * Check if the filter has changed and is ready, init the filter if needed
+ *
+ * @param ctx       AVCodec audio decoding context
+ *
+ * @retval 1        error, init failed
+ * @retval 0        filter initiated
+ */
+int cSoftHdAudio::CheckForFilterReady(AVCodecContext *ctx)
+{
+	if (m_filterReady && m_filterChanged) {
+//		LOGDEBUG2(L_SOUND, "audio: %s: m_filterReady %d sink_links_count %d channels %d nb_filters %d nb_outputs %d channels %d m_filterChanged %d",
+//			__FUNCTION__, m_filterReady,
+//			m_pFilterGraph->sink_links_count, m_pFilterGraph->sink_links[0]->channels,
+//			m_pFilterGraph->filters[m_pFilterGraph->nb_filters - 1]->nb_outputs,
+//			m_pFilterGraph->nb_filters, m_pFilterGraph->filters[m_pFilterGraph->nb_filters - 1]->outputs[m_pFilterGraph->filters[m_pFilterGraph->nb_filters - 1]->nb_outputs - 1]->channels,
+//			m_filterChanged);
+		avfilter_graph_free(&m_pFilterGraph);
+		m_filterReady = 0;
+		LOGDEBUG2(L_SOUND, "audio: %s: Free the filter graph.", __FUNCTION__);
 	}
+
+	if (!m_filterReady) {
+		if (InitFilter(ctx)) {
+			LOGDEBUG2(L_SOUND, "audio: %s: AudioFilterReady failed!", __FUNCTION__);
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+/**
+ * Send audio frame to filter and enqueue it
+ *
+ * @param inframe   incoming audio frame to be filtered
+ * @param ctx       AVCodec audio decoding context
+ *
+ * @retval 1        error, send again
+ * @retval 0        running
+ */
+void cSoftHdAudio::Filter(AVFrame *inframe, AVCodecContext *ctx)
+{
+	AVFrame *outframe = NULL;
+	int err = -1;
+	int err_count = 0;
+
+	if (inframe) {
+		while (err < 0) {
+			if (CheckForFilterReady(ctx)) {
+				av_frame_unref(inframe);
+				return;
+			}
+
+			err = av_buffersrc_add_frame(m_pBuffersrcCtx, inframe);
+			if (err < 0) {
+				if (err_count) {
+					char errbuf[128];
+					av_strerror(err, errbuf, sizeof(errbuf));
+					LOGERROR("audio: %s: Error submitting the frame to the filter fmt %s channels %d %s", __FUNCTION__,
+						av_get_sample_fmt_name(ctx->sample_fmt), ctx->ch_layout.nb_channels, errbuf);
+					av_frame_unref(inframe);
+					return;
+				} else {
+					m_filterChanged = 1;
+					err_count++;
+					LOGDEBUG2(L_SOUND, "audio: %s: m_filterChanged %d  err_count %d", __FUNCTION__, m_filterChanged, err_count);
+				}
+			}
+		}
+	}
+
+//	if (!inframe)
+//		LOGDEBUG2(L_SOUND, "audio: %s: NO inframe!", __FUNCTION__);
+
+	outframe = FilterGetFrame();
+	EnqueueFrame(outframe);
 }
 
 /**

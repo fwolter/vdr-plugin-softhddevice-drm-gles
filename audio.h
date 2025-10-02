@@ -150,6 +150,8 @@ private:
 	AVFilterGraph *m_pFilterGraph;
 	AVFilterContext *m_pBuffersrcCtx;
 	AVFilterContext *m_pBuffersinkCtx;
+	AVFrame *FilterGetFrame(void);
+	int CheckForFilterReady(AVCodecContext *);
 
 	// ring buffer variables
 	cSoftHdRingbuffer *m_pRingbuffer = nullptr;                 ///< sample ring buffer
