@@ -135,6 +135,7 @@ private:
 	cDrmPlane m_videoPlane;                ///< the video drm plane
 	cDrmPlane m_osdPlane;                  ///< the osd drm plane
 
+	int32_t FindCrtcForConnector(const drmModeRes *, const drmModeConnector *);
 #ifdef USE_GLES
 	struct gbm_device *m_pGbmDevice;       ///< pointer to the gbm device
 	struct gbm_surface *m_pGbmSurface;     ///< pointer to the gbm surface
@@ -144,7 +145,6 @@ private:
 	EGLContext m_eglContext;               ///< EGL context
 	int m_glInitiated;                     ///< true, if OpenGL/ES context is initiated
 
-	int32_t FindCrtcForConnector(const drmModeRes *, const drmModeConnector *);
 	int InitEGL(void);
 	EGLConfig GetEGLConfig(void);
 	int InitGbm(int, int, uint32_t, uint64_t);

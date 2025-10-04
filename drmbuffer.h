@@ -48,7 +48,9 @@ class cDrmBuffer {
 public:
 	cDrmBuffer(void);
 	cDrmBuffer(cDrmBuffer *src);
+#ifdef USE_GLES
 	cDrmBuffer(int, uint32_t, uint32_t, uint32_t, struct gbm_bo *);
+#endif
 	virtual ~cDrmBuffer(void);
 
 	int Setup(int, uint32_t, uint32_t, uint32_t, AVDRMFrameDescriptor *);

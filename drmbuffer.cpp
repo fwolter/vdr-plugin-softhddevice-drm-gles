@@ -109,6 +109,7 @@ cDrmBuffer::cDrmBuffer(cDrmBuffer *src)
 	}
 }
 
+#ifdef USE_GLES
 /**
  * cDrmBuffer constructor
  *
@@ -131,6 +132,7 @@ cDrmBuffer::cDrmBuffer(int fdDrm, uint32_t width, uint32_t height, uint32_t pixF
 	m_pBo = bo;
 	m_pPlane[0] = nullptr;
 }
+#endif
 
 /**
  * cDrmBuffer destructor

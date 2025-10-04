@@ -22,6 +22,8 @@
 #ifndef __SOFTHDDEVICE_DRM_GLES_H
 #define __SOFTHDDEVICE_DRM_GLES_H
 
+#include "vdr/plugin.h"
+
 #ifdef USE_GLES
 #include "openglosd.h"
 #endif
@@ -37,7 +39,7 @@ class cSoftHdDevice;
 /**
  * cPluginSoftHdDevice - SoftHdDevice plugin class
  */
-class cPluginSoftHdDevice:public cPlugin
+class cPluginSoftHdDevice : public cPlugin
 {
 public:
 	cPluginSoftHdDevice(void);

@@ -581,8 +581,10 @@ void cSoftHdDevice::Start(void)
 		if (!m_pVideoStream->Decoder())
 			m_pVideoStream->SetCodecId(AV_CODEC_ID_NONE);
 
+#ifdef USE_GLES
 		if (m_pConfig->ConfigDisableOglOsd)
 			m_pRender->DisableOglOsd();
+#endif
 		m_pRender->DisableDeint(m_pConfig->ConfigDisableDeint);
 		m_pRender->Init();
 
@@ -1748,16 +1750,6 @@ int cSoftHdDevice::OglOsdIsDisabled(void)
 {
 	return m_pConfig->ConfigDisableOglOsd;
 };
-#endif
-
-/**
- * Disables deinterlacer (called from setup menu or conf)
- */
-void cSoftHdDevice::SetDisableDeint(void)
-{
-	if (m_pRender)
-		m_pRender->DisableDeint(m_pConfig->ConfigDisableDeint);
-}
 
 /**
  * Disables OpenGL/ES Osd (called from setup menu or conf)
@@ -1767,6 +1759,16 @@ void cSoftHdDevice::SetDisableOglOsd(void)
 	m_pConfig->ConfigDisableOglOsd = 1;
 	if (m_pRender)
 		m_pRender->DisableOglOsd();
+}
+#endif
+
+/**
+ * Disables deinterlacer (called from setup menu or conf)
+ */
+void cSoftHdDevice::SetDisableDeint(void)
+{
+	if (m_pRender)
+		m_pRender->DisableDeint(m_pConfig->ConfigDisableDeint);
 }
 
 /**

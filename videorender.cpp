@@ -894,8 +894,13 @@ void cVideoRender::OsdDrawARGB(int xi, int yi,
 		LOGDEBUG2(L_OPENGL, "videorender: %s: eglSwapBuffers eglDisplay %p eglSurface %p (%i x %i, %i)", __FUNCTION__, m_pDrmDevice->EglDisplay(), m_pDrmDevice->EglSurface(), buf->Width(), buf->Height(), buf->Pitch(0));
 	}
 #else
+	// suppress unused variable warnings ...
+	(void) xi;
+	(void) yi;
+	(void) width;
+
 	for (int i = 0; i < height; ++i) {
-		memcpy(m_pBufOsd->Plane(0) + x * 4 + (i + y) * m_pBufOsd->Pitch(0)),
+		memcpy(m_pBufOsd->Plane(0) + x * 4 + (i + y) * m_pBufOsd->Pitch(0),
 			argb + i * pitch, (size_t)pitch);
 	}
 #endif
@@ -1830,7 +1835,7 @@ void cVideoRender::Exit(void)
 	}
 #else
 	if (m_pBufOsd) {
-		m_pBufOsd->Destroy(m_pBufOsd);
+		m_pBufOsd->Destroy();
 		delete m_pBufOsd;
 	}
 #endif
