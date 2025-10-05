@@ -34,6 +34,7 @@ std::shared_ptr<cSoftHdLogger> cSoftHdLogger::instance;
  */
 cSoftHdLogger::cSoftHdLogger(void)
 {
+	logLevel = 0;
 }
 
 /**

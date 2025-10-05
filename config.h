@@ -29,38 +29,40 @@
 class cSoftHdConfig
 {
 public:
-	cSoftHdConfig(void);
+	cSoftHdConfig(void) = default;
 	virtual ~cSoftHdConfig(void);
 
 	bool SetupParse(const char *, const char *, cSoftHdDevice *, cSoftHdAudio *);
 #ifdef USE_GLES
 #ifdef WRITE_PNG
-	char ConfigWritePngs;                   ///< config write pngs from OSD
+	char ConfigWritePngs = 0;                   ///< config write pngs from OSD
 #endif
-	int ConfigMaxSizeGPUImageCache = 128;   ///< config max gpu image cache size
-	int ConfigDisableOglOsd;                ///< config disable ogl osd
+	int ConfigMaxSizeGPUImageCache = 128;       ///< config max gpu image cache size
+	int ConfigDisableOglOsd = 0;                ///< config disable ogl osd
 #endif
-	int ConfigVideoAudioDelay;              ///< config audio delay
-	char ConfigAudioPassthrough;            ///< config audio pass-through mask
-	char AudioPassthroughState;             ///< flag audio-passthrough on/off
-	char ConfigAudioDownmix;                ///< config ffmpeg audio downmix
-	char ConfigAudioSoftvol;                ///< config use software volume
-	char ConfigAudioNormalize;              ///< config use normalize volume
-	int ConfigAudioMaxNormalize;            ///< config max normalize factor
-	char ConfigAudioCompression;            ///< config use volume compression
-	int ConfigAudioMaxCompression;          ///< config max volume compression
-	int ConfigAudioStereoDescent;           ///< config reduce stereo loudness
-	int ConfigAudioBufferTime;              ///< config size ms of audio buffer
-	int ConfigAudioAutoAES;                 ///< config automatic AES handling
-	int ConfigAudioEq;                      ///< config equalizer filter 
-	int SetupAudioEqBand[18];               ///< config equalizer filter bands
+	int ConfigVideoAudioDelay = 0;              ///< config audio delay
+	char ConfigAudioPassthrough = 0;            ///< config audio pass-through mask
+	char AudioPassthroughState = 0;             ///< flag audio-passthrough on/off
+	char ConfigAudioDownmix = 0;                ///< config ffmpeg audio downmix
+	char ConfigAudioSoftvol = 0;                ///< config use software volume
+	char ConfigAudioNormalize = 0;              ///< config use normalize volume
+	int ConfigAudioMaxNormalize = 0;            ///< config max normalize factor
+	char ConfigAudioCompression = 0;            ///< config use volume compression
+	int ConfigAudioMaxCompression = 0;          ///< config max volume compression
+	int ConfigAudioStereoDescent = 0;           ///< config reduce stereo loudness
+	int ConfigAudioBufferTime = 0;              ///< config size ms of audio buffer
+	int ConfigAudioAutoAES = 0;                 ///< config automatic AES handling
+	int ConfigAudioEq = 0;                      ///< config equalizer filter
+	int SetupAudioEqBand[18] =
+		{ 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		  0, 0, 0, 0, 0, 0, 0, 0, 0 };      ///< config equalizer filter bands
 
-	char ConfigMakePrimary;                 ///< config primary wanted
-	char ConfigHideMainMenuEntry;           ///< config hide main menu entry
-	char LogState;                          ///< flag logging on/off
-	int ConfigLog;                          ///< loglevel config
+	char ConfigMakePrimary = 0;                 ///< config primary wanted
+	char ConfigHideMainMenuEntry = 0;           ///< config hide main menu entry
+	char LogState = 1;                          ///< flag logging on/off
+	int ConfigLog = 0;                          ///< loglevel config
 
-	int ConfigDisableDeint;                 ///< disable deinterlacer
+	int ConfigDisableDeint = 0;                 ///< disable deinterlacer
 	void PrintLogLevel(int);
 private:
 	void SetLogState(void);
