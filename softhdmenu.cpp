@@ -133,7 +133,7 @@ void cMenuSetupSoft::Create(void)
 	//
 	Add(CollapsedItem(tr("Logging"), m_cLogging));
 	if (m_cLogging) {
-		Add(new cMenuEditBoolItem(tr("Logging default"), &m_cLogDefault, trVDR("off"), trVDR("on")));
+		Add(new cMenuEditBoolItem(tr("Enable logging"), &m_cLogDefault, trVDR("off"), trVDR("on")));
 		if (m_cLogDefault) {
 			Add(new cMenuEditBoolItem(tr("\040\040Standard debug logs"), &m_cLogDebug_, trVDR("no"), trVDR("yes")));
 			Add(new cMenuEditBoolItem(tr("\040\040AV Sync debug logs"), &m_cLogAVSync, trVDR("no"), trVDR("yes")));
@@ -157,7 +157,7 @@ void cMenuSetupSoft::Create(void)
 	//
 	Add(CollapsedItem(tr("Video"), m_cVideoMenu));
 	if (m_cVideoMenu) {
-		Add(new cMenuEditBoolItem(tr("Disable Deinterlacer"), &m_cDisableDeint, trVDR("no"), trVDR("yes")));
+		Add(new cMenuEditBoolItem(tr("Disable deinterlacer"), &m_cDisableDeint, trVDR("no"), trVDR("yes")));
 	}
 
 	//
@@ -176,7 +176,7 @@ void cMenuSetupSoft::Create(void)
 			Add(new cMenuEditIntItem(tr("  Max compression factor (/1000)"), &m_cAudioMaxCompression, 0, 10000));
 		Add(new cMenuEditIntItem(tr("Reduce stereo volume (/1000)"), &m_cAudioStereoDescent, 0, 1000));
 		Add(new cMenuEditBoolItem(tr("Enable Stereo downmix"), &m_cAudioDownmix, trVDR("no"), trVDR("yes")));
-		Add(new cMenuEditBoolItem(tr("Pass-through default"), &m_cAudioPassthroughDefault, trVDR("off"), trVDR("on")));
+		Add(new cMenuEditBoolItem(tr("Enable Pass-through"), &m_cAudioPassthroughDefault, trVDR("off"), trVDR("on")));
 		if (m_cAudioPassthroughDefault) {
 			Add(new cMenuEditBoolItem(tr("\040\040PCM pass-through"), &m_cAudioPassthroughPCM, trVDR("no"), trVDR("yes")));
 			Add(new cMenuEditBoolItem(tr("\040\040AC-3 pass-through"), &m_cAudioPassthroughAC3, trVDR("no"), trVDR("yes")));

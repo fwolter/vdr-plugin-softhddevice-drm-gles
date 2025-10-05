@@ -163,7 +163,7 @@ I18Npot	  = $(PODIR)/$(PLUGIN).pot
 $(I18Npot): $(SRCS)
 	xgettext -C -cTRANSLATORS --no-wrap --no-location -k -ktr -ktrNOOP \
 	-k_ -k_N --package-name=vdr-$(PLUGIN) --package-version=$(VERSION) \
-	--msgid-bugs-address='<see README>' -o $@ `ls $^`
+	--msgid-bugs-address='<see README>' -o $@ `find *.cpp`
 
 %.po: $(I18Npot)
 	msgmerge -U --no-wrap --no-location --backup=none -q -N $@ $<
