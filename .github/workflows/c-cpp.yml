@@ -1,0 +1,104 @@
+name: Build vdr-plugin-softhddevice-drm-gles
+
+on:
+  push:
+    branches:
+      - drm-atomic-gles
+  pull_request:
+    branches:
+      - drm-atomic-gles
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          pkg-config \
+          git \
+          gettext \
+          libavcodec-dev \
+          libavfilter-dev \
+          libavformat-dev \
+          libavutil-dev \
+          libasound2-dev \
+          libdrm-dev \
+          libgbm-dev \
+          libgles2-mesa-dev \
+          libegl1-mesa-dev \
+          libglm-dev \
+          libfreetype6-dev \
+          libfontconfig-dev
+
+    - name: Clone VDR repository
+      run: git clone https://github.com/vdr-projects/vdr.git
+
+    - name: Checkout plugin repository
+      uses: actions/checkout@v4
+      with:
+        path: vdr/PLUGINS/src/softhddevice-drm-gles
+
+    - name: Build plugin (with OpenGL/ES support)
+      run: |
+        cd vdr
+        make include-dir vdr.pc
+        make -C PLUGINS/src/softhddevice-drm-gles INCLUDES="-isystem `pwd`/include -Werror" GLES=1
+      continue-on-error: false
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: vdr-softhddevice-drm-gles
+        path: vdr/PLUGINS/src/softhddevice-drm-gles/libvdr-softhddevice-drm-gles.so
+        if-no-files-found: error
+
+  build-without-gles:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          pkg-config \
+          git \
+          gettext \
+          libavcodec-dev \
+          libavfilter-dev \
+          libavformat-dev \
+          libavutil-dev \
+          libasound2-dev \
+          libdrm-dev \
+          libgbm-dev \
+          libglm-dev \
+          libfreetype6-dev \
+          libfontconfig-dev
+
+    - name: Clone VDR repository
+      run: git clone https://github.com/vdr-projects/vdr.git
+
+    - name: Checkout plugin repository
+      uses: actions/checkout@v4
+      with:
+        path: vdr/PLUGINS/src/softhddevice-drm-gles
+
+    - name: Build plugin (without OpenGL/ES support)
+      run: |
+        cd vdr
+        make include-dir vdr.pc
+        make -C PLUGINS/src/softhddevice-drm-gles INCLUDES="-isystem `pwd`/include -Werror" GLES=0
+      continue-on-error: false
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: vdr-softhddevice-drm-no-gles
+        path: vdr/PLUGINS/src/softhddevice-drm-gles/libvdr-softhddevice-drm-gles.so
+        if-no-files-found: error

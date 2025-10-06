@@ -35,6 +35,7 @@ extern "C" {
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <EGL/eglplatform.h>
+#include "glhelpers.h"
 
 /* Hack:
  * xlib.h via eglplatform.h: #define Status int
@@ -50,7 +51,6 @@ extern "C" {
 #include "iatomic.h"
 #include "softhddevice.h"
 #include "videostream.h"
-#include "glhelpers.h"
 #include "drmbuffer.h"
 #include "drmdevice.h"
 #include "threads.h"
