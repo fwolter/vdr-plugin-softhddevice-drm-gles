@@ -676,8 +676,7 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 	LOGDEBUG("device: %s: %d", __FUNCTION__, play_mode);
 
 	switch (play_mode) {
-	// no audio/video
-	case 0:
+	case pmNone:
 		m_pVideoStream->Stop();
 		m_pVideoStream->Clear();
 		m_pVideoStream->CloseDecoder();
@@ -693,24 +692,20 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 		m_pVideoStream->Start();
 		m_pVideoStream->Resume();
 		break;
-	// audio/video
-	case 1:
+	case pmAudioVideo:
 		m_pRender->WakeupDecodingThread();
 		m_pRender->WakeupDisplayThread();
 		break;
-	// audio only
-	case 2:
+	case pmAudioOnly:
 		m_pRender->ExitDecodingThread();
 		m_pRender->ExitDisplayThread();
 		break;
-	// audio only (black screen)
-	case 3:
+	case pmAudioOnlyBlack:
 		LOGDEBUG("device: %s: FIXME: audio only, silence video errors");
 		m_pRender->WakeupDecodingThread();
 		m_pRender->WakeupDisplayThread();
 		break;
-	// video only
-	case 4:
+	case pmVideoOnly:
 		m_pRender->WakeupDecodingThread();
 		m_pRender->WakeupDisplayThread();
 		break;
