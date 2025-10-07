@@ -791,15 +791,15 @@ int cVideoRender::PageFlip(AVFrame *frame, cDrmBuffer *buf, int osdOnly)
 		av_frame_free(&m_pLastFrame->frame);
 	}
 
-	if (buf && buf->Id() != m_bufBlack.Id()) {
-		m_pLastFrame->frame = buf->Frame();
-		m_pLastFrame->buf = buf;
-		m_pLastFrame->trickspeed = buf->IsTrickspeedBuffer();
-	}
-
-	if (buf && buf->Id() == m_bufBlack.Id()) {
-		m_pLastFrame->buf = nullptr;
-		m_pLastFrame->trickspeed = 0;
+	if (buf) {
+		if (buf->Id() == m_bufBlack.Id()) {
+			m_pLastFrame->buf = nullptr;
+			m_pLastFrame->trickspeed = 0;
+		} else {
+			m_pLastFrame->frame = buf->Frame();
+			m_pLastFrame->buf = buf;
+			m_pLastFrame->trickspeed = buf->IsTrickspeedBuffer();
+		}
 	}
 
 	return 0;
