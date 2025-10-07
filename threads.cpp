@@ -43,7 +43,7 @@ extern "C" {
  *
  * This thread decodes the video data
  ****************************************************************************/
-cDecodingThread::cDecodingThread(cSoftHdDevice *device) : cThread("decoding thread")
+cDecodingThread::cDecodingThread(cSoftHdDevice *device) : cThread("decoding")
 {
 	m_pDevice = device;
 	Start();
@@ -78,7 +78,7 @@ void cDecodingThread::Stop(void)
  *
  * This thread is responsible for displaying the video and osd
  ****************************************************************************/
-cDisplayThread::cDisplayThread(cVideoRender *render) : cThread("display thread")
+cDisplayThread::cDisplayThread(cVideoRender *render) : cThread("display")
 {
 	m_pRender = render;
 	Start();
@@ -120,7 +120,7 @@ void cDisplayThread::Stop(void)
  * 
  * This thread is decodes the audio data and moves it to hardware
  ****************************************************************************/
-cAudioThread::cAudioThread(cSoftHdAudio *audio) : cThread("audio thread")
+cAudioThread::cAudioThread(cSoftHdAudio *audio) : cThread("audio")
 {
 	m_pAudio = audio;
 	Start();
@@ -195,7 +195,7 @@ void cAudioThread::SendStartSignal(void)
  *
  * This thread handles video filters like deinterlacer or scale filter
  ****************************************************************************/
-cFilterThread::cFilterThread(cVideoRender *render) : cThread("filter thread")
+cFilterThread::cFilterThread(cVideoRender *render) : cThread("filter")
 {
 	m_pRender = render;
 }
