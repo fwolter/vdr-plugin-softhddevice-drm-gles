@@ -89,8 +89,7 @@ private:
 	cSoftHdLogger(const cSoftHdLogger &) = delete;
 	cSoftHdLogger& operator=(const cSoftHdLogger &) = delete;
 
-	static std::shared_ptr<cSoftHdLogger> instance; ///< logger instance
-	int logLevel;                                   ///< loglevel (see Logger flags above)
+	int logLevel; ///< loglevel (see Logger flags above)
 };
 
 #endif

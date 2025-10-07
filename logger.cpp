@@ -23,8 +23,6 @@
 
 #include "logger.h"
 
-std::shared_ptr<cSoftHdLogger> cSoftHdLogger::instance;
-
 /*****************************************************************************
  * cSoftHdLogger class
  ****************************************************************************/
@@ -44,9 +42,7 @@ cSoftHdLogger::cSoftHdLogger(void)
  */
 std::shared_ptr<cSoftHdLogger> cSoftHdLogger::GetLogger()
 {
-	if (instance == nullptr)
-		instance = std::shared_ptr<cSoftHdLogger>(new cSoftHdLogger());
-
+	static std::shared_ptr<cSoftHdLogger> instance(new cSoftHdLogger());
 	return instance;
 }
 
