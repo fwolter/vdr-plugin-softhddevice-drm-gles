@@ -217,6 +217,12 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
                         AVRational * timebase, int forceSoftwareDecoder,
                         int width, int height)
 {
+	m_mutex.Lock();
+	if (m_pVideoCtx != nullptr) {
+		m_mutex.Unlock();
+		return 0;
+	}
+
 	int swcodec = forceSoftwareDecoder;
 
 	if ((m_pRender->HardwareQuirks() & QUIRK_CODEC_DISABLE_MPEG_HW && codecId == AV_CODEC_ID_MPEG2VIDEO))
@@ -230,6 +236,7 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 	const AVCodec *codec = FindDecoder(codecId, swcodec);
 	if (!codec) {
 		LOGERROR("videocodec: %s: Could not find any decoder for codec %s!", __FUNCTION__, avcodec_get_name(codecId));
+		m_mutex.Unlock();
 		return -1;
 	}
 
@@ -240,6 +247,7 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 	m_pVideoCtx = avcodec_alloc_context3(codec);
 	if (!m_pVideoCtx) {
 		LOGERROR("videocodec: %s: can't alloc codec context!", __FUNCTION__);
+		m_mutex.Unlock();
 		return -1;
 	}
 
@@ -252,6 +260,7 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 			avcodec_free_context(&m_pVideoCtx);
 			LOGERROR("videocodec: %s: Error creating HW context %s",__FUNCTION__,
 				type_name ? type_name : "unknown");
+			m_mutex.Unlock();
 			return -1;
 		}
 		LOGDEBUG2(L_CODEC, "videocodec: %s: Using %s HW codec", __FUNCTION__,
@@ -318,11 +327,13 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 		avcodec_free_context(&m_pVideoCtx);
 		if (forceSoftwareDecoder) {
 			LOGERROR("videocodec: %s: Error opening the decoder: %s", __FUNCTION__, av_err2str(err));
+			m_mutex.Unlock();
 			return -1;
 		}
 		LOGDEBUG2(L_CODEC, "videocodec: %s: Could not open %s decoder, try opening software decoder",
 			__FUNCTION__, codec->long_name ? codec->long_name : codec->name);
 
+		m_mutex.Unlock();
 		return Open(codecId, par, timebase, 1, 0, 0);
 	}
 
@@ -335,6 +346,7 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 
 	m_cntPacketsSent = m_cntFramesReceived = 0;
 	m_cntStartKeyFrames = 1;
+	m_mutex.Unlock();
 	return 0;
 }
 
@@ -453,20 +465,24 @@ int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 {
 	int ret = 0;
 
-	if (m_pVideoCtx == nullptr)
+	m_mutex.Lock();
+	if (m_pVideoCtx == nullptr) {
+		m_mutex.Unlock();
 		return AVERROR(EINVAL);
+	}
 
 	// force a flush, if avpkt is NULL, this initiates a decoder drain
 	if (!avpkt) {
 		LOGDEBUG2(L_CODEC, "videocodec: %s: send NULL packet, flush reqeusted", __FUNCTION__);
-		m_mutex.Lock();
 		avcodec_send_packet(m_pVideoCtx, NULL);
 		m_mutex.Unlock();
 		return 0;
 	}
 
-	if (!avpkt->size)
+	if (!avpkt->size) {
+		m_mutex.Unlock();
 		return AVERROR(EINVAL);
+	}
 
 	// get extradata, if not yet done
 	if (!m_pVideoCtx->extradata_size) {
@@ -474,17 +490,17 @@ int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 			LOGDEBUG2(L_CODEC, "videocodec: %s: set extradata %p %d", __FUNCTION__, m_pVideoCtx->extradata, m_pVideoCtx->extradata_size);
 	}
 
-	m_mutex.Lock();
 	ret = avcodec_send_packet(m_pVideoCtx, avpkt);
-	m_mutex.Unlock();
 	if (ret) {
 		if (ret != AVERROR(EAGAIN))
 			LOGDEBUG2(L_CODEC, "videocodec: %s: send_packet ret: %s", __FUNCTION__, av_err2str(ret));
+		m_mutex.Unlock();
 		return ret;
 	}
 
 	m_cntPacketsSent++;
 	LOGDEBUG2(L_PACKET, "videocodec: %s:   %6d PTS %s <<---", __FUNCTION__, m_cntPacketsSent, Timestamp2String(avpkt->pts / 90));
+	m_mutex.Unlock();
 	return 0;
 }
 
@@ -504,15 +520,18 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 	int ret;
 	AVFrame *pFrame;
 
-	if (m_pVideoCtx == nullptr)
-		return AVERROR(EINVAL);
-
-	if (!(pFrame = av_frame_alloc()))
-		LOGFATAL("videocodec: %s: can't allocate decoder frame", __FUNCTION__);
-
 	m_mutex.Lock();
+	if (m_pVideoCtx == nullptr) {
+		m_mutex.Unlock();
+		return AVERROR(EINVAL);
+	}
+
+	if (!(pFrame = av_frame_alloc())) {
+		m_mutex.Unlock();
+		LOGFATAL("videocodec: %s: can't allocate decoder frame", __FUNCTION__);
+	}
+
 	ret = avcodec_receive_frame(m_pVideoCtx, pFrame);
-	m_mutex.Unlock();
 
 	if (ret) {
 		if (ret == AVERROR_EOF)
@@ -520,6 +539,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 		else if (ret != AVERROR(EAGAIN))
 			LOGDEBUG2(L_CODEC, "videocodec: %s: receive_frame ret: %s", __FUNCTION__, av_err2str(ret));
 		av_frame_free(&pFrame);
+		m_mutex.Unlock();
 		return ret;
 	}
 
@@ -553,6 +573,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 		}
 
 		av_frame_free(&pFrame);
+		m_mutex.Unlock();
 		return AVERROR(EAGAIN);
 	}
 
@@ -561,6 +582,7 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 	m_cntFramesReceived++;
 	LOGDEBUG2(L_PACKET, "videocodec: %s: %6d PTS %s --->> (%2d)", __FUNCTION__,
 		m_cntFramesReceived, Timestamp2String(pFrame->pts / 90), m_cntPacketsSent - m_cntFramesReceived);
+	m_mutex.Unlock();
 	return 0;
 }
 
@@ -587,11 +609,9 @@ int cVideoDecoder::ReopenCodec(enum AVCodecID codecId, AVCodecParameters *par,
                                AVRational *timebase, int forceSoftwareDecoding)
 {
 	LOGDEBUG2(L_CODEC, "videocodec: %s: m_pVideoCtx %p", __FUNCTION__, m_pVideoCtx);
-	if (m_pVideoCtx) {
-		Close();
-		if (Open(codecId, par, timebase, forceSoftwareDecoding, m_lastCodedWidth, m_lastCodedHeight))
-			return -1;
-	}
+	Close();
+	if (Open(codecId, par, timebase, forceSoftwareDecoding, m_lastCodedWidth, m_lastCodedHeight))
+		return -1;
 	m_cntStartKeyFrames = 0; // currently unused, because we have no hardware which needs both quirks
 	m_cntPacketsSent = m_cntFramesReceived = 0;
 
@@ -607,8 +627,8 @@ void cVideoDecoder::FlushBuffers(void)
 	m_mutex.Lock();
 	if (m_pVideoCtx)
 		avcodec_flush_buffers(m_pVideoCtx);
-	m_mutex.Unlock();
 	m_cntPacketsSent = m_cntFramesReceived = 0;
+	m_mutex.Unlock();
 }
 
 /**
