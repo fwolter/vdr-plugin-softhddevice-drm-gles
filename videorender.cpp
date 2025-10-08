@@ -476,6 +476,15 @@ int cVideoRender::HandleDropDup(int64_t videoPts, int64_t audioPts)
 	}
 
 	if (diff < -5 && !(abs(diff) > 5000)) {	// video is more than 5ms behind audio, drop video frame
+		// don't drop the frame, if we are waiting for a flush
+		if (m_flushLastFrame) {
+			LOGDEBUG2(L_AV_SYNC, "Video too late, but skip sync (drop %d, dup %d) audio %s video %s Delay %dms diff %dms",
+				m_framesDropped, m_framesDuped,
+				Timestamp2String(audioPts), Timestamp2String(videoPts),
+				m_pDevice->GetVideoAudioDelay(), diff);
+			return 0;
+		}
+
 		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
 			m_framesDropped, m_framesDuped,
 			m_pDevice->VideoStream()->GetPacketsFilled(), m_pFilterThread->GetRbFramesFilled(),
