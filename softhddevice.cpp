@@ -546,7 +546,7 @@ void cSoftHdDevice::Exit(void)
 		m_pAudioDecoder->Close();
 		delete m_pAudioDecoder;
 	}
-	m_newAudioStream = 0;
+	m_newAudioStream = false;
 	av_packet_free(&m_pAudioAvPkt);
 
 	m_pRender->Exit();
@@ -612,7 +612,7 @@ void cSoftHdDevice::ClearAudio(void)
 		LOGDEBUG("device: %s:", __FUNCTION__);
 		m_pAudioDecoder->FlushBuffers();
 		m_pAudio->FlushBuffers();
-		m_newAudioStream = 1;
+		m_newAudioStream = true;
 	}
 }
 
@@ -682,11 +682,11 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
 		m_pVideoStream->CloseDecoder();
 
 		m_pRender->SetClosing(1);
-		m_skipAudio = 0;
+		m_skipAudio = false;
 		m_pAudio->Resume();
 		ClearAudio();	// flush all AUDIO buffers
 		if (m_pAudioDecoder && m_audioCodecID != AV_CODEC_ID_NONE)
-			m_newAudioStream = 1;
+			m_newAudioStream = true;
 
 		m_pVideoStream->SetInterlaced(0); // probably not necessary
 		m_pVideoStream->Start();
@@ -804,7 +804,7 @@ void cSoftHdDevice::Play(void)
 	m_pVideoStream->Start();
 	m_pVideoStream->Resume();
 
-	m_skipAudio = 0;
+	m_skipAudio = false;
 	m_pAudio->Resume();
 
 	m_pRender->SetTrickSpeed(0, 1);
@@ -840,7 +840,7 @@ void cSoftHdDevice::Mute(void)
 	LOGDEBUG("device: %s:", __FUNCTION__);
 	cDevice::Mute();
 
-	m_skipAudio = 1;
+	m_skipAudio = true;
 }
 
 /**
@@ -1154,7 +1154,7 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 //		SetBufferTimeInMs(m_pConfig->ConfigAudioBufferTime);		// ???
 		m_audioCodecID = AV_CODEC_ID_NONE;
 		m_audioChannelID = -1;
-		m_newAudioStream = 0;
+		m_newAudioStream = false;
 	}
 
 	// PES header 0x00 0x00 0x01 ID
@@ -1492,12 +1492,12 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 	LOGDEBUG2(L_GRAB, "device: %s: %d, %d, %d, %dx%d", __FUNCTION__, size, jpeg, quality, width, height);
 
 	// 1. Trigger grab in render thread and wait for the buffers to be cloned
-	m_grabActive = 1;
+	m_grabActive = true;
 	// TriggerGrab does wait and return 0, if buffers are available,
 	// otherwise it returns != 0, if we ran into a timeout
 	if (m_pRender->TriggerGrab()) {
 		m_pRender->ClearGrab();
-		m_grabActive = 0;
+		m_grabActive = false;
 		return NULL;
 	}
 
@@ -1586,7 +1586,7 @@ uchar *cSoftHdDevice::GrabImage(int &size, bool jpeg, int quality, int width, in
 	free(scaledresult);
 	LOGDEBUG2(L_GRAB, "device: %s: finished %s image (%dx%d, quality %d) at %p (size %d)", __FUNCTION__, jpeg ? "jpg" : "pnm", grabwidth, grabheight, jpeg ? quality : 0, grabbedimage, size);
 
-	m_grabActive = 0;
+	m_grabActive = false;
 	return grabbedimage;
 }
 

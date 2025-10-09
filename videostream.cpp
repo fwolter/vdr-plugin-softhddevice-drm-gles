@@ -263,7 +263,7 @@ int cVideoStream::DecodeInput(void)
 
 		if (m_pDecoder->Open(m_codecId, m_pPar, &m_timebase, 0, width, height))
 			LOGFATAL("videostream %s: Could not open the decoder!", __FUNCTION__);
-		m_newStream = 0;
+		m_newStream = false;
 	}
 
 	if (m_codecId != AV_CODEC_ID_NONE) {
@@ -402,7 +402,7 @@ int cVideoStream::GetPacketsFilled(void)
  *
  * @param interlaced        true, if interlaced
  */
-void cVideoStream::SetInterlaced(int interlaced)
+void cVideoStream::SetInterlaced(bool interlaced)
 {
 //	LOGDEBUG("videostream %s: %d", __FUNCTION__, m_interlaced);
 	m_interlaced = interlaced;
@@ -428,7 +428,7 @@ void cVideoStream::SetTimebase(int num, int den)
 void cVideoStream::Stop(void)
 {
 	int timeoutInMs = 1000;
-	m_closing = 1;
+	m_closing = true;
 
 	if (!m_closeCondition.Wait(timeoutInMs))
 		LOGERROR("videostream %s: Timeout while closing stream (%d ms)!", __FUNCTION__, timeoutInMs);
@@ -446,7 +446,7 @@ void cVideoStream::Pause(void)
 {
 	int timeoutInMs = 2000;
 
-	m_paused = 1;
+	m_paused = true;
 	cMutex mutex;
 	mutex.Lock();
 	if (!m_pauseCondition.TimedWait(mutex, timeoutInMs))

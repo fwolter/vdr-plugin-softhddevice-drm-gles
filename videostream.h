@@ -43,18 +43,18 @@ public:
 	cVideoStream(cSoftHdDevice *);
 	virtual ~cVideoStream(void);
 
-	void Open(void) { m_newStream = 1; };
+	void Open(void) { m_newStream = true; };
 	void Exit(void);
 	void Clear(void);
 	void FlushDecoder(void);
 	void CloseDecoder(void);
 	int DecodeInput(void);
-	void Start(void) { m_closing = 0; };
+	void Start(void) { m_closing = false; };
 	void Stop(void);
-	int IsClosing(void) { return m_closing; };
-	void Resume(void) { m_paused = 0; };
+	bool IsClosing(void) { return m_closing; };
+	void Resume(void) { m_paused = false; };
 	void Pause(void);
-	int IsPaused(void) { return m_paused; };
+	bool IsPaused(void) { return m_paused; };
 	void InitPacketRb(void);
 	void EnqueueInRb(int64_t, const void *, int);
 
@@ -65,7 +65,7 @@ public:
 	void SetParameters(AVCodecParameters *par) { m_pPar = par; };
 	void SetTimebase(int, int);
 	void SetTrickpkts(int pkts) { m_trickpkts = pkts; };
-	void SetInterlaced(int);
+	void SetInterlaced(bool interlaced);
 	int GetPacketsFilled(void);
 	void IncreasePacketsFilled(void);
 	AVPacket *GetPacketToWrite(void);
@@ -87,10 +87,10 @@ private:
 	struct AVRational m_timebase;          ///< current codec timepase
 	int m_trickpkts;                       ///< how many avpkt does the decoder need in trickspeed mode?
 
-	volatile char m_newStream;             ///< flag for new stream
-	volatile char m_closing;               ///< flag for closing request
-	volatile char m_paused;                ///< flag for paused stream
-	int m_interlaced;                      ///< flag for interlaced stream
+	volatile bool m_newStream;             ///< flag for new stream
+	volatile bool m_closing;               ///< flag for closing request
+	volatile bool m_paused;                ///< flag for paused stream
+	bool m_interlaced;                     ///< flag for interlaced stream
 	cMutex m_pktsMutex;                    ///< mutex for accessing the packet ringbuffer
 	cCondWait m_closeCondition;            ///< condition object to wait for finishing jobs while closing
 	cCondVar m_pauseCondition;             ///< condition object to wait for pausing the stream
