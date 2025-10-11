@@ -12,7 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Install build dependencies
       run: |
@@ -22,6 +22,7 @@ jobs:
           pkg-config \
           git \
           gettext \
+          cppcheck \
           libavcodec-dev \
           libavfilter-dev \
           libavformat-dev \
@@ -57,9 +58,14 @@ jobs:
         path: vdr/PLUGINS/src/softhddevice-drm-gles/libvdr-softhddevice-drm-gles.so
         if-no-files-found: error
 
+    - name: Run cppcheck
+      run: |
+        cd vdr/PLUGINS/src/softhddevice-drm-gles
+        cppcheck --quiet --error-exitcode=1 .
+
   build-without-gles:
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Install build dependencies
       run: |
