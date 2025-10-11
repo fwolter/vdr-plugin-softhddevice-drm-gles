@@ -685,7 +685,7 @@ cDrmBuffer *cVideoRender::GetBuffer(AVFrame *frame)
 			if (!m_buffer[i].IsDirty())
 				break;
 		}
-		if (m_buffer[i].IsDirty()) {
+		if (i == RENDERBUFFERS) {
 			LOGDEBUG("videorender: %s: SHOULD NOT HAPPEN! no free buffer available!", __FUNCTION__);
 			return nullptr;
 		}
@@ -1178,7 +1178,7 @@ void cVideoRender::EnqueueFB(AVFrame *inframe)
 			if (!m_buffer[i].IsDirty())
 				break;
 		}
-		if (m_buffer[i].IsDirty())
+		if (i == RENDERBUFFERS)
 			LOGFATAL("videorender: %s: SHOULD NOT HAPPEN! no free buffer available!");
 
 		buf = &m_buffer[i];
@@ -1888,7 +1888,7 @@ void cVideoRender::Init(void)
 #ifndef USE_GLES
 	if (!m_pBufOsd)
 		m_pBufOsd = new cDrmBuffer();
-	
+
 	if (m_pBufOsd->Setup(m_pDrmDevice->Fd(), m_pDrmDevice->DisplayWidth(), m_pDrmDevice->DisplayHeight(), DRM_FORMAT_ARGB8888, NULL)) {
 		LOGFATAL("videorender: %s: SetupFB FB OSD failed!", __FUNCTION__);
 	}
