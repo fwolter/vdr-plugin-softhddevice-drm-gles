@@ -9,7 +9,7 @@
  * @copyright (c) 2009 - 2014 by Johns.  All Rights Reserved.
  * @copyright (c) 2018 by zille.  All Rights Reserved.
  * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
- * 
+ *
  * @license{AGPLv3
  *
  * This program is free software: you can redistribute it and/or modify
@@ -338,7 +338,7 @@ void cSoftHdAudio::SoftAmplify(int16_t *samples, int count)
  * @param band      setting frequenz bands
  * @param onoff     set using equalizer
  */
-void cSoftHdAudio::SetEq(int band[17], int onoff)
+void cSoftHdAudio::SetEq(int band[18], int onoff)
 {
 	int i;
 /*
@@ -451,16 +451,16 @@ int cSoftHdAudio::InitFilter(AVCodecContext *audioCtx)
 		LOGWARNING("audio: %s: Could not allocate the m_pBuffersrcCtx instance.", __FUNCTION__);
 
 	av_channel_layout_describe(&audioCtx->ch_layout, channelLayout, sizeof(channelLayout));
-	
+
 	LOGDEBUG2(L_SOUND, "audio: %s: IN channelLayout %s sample_fmt %s sample_rate %d channels %d", __FUNCTION__,
 	          channelLayout, av_get_sample_fmt_name(audioCtx->sample_fmt), audioCtx->sample_rate, audioCtx->ch_layout.nb_channels);
-	
+
 	av_opt_set    (m_pBuffersrcCtx, "channel_layout", channelLayout,                                AV_OPT_SEARCH_CHILDREN);
 	av_opt_set    (m_pBuffersrcCtx, "sample_fmt",     av_get_sample_fmt_name(audioCtx->sample_fmt), AV_OPT_SEARCH_CHILDREN);
 	av_opt_set_q  (m_pBuffersrcCtx, "time_base",      (AVRational){ 1, audioCtx->sample_rate },     AV_OPT_SEARCH_CHILDREN);
 	av_opt_set_int(m_pBuffersrcCtx, "sample_rate",    audioCtx->sample_rate,                        AV_OPT_SEARCH_CHILDREN);
 //	av_opt_set_int(m_pBuffersrcCtx, "channel_counts", audioCtx->channels,                           AV_OPT_SEARCH_CHILDREN);
-	
+
 	// initialize the filter with NULL options, set all options above.
 	if (avfilter_init_str(m_pBuffersrcCtx, NULL) < 0)
 		LOGWARNING("audio: %s: Could not initialize the abuffer filter.", __FUNCTION__);
@@ -622,7 +622,7 @@ void cSoftHdAudio::EnqueueRawData(uint16_t *buffer, int count, AVFrame *frame)
 
 /**
  * Send audio data to ringbuffer
- * 
+ *
  * @param buffer     data buffer
  * @param count      number of bytes in data buffer
  * @param frame      decoded frame (used to get frame parameters)
