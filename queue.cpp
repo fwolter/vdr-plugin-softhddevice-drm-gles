@@ -18,7 +18,6 @@
  * GNU Affero General Public License for more details.}
  */
 
- #include <stdexcept>
  #include <libavutil/frame.h>
  #include <libavcodec/packet.h>
 
@@ -40,7 +39,7 @@
  * @return true if successfully pushed, false if queue is full
  */
 template <typename T>
-bool cQueue<T>::Push(const T& element)
+bool cQueue<T>::Push(T *element)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -57,19 +56,19 @@ bool cQueue<T>::Push(const T& element)
  * Pop an element from the back of the queue
  *
  * @tparam T                  Element type
- * @return T                  The popped element
+ * @return T                  The popped element, or nullptr if queue is empty
  * @throws std::runtime_error if queue is empty
  */
 template <typename T>
-T cQueue<T>::Pop(void)
+T *cQueue<T>::Pop(void)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
 	if (m_deque.empty()) {
-		throw std::runtime_error("Queue is empty");
+		return nullptr;
 	}
 
-	T element = m_deque.back();
+	T *element = m_deque.back();
 	m_deque.pop_back();
 
 	return element;
@@ -79,16 +78,16 @@ T cQueue<T>::Pop(void)
  * Get a reference to the front element
  *
  * @tparam T                  Element type
- * @return T                  Element at the front (most recently pushed)
+ * @return T                  Element at the front (most recently pushed), or nullptr if queue is empty
  * @throws std::runtime_error if queue is empty
  */
 template <typename T>
-T cQueue<T>::Head(void)
+T *cQueue<T>::Head(void)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
 	if (m_deque.empty()) {
-		throw std::runtime_error("Queue is empty");
+		return nullptr;
 	}
 
 	return m_deque.front();
@@ -98,16 +97,16 @@ T cQueue<T>::Head(void)
  * Get a reference to the back element
  *
  * @tparam T                  Element type
- * @return T                  Element at the back (next to be popped)
+ * @return T                  Element at the back (next to be popped), or nullptr if queue is empty
  * @throws std::runtime_error if queue is empty
  */
 template <typename T>
-T cQueue<T>::Peek(void)
+T *cQueue<T>::Peek(void)
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 
 	if (m_deque.empty()) {
-		throw std::runtime_error("Queue is empty");
+		return nullptr;
 	}
 
 	return m_deque.back();
@@ -142,4 +141,5 @@ size_t cQueue<T>::Size(void)
 }
 
 // Explicit template instantiations
-template class cQueue<AVFrame *>;   ///< Queue for AVFrame pointers
+template class cQueue<AVFrame>;   ///< Queue for AVFrame pointers
+template class cQueue<AVPacket>;  ///< Queue for AVPacket pointers
