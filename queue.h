@@ -38,15 +38,15 @@ public:
 	cQueue(size_t maxSize) : m_maxSize(maxSize) {};
 	~cQueue(void) {};
 
-	bool Push(const T& element);
-	T Pop(void);
-	T Head(void);
-	T Peek(void);
+	bool Push(T *element);
+	T *Pop(void);
+	T *Head(void);
+	T *Peek(void);
 	bool Empty(void);
 	size_t Size(void);
 
 private:
-	std::deque<T> m_deque;    ///< Underlying deque container
+	std::deque<T*> m_deque;    ///< Underlying deque container
 	std::mutex m_mutex;       ///< Mutex for thread-safe access
 	size_t m_maxSize;         ///< Maximum queue capacity
 };
