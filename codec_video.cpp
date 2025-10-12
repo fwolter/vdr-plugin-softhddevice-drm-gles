@@ -4,7 +4,7 @@
  *
  * This file defines cVideoDecoder, which has all the functions
  * to decode video data. It's the video interface to ffmpeg.
- * 
+ *
  * @copyright (c) 2009 - 2015 by Johns.  All Rights Reserved.
  * @copyright (c) 2018 by zille.  All Rights Reserved.
  * @copyright (c) 2025 by Andreas Baierl. All Rights Reserved.
@@ -454,20 +454,24 @@ int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
 /**
  * Send a video packet to be decoded
  *
- * @param avpkt                  video packet
+ * @param avpkt                  video packet. Deallocated by this function.
  *
  * @returns 0                    packet was sent
  * @returns AVERROR(EAGAIN)      packet was not accepted, first receive frame and send packet again
  * @returns AVERROR(EINVAL)      invalid input or missing m_pVideoCtx
  * @returns ret                  other ffmpeg error
  */
-int cVideoDecoder::SendPacket(const AVPacket * avpkt)
+int cVideoDecoder::SendPacket(AVPacket *avpkt)
 {
 	int ret = 0;
 
 	m_mutex.Lock();
 	if (m_pVideoCtx == nullptr) {
 		m_mutex.Unlock();
+
+		if (avpkt)
+			av_packet_unref(avpkt);
+
 		return AVERROR(EINVAL);
 	}
 
@@ -481,6 +485,9 @@ int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 
 	if (!avpkt->size) {
 		m_mutex.Unlock();
+
+		av_packet_unref(avpkt);
+
 		return AVERROR(EINVAL);
 	}
 
@@ -494,12 +501,15 @@ int cVideoDecoder::SendPacket(const AVPacket * avpkt)
 	if (ret) {
 		if (ret != AVERROR(EAGAIN))
 			LOGDEBUG2(L_CODEC, "videocodec: %s: send_packet ret: %s", __FUNCTION__, av_err2str(ret));
+		av_packet_unref(avpkt);
 		m_mutex.Unlock();
+
 		return ret;
 	}
 
 	m_cntPacketsSent++;
 	LOGDEBUG2(L_PACKET, "videocodec: %s:   %6d PTS %s <<---", __FUNCTION__, m_cntPacketsSent, Timestamp2String(avpkt->pts / 90));
+	av_packet_unref(avpkt);
 	m_mutex.Unlock();
 	return 0;
 }
@@ -649,7 +659,7 @@ void cVideoDecoder::GetVideoSize(int *width, int *height, double *aspect_ratio)
 
 	*width = m_pVideoCtx->coded_width;
 	*height = m_pVideoCtx->coded_height;
-	// TODO: use correct aspect ratio 
+	// TODO: use correct aspect ratio
 	if (m_pVideoCtx->coded_height > 0)
 		*aspect_ratio = (double)(m_pVideoCtx->coded_width) / (double)(m_pVideoCtx->coded_height);
 }

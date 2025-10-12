@@ -56,6 +56,7 @@ cDecodingThread::~cDecodingThread(void)
 void cDecodingThread::Action(void)
 {
 	LOGDEBUG("threads: decoding thread started");
+	usleep(100000);
 	while(Running()) {
 		if (m_pDevice->VideoStream()->DecodeInput()) {
 			usleep(10000);
@@ -117,7 +118,7 @@ void cDisplayThread::Stop(void)
 
 /*****************************************************************************
  * cAudioThread class
- * 
+ *
  * This thread is decodes the audio data and moves it to hardware
  ****************************************************************************/
 cAudioThread::cAudioThread(cSoftHdAudio *audio) : cThread("audio")
