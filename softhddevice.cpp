@@ -502,6 +502,8 @@ cSoftHdDevice::cSoftHdDevice(cSoftHdConfig *config)
 	m_pAudio = new cSoftHdAudio(this);
 	m_pRender = new cVideoRender(this);
 	m_pVideoStream = new cVideoStream(this);
+
+	m_pAudioDecoder = nullptr;
 }
 
 /**

@@ -78,6 +78,17 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 	m_pDevice = device;
 	m_pAudio = m_pDevice->Audio();
 	m_pDrmDevice = new cDrmDevice(this);
+
+	m_disableOglOsd = false;
+	m_exitThread = false;
+	m_startgrab = false;
+	m_startCounter = false;
+	m_videoIsScaled = false;
+
+	m_pBufOsd = nullptr;
+#ifdef USE_GLES
+	m_bo = nullptr;
+#endif
 }
 
 /**
@@ -1873,6 +1884,7 @@ static int ReadHWPlatform(void)
 		read_size -= (strlen(read_ptr) + 1);
 		read_ptr = (char *)&read_ptr[(strlen(read_ptr) + 1)];
 	}
+	free((void *)_txt_buf);
 	free((void *)txt_buf);
 
 	return hardwareQuirks;

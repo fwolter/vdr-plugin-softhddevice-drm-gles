@@ -65,6 +65,11 @@ cVideoStream::cVideoStream(cSoftHdDevice *device)
 	m_pRender = device->Render();
 	m_pDecoder = nullptr;
 
+	m_codecId = AV_CODEC_ID_NONE;
+	m_newStream = false;
+	m_paused = false;
+	m_packetsFilled = 0;
+
 	Start();
 }
 
