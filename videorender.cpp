@@ -101,7 +101,6 @@ cVideoRender::~cVideoRender(void)
  */
 void cVideoRender::Prepare(void)
 {
-	m_pDecodingThread = new cDecodingThread(m_pDevice);
 	m_pDisplayThread = new cDisplayThread(this);
 	m_pFilterThread = new cFilterThread(this);
 
@@ -113,6 +112,14 @@ void cVideoRender::Prepare(void)
 	m_enqueueBufferIdx = 0;
 	m_pLastFrame = (struct lastFrame *)calloc(1, sizeof(struct lastFrame));
 	ResumeVideo();
+}
+
+/**
+ * Create and start the decoding thread
+ */
+void cVideoRender::CreateDecodingThread(void)
+{
+	m_pDecodingThread = new cDecodingThread(m_pDevice);
 }
 
 /**

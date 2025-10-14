@@ -132,6 +132,7 @@ public:
 
 	// Threads
 	void Prepare(void);
+	void CreateDecodingThread(void);
 	bool DecodingThreadIsActive(void);
 	void WakeupDecodingThread(void);
 	void WakeupDisplayThread(void);

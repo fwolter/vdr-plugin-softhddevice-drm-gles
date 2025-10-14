@@ -178,6 +178,18 @@ void cVideoStream::Clear(void)
 }
 
 /**
+ * Start the decoder
+ */
+void cVideoStream::StartDecoder(cVideoDecoder *decoder)
+{
+	LOGDEBUG2(L_CODEC, "videostream %s", __FUNCTION__);
+
+	m_pDecoder = decoder;
+	m_pRender->CreateDecodingThread();
+}
+
+
+/**
  * Close the decoder
  */
 void cVideoStream::CloseDecoder(void)
