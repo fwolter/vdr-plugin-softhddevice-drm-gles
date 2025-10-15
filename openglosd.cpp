@@ -2903,18 +2903,25 @@ void cOglOsd::Flush(void) {
 }
 
 void cOglOsd::DrawScaledBitmap(int x, int y, const cBitmap &Bitmap, double FactorX, double FactorY, bool AntiAlias) {
+	if (!oglPixmaps[0])
+		return;
+
+	std::unique_ptr<cBitmap> scaledBitmap;
 	const cBitmap *b = &Bitmap;
+
+	if (!DoubleEqual(FactorX, 1.0) || !DoubleEqual(FactorY, 1.0)) {
+		scaledBitmap.reset(Bitmap.Scaled(FactorX, FactorY, AntiAlias));
+		b = scaledBitmap.get();
+	}
+
 	int xNew = x;
 	int yNew = y;
-	if (!DoubleEqual(FactorX, 1.0) || !DoubleEqual(FactorY, 1.0))
-		b = b->Scaled(FactorX, FactorY, AntiAlias);
-	if (oglPixmaps[0]) {
-		if (isSubtitleOsd && (x >= oglPixmaps[0]->ViewPort().X()))
-			xNew -= oglPixmaps[0]->ViewPort().X();
-		if (isSubtitleOsd && (y >= oglPixmaps[0]->ViewPort().Y()))
-			yNew -= oglPixmaps[0]->ViewPort().Y();
-		oglPixmaps[0]->DrawBitmap(cPoint(xNew, yNew), *b);
-	}
-	if (b != &Bitmap)
-		delete b;
+
+	const cRect &viewport = oglPixmaps[0]->ViewPort();
+	if (isSubtitleOsd && (x >= viewport.X()))
+		xNew -= viewport.X();
+	if (isSubtitleOsd && (y >= viewport.Y()))
+		yNew -= viewport.Y();
+
+	oglPixmaps[0]->DrawBitmap(cPoint(xNew, yNew), *b);
 }
