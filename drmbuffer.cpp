@@ -36,6 +36,7 @@
  */
 cDrmBuffer::cDrmBuffer(void)
 {
+	m_swbuffer = 0;
 }
 
 /**

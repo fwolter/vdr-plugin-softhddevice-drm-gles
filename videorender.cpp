@@ -78,6 +78,17 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 	m_pDevice = device;
 	m_pAudio = m_pDevice->Audio();
 	m_pDrmDevice = new cDrmDevice(this);
+
+	m_disableOglOsd = false;
+	m_exitThread = false;
+	m_startgrab = false;
+	m_startCounter = false;
+	m_videoIsScaled = false;
+
+	m_pBufOsd = nullptr;
+#ifdef USE_GLES
+	m_bo = nullptr;
+#endif
 }
 
 /**
@@ -101,7 +112,6 @@ cVideoRender::~cVideoRender(void)
  */
 void cVideoRender::Prepare(void)
 {
-	m_pDecodingThread = new cDecodingThread(m_pDevice);
 	m_pDisplayThread = new cDisplayThread(this);
 	m_pFilterThread = new cFilterThread(this);
 
@@ -113,6 +123,14 @@ void cVideoRender::Prepare(void)
 	m_enqueueBufferIdx = 0;
 	m_pLastFrame = (struct lastFrame *)calloc(1, sizeof(struct lastFrame));
 	ResumeVideo();
+}
+
+/**
+ * Create and start the decoding thread
+ */
+void cVideoRender::CreateDecodingThread(void)
+{
+	m_pDecodingThread = new cDecodingThread(m_pDevice);
 }
 
 /**
@@ -1866,6 +1884,7 @@ static int ReadHWPlatform(void)
 		read_size -= (strlen(read_ptr) + 1);
 		read_ptr = (char *)&read_ptr[(strlen(read_ptr) + 1)];
 	}
+	free((void *)_txt_buf);
 	free((void *)txt_buf);
 
 	return hardwareQuirks;

@@ -77,6 +77,8 @@ extern "C" {
 cDrmDevice::cDrmDevice(cVideoRender *render)
 {
 	m_pRender = render;
+	m_useZpos = false;
+	m_userReqDisplayWidth = 0;
 }
 
 /**

@@ -64,6 +64,9 @@ extern "C"
 cSoftHdAudio::cSoftHdAudio(cSoftHdDevice *device)
 {
 	m_pDevice = device;
+	m_pAlsaMixer = nullptr;
+	m_pAlsaMixerElem = nullptr;
+	m_compressionFactor = 0;
 }
 
 /**

@@ -502,6 +502,8 @@ cSoftHdDevice::cSoftHdDevice(cSoftHdConfig *config)
 	m_pAudio = new cSoftHdAudio(this);
 	m_pRender = new cVideoRender(this);
 	m_pVideoStream = new cVideoStream(this);
+
+	m_pAudioDecoder = nullptr;
 }
 
 /**
@@ -586,7 +588,7 @@ void cSoftHdDevice::Start(void)
 		m_pRender->DisableDeint(m_pConfig->ConfigDisableDeint);
 		m_pRender->Init();
 
-		m_pVideoStream->SetDecoder(new cVideoDecoder(m_pRender));
+		m_pVideoStream->StartDecoder(new cVideoDecoder(m_pRender));
 		m_pVideoStream->InitPacketRb();
 	}
 }

@@ -65,6 +65,11 @@ cVideoStream::cVideoStream(cSoftHdDevice *device)
 	m_pRender = device->Render();
 	m_pDecoder = nullptr;
 
+	m_codecId = AV_CODEC_ID_NONE;
+	m_newStream = false;
+	m_paused = false;
+	m_packetsFilled = 0;
+
 	Start();
 }
 
@@ -176,6 +181,18 @@ void cVideoStream::Clear(void)
 
 	m_pktsMutex.Unlock();
 }
+
+/**
+ * Start the decoder
+ */
+void cVideoStream::StartDecoder(cVideoDecoder *decoder)
+{
+	LOGDEBUG2(L_CODEC, "videostream %s", __FUNCTION__);
+
+	m_pDecoder = decoder;
+	m_pRender->CreateDecodingThread();
+}
+
 
 /**
  * Close the decoder

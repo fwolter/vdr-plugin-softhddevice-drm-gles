@@ -60,7 +60,7 @@ public:
 
 	// getters and setters
 	cVideoDecoder *Decoder(void) { return m_pDecoder; };
-	void SetDecoder(cVideoDecoder *decoder) { m_pDecoder = decoder; };
+	void StartDecoder(cVideoDecoder *decoder);
 	void SetCodecId(enum AVCodecID id) { m_codecId = id; };
 	void SetParameters(AVCodecParameters *par) { m_pPar = par; };
 	void SetTimebase(int, int);

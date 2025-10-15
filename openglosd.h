@@ -210,7 +210,7 @@ private:
 	int w;
 	int h;
 	int fontheight;
-	cOglAtlasGlyph* Glyph[MAX_CHARCODE];
+	cOglAtlasGlyph* Glyph[MAX_CHARCODE - MIN_CHARCODE + 1];
 public:
 	cOglFontAtlas(FT_Face face, int height);
 	virtual ~cOglFontAtlas(void);

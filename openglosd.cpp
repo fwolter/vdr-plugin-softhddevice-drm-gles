@@ -33,6 +33,7 @@
 #ifdef GRIDPOINTS
 #include <string>
 #endif
+#include <vector>
 #include <sys/ioctl.h>
 
 #include "logger.h"
@@ -617,7 +618,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
 	rowh = 0;
 
 	// Now do the real upload
-	for (int i = MIN_CHARCODE; i <= MAX_CHARCODE; i++) {
+	for (FT_ULong i = MIN_CHARCODE; i <= MAX_CHARCODE; i++) {
 		if (FT_Load_Char(face, i, FT_LOAD_NO_BITMAP)) {
 			LOGWARNING("openglosd: %s: Loading char %c failed!", __FUNCTION__, i);
 			continue;
@@ -681,7 +682,7 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
 		float tx = ox / (float)w;
 		float ty = oy / (float)h;
 
-		Glyph[i] = new cOglAtlasGlyph(i, ax, ay, bw, bh, bl, bt, tx, ty);
+		Glyph[i - MIN_CHARCODE] = new cOglAtlasGlyph(i, ax, ay, bw, bh, bl, bt, tx, ty);
 		rowh = std::max(rowh, (int)bGlyph->bitmap.rows);
 		ox += bGlyph->bitmap.width + 1;
 
@@ -695,10 +696,20 @@ cOglFontAtlas::cOglFontAtlas(FT_Face face, int height) {
 cOglFontAtlas::~cOglFontAtlas(void) {
 	if (tex)
 		GL_CHECK(glDeleteTextures(1, &tex));
+
+	for (FT_ULong i = MIN_CHARCODE; i <= MAX_CHARCODE; i++) {
+		if (Glyph[i - MIN_CHARCODE]) {
+			delete Glyph[i - MIN_CHARCODE];
+			Glyph[i - MIN_CHARCODE] = nullptr;
+		}
+	}
 }
 
 cOglAtlasGlyph* cOglFontAtlas::GetGlyph(int sym) const {
-	return Glyph[sym];
+	if (sym < MIN_CHARCODE || sym > MAX_CHARCODE)
+		return nullptr;
+
+	return Glyph[sym - MIN_CHARCODE];
 }
 
 void cOglFontAtlas::BindTexture(void) {
@@ -745,6 +756,7 @@ cOglFont::cOglFont(const char *fontName, int charHeight) : name(fontName) {
 }
 
 cOglFont::~cOglFont(void) {
+	delete atlas;
 	FT_Done_Face(face);
 }
 
@@ -1736,8 +1748,8 @@ bool cOglCmdDrawText::Execute(void) {
 
 	if (!unknown_char) {
 		cOglFontAtlas *fa = f->Atlas();
-		int n = 0;
-		GLfloat *vertices = new GLfloat[4 * 6 * length];
+		std::vector<GLfloat> vertices;
+		vertices.reserve( 4 * 6 * length);
 
 		for (int i = 0; symbols[i]; i++) {
 			sym = symbols[i];
@@ -1762,35 +1774,35 @@ bool cOglCmdDrawText::Execute(void) {
 			GLfloat w = g->Width();
 			GLfloat h = g->Height();
 
-			vertices[n++] = x2;
-			vertices[n++] = y2;
-			vertices[n++] = g->XOffset();
-			vertices[n++] = g->YOffset();
+			vertices.push_back(x2);
+			vertices.push_back(y2);
+			vertices.push_back(g->XOffset());
+			vertices.push_back(g->YOffset());
 
-			vertices[n++] = x2 + w;
-			vertices[n++] = y2;
-			vertices[n++] = g->XOffset() + g->Width() / (float)fa->Width();
-			vertices[n++] = g->YOffset();
+			vertices.push_back(x2 + w);
+			vertices.push_back(y2);
+			vertices.push_back(g->XOffset() + g->Width() / (float)fa->Width());
+			vertices.push_back(g->YOffset());
 
-			vertices[n++] = x2;
-			vertices[n++] = y2 + h;
-			vertices[n++] = g->XOffset();
-			vertices[n++] = g->YOffset() + g->Height() / (float)fa->Height();
+			vertices.push_back(x2);
+			vertices.push_back(y2 + h);
+			vertices.push_back(g->XOffset());
+			vertices.push_back(g->YOffset() + g->Height() / (float)fa->Height());
 
-			vertices[n++] = x2 + w;
-			vertices[n++] = y2;
-			vertices[n++] = g->XOffset() + g->Width() / (float)fa->Width();
-			vertices[n++] = g->YOffset();
+			vertices.push_back(x2 + w);
+			vertices.push_back(y2);
+			vertices.push_back(g->XOffset() + g->Width() / (float)fa->Width());
+			vertices.push_back(g->YOffset());
 
-			vertices[n++] = x2;
-			vertices[n++] = y2 + h;
-			vertices[n++] = g->XOffset();
-			vertices[n++] = g->YOffset() + g->Height() / (float)fa->Height();
+			vertices.push_back(x2);
+			vertices.push_back(y2 + h);
+			vertices.push_back(g->XOffset());
+			vertices.push_back(g->YOffset() + g->Height() / (float)fa->Height());
 
-			vertices[n++] = x2 + w;
-			vertices[n++] = y2 + h;
-			vertices[n++] = g->XOffset() + g->Width() / (float)fa->Width();
-			vertices[n++] = g->YOffset() + g->Height() / (float)fa->Height();
+			vertices.push_back(x2 + w);
+			vertices.push_back(y2 + h);
+			vertices.push_back(g->XOffset() + g->Width() / (float)fa->Width());
+			vertices.push_back(g->YOffset() + g->Height() / (float)fa->Height());
 
 			xGlyph += kerning + g->AdvanceX();
 			yGlyph += kerning + g->AdvanceY();
@@ -1801,8 +1813,8 @@ bool cOglCmdDrawText::Execute(void) {
 		}
 
 		fa->BindTexture();
-		VertexBuffers[vbText]->SetVertexData(vertices, (n / 4));
-		VertexBuffers[vbText]->DrawArrays(n / 4);
+		VertexBuffers[vbText]->SetVertexData(vertices.data(), (vertices.size() / 4));
+		VertexBuffers[vbText]->DrawArrays(vertices.size() / 4);
 	} else {
 		LOGDEBUG2(L_OPENGL, "openglosd: %s: char %d is not on the texture atlas, use single draw", __FUNCTION__, unknown_char);
 		for (int i = 0; symbols[i]; i++) {
