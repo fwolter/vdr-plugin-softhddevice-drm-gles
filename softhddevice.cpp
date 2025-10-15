@@ -504,6 +504,9 @@ cSoftHdDevice::cSoftHdDevice(cSoftHdConfig *config)
 	m_pVideoStream = new cVideoStream(this);
 
 	m_pAudioDecoder = nullptr;
+
+	m_skipAudio = false;
+	m_newAudioStream = false;
 }
 
 /**

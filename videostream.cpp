@@ -69,6 +69,10 @@ cVideoStream::cVideoStream(cSoftHdDevice *device)
 	m_newStream = false;
 	m_paused = false;
 	m_packetsFilled = 0;
+	m_pPar = nullptr;
+
+	m_interlaced = 0;
+	m_trickpkts = 1;
 
 	Start();
 }
@@ -203,7 +207,7 @@ void cVideoStream::CloseDecoder(void)
 
 	m_codecId = AV_CODEC_ID_NONE;
 	m_pDecoder->Close();
-	m_pPar = NULL;
+	m_pPar = nullptr;
 }
 
 /**

@@ -634,11 +634,10 @@ EGLConfig cDrmDevice::GetEGLConfig(void)
 		EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
 		EGL_NONE
 	};
-	EGLConfig *configs;
-	EGLint matched;
-	EGLint count;
-	eglGetConfigs(m_eglDisplay, NULL, 0, &count);
-//	EGL_CHECK(eglGetConfigs(m_eglDisplay, NULL, 0, &count));
+	EGLConfig *configs = nullptr;
+	EGLint matched = 0;
+	EGLint count = 0;
+	EGL_CHECK(eglGetConfigs(m_eglDisplay, NULL, 0, &count));
 	if (count < 1)
 		LOGFATAL("drmdevice: %s: no EGL configs to choose from", __FUNCTION__);
 
@@ -648,24 +647,30 @@ EGLConfig cDrmDevice::GetEGLConfig(void)
 	if (!configs)
 		LOGFATAL("drmdevice: %s: can't allocate space for EGL configs", __FUNCTION__);
 
-	eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched);
-//	EGL_CHECK(eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched));
-	if (!matched)
+	EGL_CHECK(eglChooseConfig(m_eglDisplay, config_attribute_list, configs, count, &matched));
+	if (!matched) {
+		free(configs);
 		LOGFATAL("drmdevice: %s: no EGL configs with appropriate attributes", __FUNCTION__);
+	}
 
 	LOGDEBUG2(L_OPENGL, "drmdevice: %s: %d appropriate EGL configs found, which match attributes", __FUNCTION__, matched);
 
+	EGLConfig chosen = NULL;
 	for (int i = 0; i < matched; ++i) {
 		EGLint gbm_format;
-		eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format);
-//		EGL_CHECK(eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format));
+		EGL_CHECK(eglGetConfigAttrib(m_eglDisplay, configs[i], EGL_NATIVE_VISUAL_ID, &gbm_format));
 
-		if (gbm_format == GBM_FORMAT_ARGB8888)
-			return configs[i];
+		if (gbm_format == GBM_FORMAT_ARGB8888) {
+			chosen = configs[i];
+			break;
+		}
 	}
 
-	LOGFATAL("drmdevice: %s: no matching gbm config found", __FUNCTION__);
-	return NULL;
+	free(configs);
+	if (chosen == NULL)
+		LOGFATAL("drmdevice: %s: no matching gbm config found", __FUNCTION__);
+
+	return chosen;
 }
 
 /**
@@ -683,8 +688,7 @@ int cDrmDevice::InitEGL(void)
 	PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC get_platform_surface = (PFNEGLCREATEPLATFORMWINDOWSURFACEEXTPROC)eglGetProcAddress("eglCreatePlatformWindowSurfaceEXT");
 	assert(get_platform_surface != NULL);
 
-	m_eglDisplay = get_platform_display(EGL_PLATFORM_GBM_KHR, m_pGbmDevice, NULL);
-//	EGL_CHECK(m_eglDisplay = get_platform_display(EGL_PLATFORM_GBM_KHR, m_pGbmDevice, NULL));
+	EGL_CHECK(m_eglDisplay = get_platform_display(EGL_PLATFORM_GBM_KHR, m_pGbmDevice, NULL));
 	if (!m_eglDisplay) {
 		LOGERROR("drmdevice: %s: failed to get eglDisplay", __FUNCTION__);
 		return -1;

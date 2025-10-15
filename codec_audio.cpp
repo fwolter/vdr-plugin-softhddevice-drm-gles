@@ -55,6 +55,7 @@ cAudioDecoder::cAudioDecoder(cSoftHdAudio *audio)
 		LOGFATAL("audiocodec: %s: can't allocate audio decoder frame buffer", __FUNCTION__);
 
 	m_pAudioCtx = NULL;
+	m_lastPts = AV_NOPTS_VALUE;
 
 	m_passthroughMask = mask & (CODEC_PCM | CODEC_AC3 | CODEC_EAC3 | CODEC_DTS);
 	LOGDEBUG2(L_CODEC, "audiocodec: %s: Set passthrough mask %d", __FUNCTION__, m_passthroughMask);
