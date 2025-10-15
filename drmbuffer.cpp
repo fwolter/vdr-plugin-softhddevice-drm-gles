@@ -36,7 +36,15 @@
  */
 cDrmBuffer::cDrmBuffer(void)
 {
-	m_swbuffer = 0;
+	m_dirty = false;
+	m_swbuffer = false;
+	m_trickspeed = false;
+	m_fdPrime[0] = 0;
+
+	m_numPlanes = 0;
+	for (int i = 0; i < 4; i++) {
+		m_pPlane[i] = nullptr;
+	}
 }
 
 /**
@@ -58,6 +66,7 @@ cDrmBuffer::cDrmBuffer(cDrmBuffer *src)
 	m_trickspeed = src->m_trickspeed;
 	m_swbuffer = src->m_swbuffer;
 	m_numObjects = src->m_numObjects;
+	m_dirty = false;
 
 	for (int object = 0; object < m_numObjects; object++) {
 		m_fdPrime[object] = src->m_fdPrime[object];
@@ -131,7 +140,17 @@ cDrmBuffer::cDrmBuffer(int fdDrm, uint32_t width, uint32_t height, uint32_t pixF
 	m_height = height;
 	m_pixFmt = pixFmt;
 	m_pBo = bo;
-	m_pPlane[0] = nullptr;
+	m_numPlanes = 0;
+	for (int i = 0; i < 4; i++) {
+		m_pPlane[i] = nullptr;
+		m_handle[i] = 0;
+		m_offset[i] = 0;
+		m_pitch[i] = 0;
+		m_size[i] = 0;
+	}
+	m_dirty = false;
+	m_swbuffer = false;
+	m_trickspeed = false;
 }
 #endif
 
@@ -340,6 +359,10 @@ int cDrmBuffer::Setup(int fdDrm, uint32_t width, uint32_t height, uint32_t pixFm
 			creq.height = m_height / plane_info->ysub;
 			creq.width = m_width / plane_info->xsub;
 			creq.bpp = plane_info->bitspp;
+			creq.flags = 0;
+			creq.handle = 0;
+			creq.pitch = 0;
+			creq.size = 0;
 
 			if (drmIoctl(fdDrm, DRM_IOCTL_MODE_CREATE_DUMB, &creq) < 0){
 				LOGERROR("drmbuffer: %s: cannot create dumb buffer %dx%d@%d (%d): %m", __FUNCTION__,

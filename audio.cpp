@@ -64,9 +64,25 @@ extern "C"
 cSoftHdAudio::cSoftHdAudio(cSoftHdDevice *device)
 {
 	m_pDevice = device;
+
+	m_pPassthroughDevice = nullptr;
+	m_pPCMDevice = nullptr;
+
 	m_pAlsaMixer = nullptr;
+	m_pMixerDevice = nullptr;
+	m_pMixerChannel = nullptr;
 	m_pAlsaMixerElem = nullptr;
+
 	m_compressionFactor = 0;
+	m_hwSampleRate = 0;
+	m_hwNumChannels = 0;
+	m_downmix = false;
+	m_paused = false;
+	m_running = false;
+	m_alsaPlayerRunning = false;
+	m_alsaCanPause = false;
+
+	m_pts = AV_NOPTS_VALUE;
 }
 
 /**
@@ -1315,7 +1331,7 @@ int cSoftHdAudio::PlayWithAlsa(void)
 		int frames;
 		const void *p;
 
-		if (m_paused || !m_alsaPlayerRunning)
+		if (m_paused || !m_alsaPlayerRunning || !m_pAlsaPCMHandle)
 			return 1;
 
 		// wait for space in kernel buffers

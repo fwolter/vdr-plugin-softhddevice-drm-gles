@@ -85,6 +85,15 @@ cVideoRender::cVideoRender(cSoftHdDevice *device)
 	m_startCounter = false;
 	m_videoIsScaled = false;
 
+	m_trickSpeed = 0;
+	m_trickCounter = 0;
+	m_trickForward = true;
+
+	m_framesFilled = 0;
+	m_framesWrite = 0;
+	m_framesRead = 0;
+	m_numFramesToFilter = 0;
+
 	m_pBufOsd = nullptr;
 #ifdef USE_GLES
 	m_bo = nullptr;

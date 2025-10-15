@@ -158,6 +158,9 @@ void cSoftHdLogger::LogDebug(const char *format, ...)
  */
 void cSoftHdLogger::LogDebug2(const int cat, const char *format, ...)
 {
+	if (!format)
+		return;
+
 	va_list ap;
 	char fmt[256];
 	char prefix[20] = "";
