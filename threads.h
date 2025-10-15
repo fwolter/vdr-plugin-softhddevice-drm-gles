@@ -112,7 +112,7 @@ private:
 	bool m_filterStill;                         ///< the current filter handles stillpicture frames
 	bool m_isInterlaceFilter;                   ///< the current filter is an deinterlace filter
 
-	cQueue<AVFrame *> m_frames{VIDEO_SURFACES_MAX}; ///< queue for frames to be filtered
+	cQueue<AVFrame> m_frames{VIDEO_SURFACES_MAX}; ///< queue for frames to be filtered
 
 	cCondVar m_waitIdleCondition;               ///< condition is triggered, if ringbuffer is empty
 
