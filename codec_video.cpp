@@ -461,7 +461,7 @@ int cVideoDecoder::GetExtraData(const AVPacket * avpkt)
  * @returns AVERROR(EINVAL)      invalid input or missing m_pVideoCtx
  * @returns ret                  other ffmpeg error
  */
-int cVideoDecoder::SendPacket(const AVPacket * avpkt)
+int cVideoDecoder::SendPacket(const AVPacket *avpkt)
 {
 	int ret = 0;
 
