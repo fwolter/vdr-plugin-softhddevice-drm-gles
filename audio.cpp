@@ -1368,7 +1368,7 @@ int cSoftHdAudio::PlayWithAlsa(void)
 		n = m_pRingbuffer->GetReadPointer(&p);
 		if (!n) { // ring buffer empty
 			LOGWARNING("audio: %s: ring buffer empty Videopkts: %d", __FUNCTION__,
-			           m_pDevice->VideoStream()->GetPacketsFilled());
+			           m_pDevice->VideoStream()->GetAvPacketsFilled());
 		}
 		if (n < avail) { // not enough bytes in ring buffer
 			avail = n;

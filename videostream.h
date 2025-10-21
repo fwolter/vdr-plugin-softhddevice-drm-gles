@@ -21,15 +21,18 @@
 #ifndef __VIDEOSTREAM_H
 #define __VIDEOSTREAM_H
 
+#include <vector>
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 }
 
 #include "codec_video.h"
 #include "videorender.h"
+#include "pes.h"
 
 #define VIDEO_BUFFER_SIZE (512 * 1024)  ///< video PES buffer default size
-#define VIDEO_PACKET_MAX 192            ///< max number of video packets held in ringbuffer
+#define VIDEO_PACKET_MAX 192            ///< max number of video packets held in the buffer
 
 class cVideoDecoder;
 class cVideoRender;
@@ -45,7 +48,7 @@ public:
 
 	void Open(void) { m_newStream = true; };
 	void Exit(void);
-	void Clear(void);
+	void ClearPacketQueue(void);
 	void FlushDecoder(void);
 	void CloseDecoder(void);
 	int DecodeInput(void);
@@ -55,8 +58,9 @@ public:
 	void Resume(void) { m_paused = false; };
 	void Pause(void);
 	bool IsPaused(void) { return m_paused; };
-	void InitPacketRb(void);
-	void EnqueueInRb(int64_t, const void *, int);
+	void PushPesPacket(cPes *pesPacket);
+	bool PushAvPacket(AVPacket *avpkt);
+	void ResetFragmentationBuffer(void);
 
 	// getters and setters
 	cVideoDecoder *Decoder(void) { return m_pDecoder; };
@@ -66,36 +70,28 @@ public:
 	void SetTimebase(int, int);
 	void SetTrickpkts(int pkts) { m_trickpkts = pkts; };
 	void SetInterlaced(bool interlaced);
-	int GetPacketsFilled(void);
-	void IncreasePacketsFilled(void);
-	AVPacket *GetPacketToWrite(void);
-	void AdvancePacketToWrite(void);
+	size_t GetAvPacketsFilled(void) { return m_packets.Size(); };
 	enum AVCodecID GetCodecId(void) { return m_codecId; };
 
 private:
 	cVideoDecoder *m_pDecoder;             ///< video decoder
 	cVideoRender *m_pRender;               ///< video renderer
 
-	// TODO: move ringbuffer to a separate class
-	AVPacket m_packetRb[VIDEO_PACKET_MAX]; ///< PES packet ring buffer
-	int m_packetWrite;                     ///< ring buffer write pointer
-	int m_packetRead;                      ///< ring buffer read pointer
-	atomic_t m_packetsFilled;              ///< how many of the ring buffer is used
+	cQueue<AVPacket> m_packets{VIDEO_PACKET_MAX}; ///< AVPackets queue
+	std::vector<uint8_t> m_currentCodecPacket;    ///< fragmentation buffer
+	int64_t m_currentPacketPts = AV_NOPTS_VALUE;  ///< PTS of the currently receiving codec packet
 
 	enum AVCodecID m_codecId;              ///< current codec id
-	AVCodecParameters *m_pPar;             ///< current codec parameters
-	struct AVRational m_timebase;          ///< current codec timepase
+	AVCodecParameters *m_pPar = nullptr;   ///< current codec parameters
+	struct AVRational m_timebase;          ///< current codec timebase
 	int m_trickpkts;                       ///< how many avpkt does the decoder need in trickspeed mode?
 
 	volatile bool m_newStream;             ///< flag for new stream
 	volatile bool m_closing;               ///< flag for closing request
 	volatile bool m_paused;                ///< flag for paused stream
 	bool m_interlaced;                     ///< flag for interlaced stream
-	cMutex m_pktsMutex;                    ///< mutex for accessing the packet ringbuffer
 	cCondWait m_closeCondition;            ///< condition object to wait for finishing jobs while closing
 	cCondVar m_pauseCondition;             ///< condition object to wait for pausing the stream
-
-	void CleanupPacketRb(void);
 };
 
 #endif
