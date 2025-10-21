@@ -368,6 +368,13 @@ int cVideoRender::CommitBuffer(cDrmBuffer *buf, int osdOnly)
 		videoPlane->SetPlane(modeReq);
 		dirty += 2;
 //		LOGDEBUG2(L_DRM, "videorender: %s: SetPlane Video (fb = %" PRIu64 ")", __FUNCTION__, videoPlane->GetFbId());
+	} else if (m_pLastFrame && m_pLastFrame->buf) {
+		// If no new video is available, set the old buffer again, if available.
+		// This is necessary to recognize a size-change in SetVideoBuffer().
+		// Though this is not expensive, maybe we should only call that, if size really changed.
+		SetVideoBuffer(m_pLastFrame->buf);
+		videoPlane->SetPlane(modeReq);
+		dirty += 2;
 	}
 
 	// handle the osd plane
@@ -854,7 +861,7 @@ int cVideoRender::PageFlip(AVFrame *frame, cDrmBuffer *buf, int osdOnly)
 		return 1;
 	}
 
-	// only osd was set
+	// only osd was set (and maybe m_pLastFrame->buf again)
 	if (osdOnly)
 		return 0;
 
