@@ -52,6 +52,7 @@ public:
 	void FlushDecoder(void);
 	void CloseDecoder(void);
 	int DecodeInput(void);
+	void StillPicture(cPesVideo *);
 	void Start(void) { m_closing = false; };
 	void Stop(void);
 	bool IsClosing(void) { return m_closing; };

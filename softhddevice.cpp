@@ -867,88 +867,24 @@ void cSoftHdDevice::Mute(void)
  */
 void cSoftHdDevice::StillPicture(const uchar *data, int size)
 {
-	if (data[0] == 0x47) {		// ts sync
+	LOGDEBUG("device: %s: %s %p %d", __FUNCTION__, data[0] == 0x47 ? "ts" : "pes", data, size);
+
+	if (data[0] == 0x47) {		// ts sync byte
 		cDevice::StillPicture(data, size);
 		return;
 	}
 
-	LOGDEBUG("device: %s: %s %p %d", __FUNCTION__, data[0] == 0x47 ? "ts" : "pes", data, size);
-
 	cPesVideo pesPacket((const uint8_t*)data, size);
-
 	if (!pesPacket.IsValid()) {
 		m_pVideoStream->ResetFragmentationBuffer();
-
 		return;
 	}
 
-	AVPacket *avpkt = CreateAvPacket(pesPacket.GetPayload(), pesPacket.GetPayloadSize(), pesPacket.GetPts());
-
-	m_pVideoStream->Pause();
-	// close the decoder if opened and another codec id arrives
-	if (m_pVideoStream->Decoder()->GetContext()) {
-		if ((int)(m_pVideoStream->Decoder()->GetContext()->codec_id) != pesPacket.GetCodec()) {
-			m_pVideoStream->Decoder()->Close();
-		}
-	}
-	// open the decoder if we have none (context flag is set)
-	bool context = false;
-	if (!m_pVideoStream->Decoder()->GetContext()) {
-		if (m_pVideoStream->Decoder()->Open(pesPacket.GetCodec(), NULL, NULL, 0, 0, 0))
-			LOGFATAL("device: %s: Could not open the decoder!", __FUNCTION__);
-		context = true;
-	}
 	m_pAudio->Pause();
 
-	int ret = 0;
-	ret = m_pVideoStream->Decoder()->SendPacket(avpkt);
-	if (ret)
-		LOGDEBUG2(L_STILL, "device: %s: SendPacket(avpkt) returned %d", __FUNCTION__, ret);
-	else
-		LOGDEBUG2(L_STILL, "device: %s: avpkt sent", __FUNCTION__);
+	m_pVideoStream->StillPicture(&pesPacket);
 
-	av_packet_free(&avpkt);
-
-	// force decoder to enter draining because we only want 1 avpkt to be decoded
-	m_pVideoStream->Decoder()->SendPacket(NULL);
-
-	AVFrame *frame;
-	ret = m_pVideoStream->Decoder()->ReceiveFrame(&frame);
-
-	// we got a frame, so try to render it and try another one (should end up with AVERROR_EOF)
-	while (!ret) {
-		// always treat the frame as progressive frame
-		LOGDEBUG2(L_STILL, "device: %s: frame received", __FUNCTION__);
-		m_pRender->MarkAsProgressiveFrame(frame);
-		m_pRender->MarkAsStillpictureFrame(frame);
-		while (m_pRender->RenderFrame(m_pVideoStream->Decoder()->GetContext(), frame)) {
-			if (m_pVideoStream->IsClosing()) {
-				av_frame_free(&frame);
-				break;
-			}
-		}
-		// try to get another frame
-		ret = m_pVideoStream->Decoder()->ReceiveFrame(&frame);
-	}
-
-	// no more frames available or error
-	if (ret == AVERROR_EOF) {
-		// AVERROR_EOF, flush needed
-		m_pVideoStream->FlushDecoder();
-	} else {
-		// sth went wrong or AVERROR(EAGAIN)
-		LOGDEBUG2(L_STILL, "device: %s: Receive Frame returned %d, should not happen!", __FUNCTION__, ret);
-	}
-
-	// close the decoder, if it was opened by StillPicture
-	if (context) {
-		m_pVideoStream->Decoder()->Close();
-		m_pVideoStream->SetCodecId(AV_CODEC_ID_NONE);
-	}
 	ClearAudio();
-	m_pVideoStream->ClearPacketQueue();
-	m_pVideoStream->FlushDecoder();
-	m_pVideoStream->Resume();
 	m_pAudio->Resume();
 }
 

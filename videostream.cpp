@@ -348,6 +348,84 @@ int cVideoStream::DecodeInput(void)
 	return 0;
 }
 
+
+/**
+ * Display the given I-frame as a still picture
+ *
+ * @param pesPacket      cPesVideo packet
+ */
+void cVideoStream::StillPicture(cPesVideo *pesPacket)
+{
+	AVPacket *avpkt = CreateAvPacket(pesPacket->GetPayload(), pesPacket->GetPayloadSize(), pesPacket->GetPts());
+
+	Pause();
+
+	// close the decoder if open and another codec id arrives
+	if (Decoder()->GetContext()) {
+		if ((int)(Decoder()->GetContext()->codec_id) != pesPacket->GetCodec()) {
+			Decoder()->Close();
+		}
+	}
+	// open the decoder if we have none (context flag is set)
+	bool context = false;
+	if (!Decoder()->GetContext()) {
+		if (Decoder()->Open(pesPacket->GetCodec(), NULL, NULL, 0, 0, 0))
+			LOGFATAL("videostream: %s: Could not open the decoder!", __FUNCTION__);
+		context = true;
+	}
+
+	int ret = 0;
+	ret = Decoder()->SendPacket(avpkt);
+	if (ret)
+		LOGDEBUG2(L_STILL, "videostream: %s: SendPacket(avpkt) returned %d", __FUNCTION__, ret);
+	else
+		LOGDEBUG2(L_STILL, "videostream: %s: avpkt sent", __FUNCTION__);
+
+	av_packet_free(&avpkt);
+
+	// force decoder to enter draining because we only want 1 avpkt to be decoded
+	Decoder()->SendPacket(NULL);
+
+	AVFrame *frame;
+	ret = Decoder()->ReceiveFrame(&frame);
+
+	// we got a frame, so try to render it and try another one (should end up with AVERROR_EOF)
+	while (!ret) {
+		// always treat a stillpicture frame as a progressive frame
+		LOGDEBUG2(L_STILL, "videostream: %s: frame received", __FUNCTION__);
+		m_pRender->MarkAsProgressiveFrame(frame);
+		m_pRender->MarkAsStillpictureFrame(frame);
+		while (m_pRender->RenderFrame(Decoder()->GetContext(), frame)) {
+			if (IsClosing()) {
+				av_frame_free(&frame);
+				break;
+			}
+		}
+		// try to get another frame
+		ret = Decoder()->ReceiveFrame(&frame);
+	}
+
+	// no more frames available or error
+	if (ret == AVERROR_EOF) {
+		// AVERROR_EOF, flush needed
+		FlushDecoder();
+	} else {
+		// sth went wrong or AVERROR(EAGAIN)
+		LOGDEBUG2(L_STILL, "videostream: %s: ReceiveFrame returned %d, should not happen!", __FUNCTION__, ret);
+	}
+
+	// close the decoder, if it was opened by StillPicture
+	if (context) {
+		Decoder()->Close();
+		SetCodecId(AV_CODEC_ID_NONE);
+	}
+
+	ClearPacketQueue();
+	FlushDecoder();
+
+	Resume();
+}
+
 /**
  * Set the interlaced flag for the stream
  *
