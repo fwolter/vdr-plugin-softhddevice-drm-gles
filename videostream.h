@@ -52,6 +52,7 @@ public:
 	void FlushDecoder(void);
 	void CloseDecoder(void);
 	int DecodeInput(void);
+	void StillPicture(cPesVideo *);
 	void Start(void) { m_closing = false; };
 	void Stop(void);
 	bool IsClosing(void) { return m_closing; };
@@ -85,6 +86,7 @@ private:
 	AVCodecParameters *m_pPar = nullptr;   ///< current codec parameters
 	struct AVRational m_timebase;          ///< current codec timebase
 	int m_trickpkts;                       ///< how many avpkt does the decoder need in trickspeed mode?
+	int m_sentTrickPkts;                   ///< how many avpkt have been sent to the decoder in trickspeed mode?
 
 	volatile bool m_newStream;             ///< flag for new stream
 	volatile bool m_closing;               ///< flag for closing request
@@ -92,6 +94,8 @@ private:
 	bool m_interlaced;                     ///< flag for interlaced stream
 	cCondWait m_closeCondition;            ///< condition object to wait for finishing jobs while closing
 	cCondVar m_pauseCondition;             ///< condition object to wait for pausing the stream
+
+	int RenderTrickspeedFrames(AVFrame *);
 };
 
 #endif

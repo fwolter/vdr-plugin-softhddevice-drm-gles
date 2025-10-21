@@ -368,6 +368,13 @@ int cVideoRender::CommitBuffer(cDrmBuffer *buf, int osdOnly)
 		videoPlane->SetPlane(modeReq);
 		dirty += 2;
 //		LOGDEBUG2(L_DRM, "videorender: %s: SetPlane Video (fb = %" PRIu64 ")", __FUNCTION__, videoPlane->GetFbId());
+	} else if (m_pLastFrame && m_pLastFrame->buf) {
+		// If no new video is available, set the old buffer again, if available.
+		// This is necessary to recognize a size-change in SetVideoBuffer().
+		// Though this is not expensive, maybe we should only call that, if size really changed.
+		SetVideoBuffer(m_pLastFrame->buf);
+		videoPlane->SetPlane(modeReq);
+		dirty += 2;
 	}
 
 	// handle the osd plane
@@ -652,6 +659,38 @@ bool cVideoRender::IsStillpictureFrame(AVFrame *frame)
 }
 
 /**
+ * Check, if this is an interlaced frame
+ *
+ * @param frame    AVFrame
+ *
+ * @return         true, if this frame is an interlaced frame
+ */
+bool cVideoRender::IsInterlacedFrame(AVFrame *frame)
+{
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
+	return frame->interlaced_frame;
+#else
+	return frame->flags & AV_FRAME_FLAG_INTERLACED;
+#endif
+}
+
+/**
+ * Check, if this is a key frame
+ *
+ * @param frame    AVFrame
+ *
+ * @return         true, if this frame is a key frame
+ */
+bool cVideoRender::IsKeyFrame(AVFrame *frame)
+{
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
+	return frame->key_frame;
+#else
+	return frame->flags & AV_FRAME_FLAG_KEY;
+#endif
+}
+
+/**
  * Mark this frame as a trickspeed frame
  *
  * @param frame      AVFrame
@@ -670,6 +709,24 @@ void cVideoRender::MarkAsStillpictureFrame(AVFrame *frame)
 {
 	SetFrameFlags(frame, FRAME_FLAG_STILLPICTURE);
 	frame->pts = AV_NOPTS_VALUE;
+}
+
+/**
+ * Force this frame to be a progressive frame
+ *
+ * @param frame     AVFrame
+ *
+ * @returns         true, if the frame was an interlaced frame before
+ */
+bool cVideoRender::MarkAsProgressiveFrame(AVFrame *frame)
+{
+	bool wasInterlaced = IsInterlacedFrame(frame);
+#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
+	frame->interlaced_frame = 0;
+#else
+	frame->flags &= ~AV_FRAME_FLAG_INTERLACED;
+#endif
+	return wasInterlaced;
 }
 
 /**
@@ -804,7 +861,7 @@ int cVideoRender::PageFlip(AVFrame *frame, cDrmBuffer *buf, int osdOnly)
 		return 1;
 	}
 
-	// only osd was set
+	// only osd was set (and maybe m_pLastFrame->buf again)
 	if (osdOnly)
 		return 0;
 
@@ -1308,8 +1365,6 @@ void cVideoRender::EnqueueFB(AVFrame *inframe)
  */
 int cVideoRender::RenderFrame(AVCodecContext * videoCtx, AVFrame * frame)
 {
-	bool interlaced;
-
 	if (!m_startCounter) {
 		m_timebase = &videoCtx->pkt_timebase;
 	}
@@ -1323,26 +1378,27 @@ int cVideoRender::RenderFrame(AVCodecContext * videoCtx, AVFrame * frame)
 		return 0;
 	}
 
-#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
-	interlaced = frame->interlaced_frame;
-#else
-	interlaced = !!(frame->flags & AV_FRAME_FLAG_INTERLACED);
-#endif
+	bool interlaced = IsInterlacedFrame(frame);
 	// we can't trust frame->interlaced_frame ...
 	// do some tricks in normal playback
 	if (!(IsTrickspeedFrame(frame) || IsStillpictureFrame(frame))) {
 
-		// set the interlaced switch depending on the framerate
+		// framerate available -> set the interlaced switch depending on the framerate
 		if ((videoCtx->framerate.num > 0) &&
-		    (videoCtx->framerate.num / videoCtx->framerate.den > 30))
+		    (videoCtx->framerate.num / videoCtx->framerate.den > 30)) {    // framerate > 30fps -> progressive stream
 			interlaced = false;
-		else if (videoCtx->framerate.num > 0)
+		} else if (videoCtx->framerate.num > 0 && !interlaced) {           // framerate <= 30fps -> interlaced stream
+//			LOGWARNING("videorender: %s: WARNING!!! progressive frame arrived in interlaced stream (P %d)!",
+//				__FUNCTION__, ++m_numWrongProgressive);
 			interlaced = true;
+		}
 
-		// set the interlaced switch depending on an active deinterlace filter, if framerate is not available
-		if ((videoCtx->framerate.num == 0) &&
-		    !interlaced && m_pFilterThread->Active() && m_pFilterThread->IsInterlaceFilter()) {
-			LOGWARNING("videorender: %s: WARNING!!! frame without interlaced flag arrived while deinterlace filter is active (P %d)!", __FUNCTION__, ++m_numWrongProgressive);
+		// framerate not available -> set the interlaced switch depending on an active deinterlace filter
+		// this doesn't work, if the first frame is wrong, because it should init the filter!
+		if ((videoCtx->framerate.num == 0) && !interlaced &&
+		     m_pFilterThread->Active() && m_pFilterThread->IsInterlaceFilter()) {
+//			LOGWARNING("videorender: %s: WARNING!!! frame without interlaced flag arrived while deinterlace filter is active (P %d)!",
+//				__FUNCTION__, ++m_numWrongProgressive);
 			interlaced = true;
 		}
 

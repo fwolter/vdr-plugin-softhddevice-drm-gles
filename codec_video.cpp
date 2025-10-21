@@ -507,7 +507,7 @@ int cVideoDecoder::SendPacket(const AVPacket *avpkt)
 /**
  * Receive a decoded a video frame
  *
- * @param noDeint               if set, force decoded frame to be progressive
+ * @param[out] frame            decoded AVFrame
  *
  * @returns 0                   received frame
  * @returns AVERROR(EAGAIN)     get no frame, send avpkt again
@@ -515,7 +515,7 @@ int cVideoDecoder::SendPacket(const AVPacket *avpkt)
  * @returns AVERROR(EINVAL)     get no frame, something went wrong
  * @returns ret                 return other ffmpeg error
  */
-int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
+int cVideoDecoder::ReceiveFrame(AVFrame **frame)
 {
 	int ret;
 	AVFrame *pFrame;
@@ -546,28 +546,14 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 	if (pFrame->flags == AV_FRAME_FLAG_CORRUPT)
 		LOGDEBUG2(L_CODEC, "videocodec: %s: AV_FRAME_FLAG_CORRUPT", __FUNCTION__);
 
-	if (noDeint) {
-#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
-		pFrame->interlaced_frame = 0;
-#else
-		pFrame->flags &= ~AV_FRAME_FLAG_INTERLACED;
-#endif
-		LOGDEBUG2(L_CODEC, "videocodec: %s: interlaced_frame = 0", __FUNCTION__);
-	}
-
 	// codec artifacts workaround for amlogic H264:
 	// skip QUIRK_CODEC_SKIP_NUM_FRAMES key frames
 	if (m_pVideoCtx->codec_id == AV_CODEC_ID_H264 &&
 	   (m_pRender->HardwareQuirks() & QUIRK_CODEC_SKIP_FIRST_FRAMES) && m_cntStartKeyFrames) {
-#if LIBAVUTIL_VERSION_INT < AV_VERSION_INT(58,7,100)
-		if (pFrame->key_frame) {
+		if (m_pRender->IsKeyFrame(pFrame)) {
 			LOGDEBUG2(L_CODEC, "videocodec: %s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,
-				pFrame->interlaced_frame ? "interlaced" : "progressive", m_cntStartKeyFrames);
-#else
-		if (pFrame->flags & AV_FRAME_FLAG_KEY) {
-			LOGDEBUG2(L_CODEC, "videocodec: %s: artifact workaround - skip %s I-frame nr %d", __FUNCTION__,
-				pFrame->flags & AV_FRAME_FLAG_INTERLACED ? "interlaced" : "progressive", m_cntStartKeyFrames);
-#endif
+				m_pRender->IsInterlacedFrame(pFrame) ? "interlaced" : "progressive", m_cntStartKeyFrames);
+
 			if (m_cntStartKeyFrames++ > QUIRK_CODEC_SKIP_NUM_FRAMES - 1)
 				m_cntStartKeyFrames = 0;
 		}
@@ -580,8 +566,9 @@ int cVideoDecoder::ReceiveFrame(int noDeint, AVFrame **frame)
 	*frame = pFrame;
 
 	m_cntFramesReceived++;
-	LOGDEBUG2(L_PACKET, "videocodec: %s: %6d PTS %s --->> (%2d)", __FUNCTION__,
-		m_cntFramesReceived, Timestamp2String(pFrame->pts / 90), m_cntPacketsSent - m_cntFramesReceived);
+	LOGDEBUG2(L_PACKET, "videocodec: %s: %6d PTS %s --->> (%2d)%s", __FUNCTION__,
+		m_cntFramesReceived, Timestamp2String(pFrame->pts / 90), m_cntPacketsSent - m_cntFramesReceived,
+		m_pRender->IsInterlacedFrame(pFrame) ? " I" : "");
 	m_mutex.Unlock();
 	return 0;
 }
