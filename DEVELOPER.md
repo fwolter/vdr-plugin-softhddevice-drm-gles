@@ -1,6 +1,147 @@
-# Video Data Flow Call Graph - softhddevice-drm-gles
+# Developer Documentation - softhddevice-drm-gles
 
-This document shows the complete data flow of video frames from VDR through the plugin to the display hardware.
+This document contains technical documentation for developers, including the playback state machine and video data flow.
+
+## State Diagram
+
+### Simple Version
+
+```mermaid
+stateDiagram-v2
+    PrepareContinuePlay: PREPARE CONTINUE PLAY<br/>• Halt ("pause") decoding thread<br/>• Wait filter thread idle<br/>• Cancel filter thread<br />• Continue ("pause", "close") decoder thread<br/>• Resume audio<br/>• Reset trick speed<br/>• Reset cVideoRender pause flag<br/>• Start filter thread lazily
+
+    PrepareNewPlay: PREPARE NEW PLAYBACK<br/>• Start decoding & display thread<br/>• Start filter thread lazily
+
+    PrepareStop: PREPARE STOP<br/>• Halt ("close") decoding thread<br/>• Clear decoding queue<br/>• Cancel filter thread<br/>• Free FFMPEG context<br/>• Flush audio
+
+    PreparePause: PREPARE PAUSE<br/>• Halt ("pause") decoding thread<br/>• Wait filter thread idle<br/>• Cancel filter thread<br />• Pause audio<br/>• Set cVideoRender pause flag
+
+    PrepareStillPicture: PREPARE STILL PICTURE<br/>• Audio pause<br/>• cVideoStream StillPicture() logic<br/>• Audio clear/resume
+
+    [*] --> Stop: Initialize
+
+    PrepareStop --> Stop
+    Stop --> PrepareNewPlay
+
+    PrepareNewPlay --> Play
+    PrepareContinuePlay --> Play
+    Play --> PreparePause: Freeze()
+    Play --> TrickSpeed: TrickSpeed()
+    Play --> PrepareStop: PlayMode(pmNone)
+    Play --> PrepareStillPicture: StillPicture()
+
+    PreparePause --> Pause
+    Pause --> PrepareContinuePlay: Play()
+    Pause --> PrepareStop: PlayMode(pmNone)
+    Pause --> TrickSpeed: TrickSpeed()
+    Pause --> PrepareStillPicture: StillPicture()
+
+    TrickSpeed --> PrepareContinuePlay: Play()
+    TrickSpeed --> PreparePause: Freeze()
+    TrickSpeed --> PrepareStop: PlayMode(pmNone)
+    TrickSpeed --> PrepareStillPicture: StillPicture()
+
+    PrepareStillPicture --> StillPicture
+    StillPicture --> PrepareContinuePlay: Play()
+    StillPicture --> PrepareStop: PlayMode(pmNone)
+    StillPicture --> TrickSpeed: TrickSpeed()
+
+    classDef stopState fill:#e57373,stroke:#d32f2f,stroke-width:2px,color:#000
+    classDef playState fill:#81c784,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef pauseState fill:#fff59d,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef trickspeedState fill:#64b5f6,stroke:#1976d2,stroke-width:2px,color:#000
+    classDef stillpictureState fill:#ba68c8,stroke:#7b1fa2,stroke-width:2px,color:#000
+
+    class Stop stopState
+    class Play playState
+    class Pause pauseState
+    class TrickSpeed trickspeedState
+    class StillPicture stillpictureState
+```
+
+### Fat Version
+
+```mermaid
+stateDiagram-v2
+    PrepareContinuePlay: PREPARE CONTINUE PLAY<br/>→ Play()<br/>• Halt ("pause") decoding thread<br/>• Wait filter thread idle<br/>• Cancel filter thread<br />• Continue ("pause", "close") decoder thread<br/>• Resume audio<br/>• Reset trick speed<br/>• Reset cVideoRender pause flag<br/>• Start filter thread lazily
+
+    PrepareNewPlay: PREPARE NEW PLAYBACK<br/>→ SetPlayMode()<br/>• Start decoding & display thread<br/>• Start filter thread lazily
+
+    PrepareStop: PREPARE STOP<br/>→ PlayMode(pmNone)<br/>• Halt ("close") decoding thread<br/>• Cancel filter thread<br/>• Clear decoding queue<br/>• Free FFMPEG context<br/>• Flush audio
+
+    PreparePause: PREPARE PAUSE<br/>→ Freeze()<br/>• Halt ("pause") decoding thread<br/>• Wait filter thread idle<br/>• Cancel filter thread<br />• Pause audio<br/>• Set cVideoRender pause flag
+
+    PrepareStillPicture: PREPARE STILL PICTURE<br/>• Audio pause<br/>• cVideoStream StillPicture() logic<br/>• Audio clear/resume
+
+    FastTrickSpeed: Fast Reverse/Forward
+
+    [*] --> Stop: Initialize
+
+    PrepareStop --> Stop
+    Stop --> PrepareNewPlay
+
+    PrepareNewPlay --> Play
+    PrepareContinuePlay --> Play
+    Play --> PreparePause
+    Play --> FastTrickSpeed: Clear()
+    Play --> PrepareStop
+    Play --> Play: SkipSeconds → Clear()
+    Play --> PrepareStillPicture: Clear()
+
+    PreparePause --> Pause
+    Pause --> PrepareContinuePlay
+    Pause --> PrepareStop
+    Pause --> SlowForward
+    Pause --> SlowReverse
+    Pause --> PrepareContinuePlay: SkipSeconds → Clear()
+    Pause --> PrepareStillPicture: Clear()
+
+    FastTrickSpeed --> PrepareContinuePlay: Clear()
+    FastTrickSpeed --> PreparePause: Clear()
+    FastTrickSpeed --> PrepareStop
+    FastTrickSpeed --> PrepareContinuePlay: SkipSeconds → 2x Clear()
+    FastTrickSpeed --> PrepareStillPicture: Clear()
+
+    SlowForward --> PrepareContinuePlay: [no clear]
+    SlowForward --> PreparePause: [no clear]
+    SlowForward --> PrepareStop
+    SlowForward --> SlowReverse: Clear()
+    SlowForward --> PrepareContinuePlay: Clear()
+    SlowForward --> PrepareStillPicture: Clear()
+
+    SlowReverse --> PrepareContinuePlay: Clear()
+    SlowReverse --> PreparePause: Clear()
+    SlowReverse --> PrepareStop
+    SlowReverse --> SlowForward: Clear()
+    SlowReverse --> PrepareContinuePlay: 1-2x Clear()
+    SlowReverse --> PrepareStillPicture: Clear()
+
+    PrepareStillPicture --> StillPicture
+    StillPicture --> PrepareContinuePlay: Clear()
+    StillPicture --> PrepareStop
+    StillPicture --> SlowForward: [no clear]
+    StillPicture --> SlowReverse: Clear()
+
+    classDef stopState fill:#e57373,stroke:#d32f2f,stroke-width:2px,color:#000
+    classDef playState fill:#81c784,stroke:#388e3c,stroke-width:2px,color:#000
+    classDef pauseState fill:#fff59d,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef fastTrickspeedState fill:#64b5f6,stroke:#1976d2,stroke-width:2px,color:#000
+        classDef slowForwardState fill:#4dd0e1,stroke:#0097a7,stroke-width:2px,color:#000
+    classDef slowReverseState fill:#ffb74d,stroke:#f57c00,stroke-width:2px,color:#000
+    classDef stillpictureState fill:#ba68c8,stroke:#7b1fa2,stroke-width:2px,color:#000
+
+    class Stop stopState
+    class Play playState
+    class Pause pauseState
+    class FastTrickSpeed fastTrickspeedState
+    class SlowForward slowForwardState
+    class SlowReverse slowReverseState
+    class StillPicture stillpictureState
+```
+
+## Video Data Flow Call Graph
+
+This section shows the complete data flow of video frames from VDR through the plugin to the display hardware.
 
 ## Overview
 
