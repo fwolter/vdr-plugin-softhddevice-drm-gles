@@ -242,7 +242,7 @@ int cVideoStream::DecodeInput(void)
 	int ret = 0;
 
 	if (m_closing) {
-		m_closeCondition.Signal();
+		m_closeCondition.Broadcast();
 		return -1;
 	}
 
@@ -459,7 +459,9 @@ void cVideoStream::StopAndWaitDecodingIdle(void)
 	int timeoutInMs = 1000;
 	m_closing = true;
 
-	if (!m_closeCondition.Wait(timeoutInMs))
+	cMutex mutex;
+	mutex.Lock();
+	if (!m_closeCondition.TimedWait(mutex, timeoutInMs))
 		LOGERROR("videostream %s: Timeout while closing stream (%d ms)!", __FUNCTION__, timeoutInMs);
 
 	LOGDEBUG2(L_CODEC, "videostream %s: stream is closing", __FUNCTION__);
