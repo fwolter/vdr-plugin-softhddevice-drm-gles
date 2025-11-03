@@ -60,7 +60,7 @@ static inline const char* av_err2string(int errnum)
  *
  * @param ts       time stamp
  */
-static inline const char *Timestamp2String(int64_t ts)
+static inline const char *Timestamp2String(int64_t ts, uint8_t divisor)
 {
 	static char buf[3][16];
 	static int idx = 0;
@@ -68,6 +68,9 @@ static inline const char *Timestamp2String(int64_t ts)
 	if (ts == (int64_t) AV_NOPTS_VALUE) {
 		return "--:--:--.---";
 	}
+
+	ts /= divisor;
+
 	idx = (idx + 1) % 3;
 	snprintf(buf[idx], sizeof(buf[idx]), "%2d:%02d:%02d.%03d",
 		(int)(ts / (3600000)), (int)((ts / (60000)) % 60),
