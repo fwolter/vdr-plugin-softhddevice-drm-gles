@@ -57,7 +57,7 @@ extern "C"
 /*****************************************************************************
  * Static variables
  ****************************************************************************/
-static const char *const VERSION = "1.0.9";    ///< vdr-plugin version number
+static const char *const VERSION = "1.1.0";    ///< vdr-plugin version number
                                                ///< Makefile extracts the version number for generating the file name
                                                ///< for the distribution archive.
 
