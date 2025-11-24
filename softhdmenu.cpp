@@ -164,7 +164,7 @@ void cMenuSetupSoft::Create(void)
 	//
 	Add(CollapsedItem(tr("Audio"), m_cAudio));
 	if (m_cAudio) {
-		Add(new cMenuEditIntItem(tr("Audio/Video delay (ms)"), &m_cAudioDelay, -1000, 1000));
+		Add(new cMenuEditIntItem(tr("Audio/Video delay (ms)"), &m_cAudioDelayMs, -1000, 1000));
 		Add(new cMenuEditBoolItem(tr("Volume control"), &m_cAudioSoftvol, tr("Hardware"), tr("Software")));
 		Add(new cMenuEditIntItem(tr("Audio buffer size (ms)"), &m_cAudioBufferTime, 0, 1000));
 		Add(new cMenuEditBoolItem(tr("Enable normalize volume"), &m_cAudioNormalize, trVDR("no"), trVDR("yes")));
@@ -335,7 +335,7 @@ cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
 	// Audio
 	//
 	m_cAudio = 0;
-	m_cAudioDelay              = m_pConfig->ConfigVideoAudioDelay;
+	m_cAudioDelayMs            = m_pConfig->ConfigVideoAudioDelayMs;
 	m_cAudioSoftvol            = m_pConfig->ConfigAudioSoftvol;
 	m_cAudioBufferTime         = m_pConfig->ConfigAudioBufferTime;
 	m_cAudioNormalize          = m_pConfig->ConfigAudioNormalize;
@@ -427,12 +427,12 @@ void cMenuSetupSoft::Store(void)
 	//
 	// Audio
 	//
-	SetupStore("AudioDelay", m_pConfig->ConfigVideoAudioDelay = m_cAudioDelay);
-	m_pDevice->SetVideoAudioDelay(m_pConfig->ConfigVideoAudioDelay);
+	SetupStore("AudioDelay", m_pConfig->ConfigVideoAudioDelayMs = m_cAudioDelayMs);
+	m_pDevice->SetVideoAudioDelayMs(m_pConfig->ConfigVideoAudioDelayMs);
 	SetupStore("AudioSoftvol", m_pConfig->ConfigAudioSoftvol = m_cAudioSoftvol);
 	m_pAudioDevice->SetSoftvol(m_pConfig->ConfigAudioSoftvol);
 	SetupStore("AudioBufferTime", m_pConfig->ConfigAudioBufferTime = m_cAudioBufferTime);
-	m_pAudioDevice->SetBufferTimeInMs(m_pConfig->ConfigAudioBufferTime);
+	m_pAudioDevice->SetBufferTimeMs(m_pConfig->ConfigAudioBufferTime);
 	SetupStore("AudioNormalize", m_pConfig->ConfigAudioNormalize = m_cAudioNormalize);
 	SetupStore("AudioMaxNormalize", m_pConfig->ConfigAudioMaxNormalize = m_cAudioMaxNormalize);
 	m_pAudioDevice->SetNormalize(m_pConfig->ConfigAudioNormalize, m_pConfig->ConfigAudioMaxNormalize);

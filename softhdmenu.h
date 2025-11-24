@@ -86,7 +86,7 @@ protected:
 
 	// Audio
 	int m_cAudio;
-	int m_cAudioDelay;
+	int m_cAudioDelayMs;
 	int m_cAudioSoftvol;
 	int m_cAudioBufferTime;
 	int m_cAudioNormalize;
