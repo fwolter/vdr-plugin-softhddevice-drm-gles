@@ -23,7 +23,10 @@
  * GNU Affero General Public License for more details.}
  */
 
+#include <string.h>
+#include <stdlib.h>
 #include "config.h"
+#include "logger.h"
 
 /*****************************************************************************
  * cSoftHdConfig - Setup parameters

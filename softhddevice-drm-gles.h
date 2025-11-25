@@ -29,6 +29,7 @@
 #endif
 
 #include "softhddevice.h"
+#include "config.h"
 
 class cSoftHdDevice;
 
