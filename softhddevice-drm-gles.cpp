@@ -153,8 +153,6 @@ bool cPluginSoftHdDevice::Initialize(void)
 {
 //	LOGDEBUG("plugin: %s:", __FUNCTION__);
 
-	m_pDevice->Init();
-
 	return true;
 }
 
@@ -164,8 +162,6 @@ bool cPluginSoftHdDevice::Initialize(void)
 bool cPluginSoftHdDevice::Start(void)
 {
 //	LOGDEBUG("plugin: %s:", __FUNCTION__);
-
-	m_pDevice->Start();
 
 	return true;
 }
@@ -178,8 +174,6 @@ bool cPluginSoftHdDevice::Start(void)
 void cPluginSoftHdDevice::Stop(void)
 {
 	//LOGDEBUG("plugin: %s:", __FUNCTION__);
-
-	m_pDevice->Stop();
 }
 
 /**
