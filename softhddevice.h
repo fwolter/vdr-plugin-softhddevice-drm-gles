@@ -192,8 +192,7 @@ public:
 	void SetScreenSize(int, int, uint32_t);
 
 	// audio
-	void SetVideoAudioDelayMs(int delayMs) { m_videoAudioDelayMs = delayMs; };
-	int GetVideoAudioDelayMs(void) { return m_videoAudioDelayMs; };
+	int GetVideoAudioDelayMs(void) { return m_pConfig->ConfigVideoAudioDelayMs; };
 	void SetPassthrough(int);
 	void ResetChannelId(void);
 

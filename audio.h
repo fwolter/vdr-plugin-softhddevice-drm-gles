@@ -33,11 +33,11 @@ extern "C"
 #include "ringbuffer.h"
 #include "threads.h"
 #include "event.h"
+#include "config.h"
 
 #define NORMALIZE_MAX_INDEX 128		///< number of average values
 
 class cSoftHdDevice;
-class cSoftHdConfig;
 
 /**
  * cSoftHdAudio - Audio class

@@ -79,7 +79,6 @@ extern "C" {
 #define AV_SYNC_THRESHOLD_AUDIO_AHEAD_VIDEO_MS 5   ///< threshold in ms, when to drop video frames to keep audio and video in sync
 
 class cDrmDevice;
-class cSoftHdConfig;
 
 /**
  * cVideoRender - Video render class

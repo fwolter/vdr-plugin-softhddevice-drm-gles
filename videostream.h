@@ -30,6 +30,7 @@ extern "C" {
 #include "codec_video.h"
 #include "videorender.h"
 #include "pes.h"
+#include "threads.h"
 
 #define VIDEO_BUFFER_SIZE (512 * 1024)  ///< video PES buffer default size
 #define VIDEO_PACKET_MAX 192            ///< max number of video packets held in the buffer
@@ -43,7 +44,7 @@ class cVideoRender;
 class cVideoStream
 {
 public:
-	cVideoStream(cSoftHdDevice *);
+	cVideoStream(cVideoRender *);
 	virtual ~cVideoStream(void);
 
 	void DecodeInput(void);
