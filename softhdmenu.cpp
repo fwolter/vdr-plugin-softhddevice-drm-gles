@@ -429,7 +429,6 @@ void cMenuSetupSoft::Store(void)
 	// Audio
 	//
 	SetupStore("AudioDelay", m_pConfig->ConfigVideoAudioDelayMs = m_cAudioDelayMs);
-	m_pDevice->SetVideoAudioDelayMs(m_pConfig->ConfigVideoAudioDelayMs);
 	SetupStore("AudioSoftvol", m_pConfig->ConfigAudioSoftvol = m_cAudioSoftvol);
 	m_pAudioDevice->SetSoftvol(m_pConfig->ConfigAudioSoftvol);
 	SetupStore("AudioNormalize", m_pConfig->ConfigAudioNormalize = m_cAudioNormalize);

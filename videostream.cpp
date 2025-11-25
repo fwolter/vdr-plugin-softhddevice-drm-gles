@@ -61,11 +61,11 @@ extern "C" {
 /**
  * cVideoStream constructor
  */
-cVideoStream::cVideoStream(cSoftHdDevice *device)
+cVideoStream::cVideoStream(cVideoRender *render)
 {
 	LOGDEBUG("videostream %s:", __FUNCTION__);
 
-	m_pRender = device->Render();
+	m_pRender = render;
 	m_pDecoder = nullptr;
 
 	m_codecId = AV_CODEC_ID_NONE;

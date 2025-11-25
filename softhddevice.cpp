@@ -554,7 +554,7 @@ void cSoftHdDevice::OnLeavingState(State state) {
 		case DETACHED:
 			m_pAudio = new cSoftHdAudio(this);
 			m_pRender = new cVideoRender(this);
-			m_pVideoStream = new cVideoStream(this);
+			m_pVideoStream = new cVideoStream(m_pRender);
 			m_pAudioDecoder = new cAudioDecoder(m_pAudio);
 			m_pRender->Init(); // starts display thread
 			m_pVideoStream->StartDecoder(new cVideoDecoder(m_pVideoStream, m_pRender->HardwareQuirks())); // starts decoding thread
