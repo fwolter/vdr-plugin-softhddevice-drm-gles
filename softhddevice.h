@@ -160,9 +160,6 @@ public:
 	//
 	// wrapped by cPluginSoftHdDevice
 	//
-	void Init(void);                    // wrapped by cPluginSoftHdDevice::Initialize()
-	void Start(void);                   // wrapped by cPluginSoftHdDevice::Start()
-	void Stop(void);                    // wrapped by cPluginSoftHdDevice::Stop()
 	const char *CommandLineHelp(void);  // wrapped by cPluginSoftHdDevice::CommandLineHelp()
 	int ProcessArgs(int, char *[]);     // wrapped by cPluginSoftHdDevice::ProcessArgs()
 

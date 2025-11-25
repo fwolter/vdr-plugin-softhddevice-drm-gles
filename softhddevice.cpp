@@ -160,54 +160,6 @@ cSoftHdDevice::~cSoftHdDevice(void)
 }
 
 /**
- * Device init
- *
- * .. currently does nothing
- */
-void cSoftHdDevice::Init(void)
-{
-	LOGDEBUG("device: %s: (do nothing)", __FUNCTION__);
-}
-
-/**
- * Start plugin
- *
- * creates
- *     audio device
- *     render device
- *     video stream device
- *     audio decoder
- *
- * inits
- *     renderer
- *
- * starts
- *     display thread (filter thread starts on demand)
- *     decoding thread
- *
- * No need to init audio and start audio thread, because this is done lazily.
- */
-void cSoftHdDevice::Start(void)
-{
-	LOGDEBUG("device: %s:", __FUNCTION__);
-
-	OnEventReceived(AttachEvent{});
-}
-
-/**
- * Stop plugin
- *
- * Stop and delete everything except the config and device itself
- *
- */
-void cSoftHdDevice::Stop(void)
-{
-	LOGDEBUG("device: %s:", __FUNCTION__);
-
-	OnEventReceived(DetachEvent{});
-}
-
-/**
  * Clear all audio data from the decoder and ringbuffer
  */
 void cSoftHdDevice::ClearAudio(void)
@@ -226,10 +178,10 @@ void cSoftHdDevice::ClearAudio(void)
 void cSoftHdDevice::MakePrimaryDevice(bool on)
 {
 	LOGDEBUG("device: %s: %d", __FUNCTION__, on);
-	if (!on)
-		Stop();
+	if (on)
+		OnEventReceived(AttachEvent{});
 	else
-		Start();
+		OnEventReceived(DetachEvent{});
 
 	cDevice::MakePrimaryDevice(on);
 	if (on)
