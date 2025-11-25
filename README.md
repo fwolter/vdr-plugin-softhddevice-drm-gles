@@ -219,6 +219,10 @@ Setup: /etc/vdr/setup.conf
 		0 = do nothing, 1 = write osd on every flush to /tmp
 		this is only for debugging purposes
 
+	softhddevice-drm-gles.AdditionalBufferLengthMs = 0
+		0 = default (min 450ms fixed)
+		1 - 1000 = length of additional buffering duration in ms
+
 	softhddevice-drm-gles.AudioDelay = 0
 		+n or -n ms
 		delay audio or delay video
@@ -254,10 +258,6 @@ Setup: /etc/vdr/setup.conf
 
 	softhddevice-drm-gles.AudioStereoDescent = 0
 		reduce volume level (/1000) for stereo sources
-
-	softhddevice-drm-gles.AudioBufferTime = 0
-		0 = default (600 ms)
-		1 - 1000 = size of the buffer in ms
 
 
 SVDRP:

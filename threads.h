@@ -61,13 +61,11 @@ public:
 	cDisplayThread(cVideoRender *);
 	virtual ~cDisplayThread(void);
 	void Stop(void);
-	void Halt(void) { m_halt = true; m_mutex.lock(); };
-	void Resume(void) { m_mutex.unlock(); m_halt = false; };
-	bool ShouldHalt(void) { return m_halt; };
+	void Halt(void) { m_mutex.lock(); };
+	void Resume(void) { m_mutex.unlock(); };
 
 private:
 	std::mutex m_mutex;
-	bool m_halt;
 	cVideoRender *m_pRender;
 
 protected:
@@ -85,12 +83,9 @@ public:
 	cAudioThread(cSoftHdAudio *);
 	virtual ~cAudioThread(void);
 	void Stop(void);
-	void SendStartSignal(void);
 
 private:
 	cSoftHdAudio *m_pAudio;
-	cMutex m_mutex;
-	cCondVar m_startWait;          ///< condition is triggered if audio and video is ready
 
 protected:
 	virtual void Action(void);

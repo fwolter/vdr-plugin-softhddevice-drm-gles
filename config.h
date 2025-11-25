@@ -42,6 +42,7 @@ public:
 	int ConfigMaxSizeGPUImageCache = 128;       ///< config max gpu image cache size
 	int ConfigDisableOglOsd = 0;                ///< config disable ogl osd
 #endif
+	int ConfigAdditionalBufferLengthMs = 0;     ///< config size ms of a/v buffer
 	int ConfigVideoAudioDelayMs = 0;            ///< config audio delay
 	int ConfigAudioPassthroughMask = 0;         ///< config audio pass-through mask
 	bool ConfigAudioPassthroughState = false;   ///< flag audio-passthrough on/off
@@ -52,7 +53,6 @@ public:
 	bool ConfigAudioCompression = false;        ///< config use volume compression
 	int ConfigAudioMaxCompression = 0;          ///< config max volume compression
 	int ConfigAudioStereoDescent = 0;           ///< config reduce stereo loudness
-	int ConfigAudioBufferTime = 0;              ///< config size ms of audio buffer
 	int ConfigAudioAutoAES = 0;                 ///< config automatic AES handling
 	int ConfigAudioEq = 0;                      ///< config equalizer filter
 	int ConfigAudioEqBand[18] =

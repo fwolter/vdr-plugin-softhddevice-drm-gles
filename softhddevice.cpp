@@ -64,8 +64,6 @@ extern "C" {
 
 #define _(str) gettext(str)                    ///< gettext shortcut
 #define _N(str) str                            ///< gettext_noop shortcut
-#define AUDIO_MIN_BUFFER_FREE (3072 * 8 * 8)   ///< Minimum free space in audio buffer 8 packets for 8 channels
-#define AUDIO_BUFFER_SIZE (512 * 1024)         ///< audio PES buffer default size
 
 /**
  * Call rgb to jpeg for C Plugin
@@ -146,7 +144,6 @@ cSoftHdDevice::cSoftHdDevice(cSoftHdConfig *config)
 	m_pSpuDecoder = new cDvbSpuDecoder();
 	m_pConfig = config;
 	m_pAudioDecoder = nullptr;
-	m_videoAudioDelayMs = m_pConfig->ConfigVideoAudioDelayMs;
 	m_audioChannelID = -1;
 	m_pOsdProvider = nullptr;
 }
@@ -279,17 +276,6 @@ bool cSoftHdDevice::CanReplay(void) const
 }
 
 /**
- * Handle pause state
- *
- * Pauses both video rendering and audio playback.
- */
-void cSoftHdDevice::HandlePause(void)
-{
-	m_pRender->SetPlaybackPaused(true);
-	m_pAudio->Pause();
-}
-
-/**
  * Event handler for playback state transitions
  *
  * Processes events (Play, Pause, Stop, TrickSpeed, StillPicture) and performs
@@ -306,7 +292,7 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 	LOGDEBUG("device: received %s", EventToString(event));
 
 	if (m_state != DETACHED) {
-		m_pRender->DisplayThreadHalt(); // the display thread needs to be halted first, otherwise a deadlock can occur in WaitForAudioClock()
+		m_pRender->DisplayThreadHalt();
 		m_pVideoStream->DecodingThreadHalt();
 	}
 
@@ -328,6 +314,8 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 				[this](const AttachEvent&) {
 					SetState(STOP);
 				},
+				[&invalid](const BufferUnderrunEvent&) { invalid(); },
+				[&invalid](const BufferingThresholdReachedEvent&) { invalid(); },
 			}, event);
 			needsResume = false;
 			break;
@@ -335,7 +323,7 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 			std::visit(overload{
 				[this](const PlayEvent&) {
 					m_pAudio->LazyInit();
-					SetState(PLAY);
+					SetState(BUFFERING);
 					m_pRender->ResetFrameCounter();
 				},
 				[&invalid](const PauseEvent&) { invalid(); },
@@ -347,22 +335,24 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 					needsResume = false;
 				},
 				[&invalid](const AttachEvent&) { invalid(); },
+				[&invalid](const BufferUnderrunEvent&) { invalid(); },
+				[&invalid](const BufferingThresholdReachedEvent&) { invalid(); },
 			}, event);
 			break;
-		case State::PLAY:
+		case State::BUFFERING:
 			std::visit(overload{
 				[this](const PlayEvent&) {
-					// resume from pause
-					m_pAudio->Resume();
-					m_pRender->SetPlaybackPaused(false);
+					// ignore
 				},
 				[this](const PauseEvent&) {
-					HandlePause();
+					// ignore
 				 },
 				[this](const StopEvent&) {
 					SetState(STOP);
 				},
 				[this](const TrickSpeedEvent& t) {
+					// abort buffering and proceed with trick speed immediately, because trick speed shall be as fast and as demanded as possible
+					SetState(PLAY);
 					m_pRender->SetTrickSpeed(t.speed, t.forward);
 					SetState(TRICK_SPEED);
 				},
@@ -374,6 +364,70 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 					needsResume = false;
 				},
 				[&invalid](const AttachEvent&) { invalid(); },
+				[&invalid](const BufferUnderrunEvent&) { invalid(); },
+				[this](const BufferingThresholdReachedEvent&) {
+					bool receivedAudio = m_pAudio->HasPts();
+					bool receivedVideo = m_pVideoStream->HasInputPts();
+
+					if (receivedAudio && receivedVideo) {
+						m_playbackMode = AUDIO_AND_VIDEO;
+						LOGINFO("first audio: %s, first video: %s", Timestamp2String(GetFirstAudioPtsMsToPlay(), 1), Timestamp2String(GetFirstVideoPtsMsToPlay(), 1));
+						int64_t firstAudioPtsMs = GetFirstAudioPtsMsToPlay();
+						int64_t firstVideoPtsMs = GetFirstVideoPtsMsToPlay();
+						// store the first PTSes beforehand, because dropping samples/frames will change the output of GetFirst*PtsMsToPlay()
+						m_pAudio->DropSamplesOlderThanPtsMs(firstAudioPtsMs);
+						m_pRender->SchedulePlaybackStartAtPtsMs(firstVideoPtsMs);
+					} else if (receivedAudio) {
+						LOGDEBUG("device: audio only detected");
+						m_playbackMode = AUDIO_ONLY;
+						m_pAudio->DropSamplesOlderThanPtsMs(m_pAudio->GetOutputPtsMs());
+					} else if (receivedVideo) {
+						LOGDEBUG("device: video only detected");
+						m_playbackMode = VIDEO_ONLY;
+						m_pRender->SchedulePlaybackStartAtPtsMs(m_pRender->GetOutputPtsMs());
+					} else
+						LOGFATAL("device: buffering threshold reached and no a/v available. This is a bug.");
+
+					SetState(PLAY);
+				},
+			}, event);
+			break;
+		case State::PLAY:
+			std::visit(overload{
+				[this](const PlayEvent&) {
+					// resume from pause
+					if (m_playbackMode == AUDIO_ONLY)
+						m_pAudio->SetPaused(false);
+					else {
+						m_pRender->SetScheduleAudioResume(true);
+						m_pRender->SetPlaybackPaused(false);
+					}
+				},
+				[this](const PauseEvent&) {
+					m_pRender->SetPlaybackPaused(true);
+					m_pAudio->SetPaused(true);
+				},
+				[this](const StopEvent&) {
+					SetState(STOP);
+				},
+				[this](const TrickSpeedEvent& t) {
+					m_pRender->SetTrickSpeed(t.speed, t.forward);
+					SetState(TRICK_SPEED);
+				},
+				[this](const StillPictureEvent& s) {
+					HandleStillPicture(s.data, s.size);
+				},
+				[this, &needsResume](const DetachEvent&) {
+					SetState(DETACHED);
+					needsResume = false;
+				},
+				[&invalid](const AttachEvent&) { invalid(); },
+				[this](const BufferUnderrunEvent&) {
+					SetState(BUFFERING);
+				},
+				[&invalid](const BufferingThresholdReachedEvent&) {
+					// ignore
+				},
 			}, event);
 			break;
 		case State::TRICK_SPEED:
@@ -382,8 +436,9 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 					SetState(PLAY);
 				},
 				[this](const PauseEvent&) {
-					HandlePause();
-				 },
+					m_pRender->SetPlaybackPaused(true);
+					m_pAudio->SetPaused(true);
+				},
 				[this](const StopEvent&) {
 					SetState(STOP);
 				},
@@ -394,12 +449,16 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 				 },
 				[this](const StillPictureEvent& s) {
 					HandleStillPicture(s.data, s.size);
-				 },
+				},
 				[this, &needsResume](const DetachEvent&) {
 					SetState(DETACHED);
 					needsResume = false;
 				},
 				[&invalid](const AttachEvent&) { invalid(); },
+				[this](const BufferUnderrunEvent&) {
+					// ignore during trick speed. Fast forward/reverse as fast and as demanded as possible
+				},
+				[&invalid](const BufferingThresholdReachedEvent&) { invalid(); },
 			}, event);
 			break;
 		case State::STILL_PICTURE:
@@ -417,12 +476,14 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 				},
 				[this](const StillPictureEvent& s) {
 					HandleStillPicture(s.data, s.size);
-				 },
+				},
 				[this, &needsResume](const DetachEvent&) {
 					SetState(DETACHED);
 					needsResume = false;
 				},
 				[&invalid](const AttachEvent&) { invalid(); },
+				[&invalid](const BufferUnderrunEvent&) { invalid(); },
+				[&invalid](const BufferingThresholdReachedEvent&) { invalid(); },
 			}, event);
 			break;
 	}
@@ -441,18 +502,24 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
  *
  * @param state         state being entered
  */
-void cSoftHdDevice::OnEnteringState(enum State state) {
+void cSoftHdDevice::OnEnteringState(State state) {
 	switch (state) {
+		case BUFFERING:
+			// nothing
+			break;
 		case PLAY:
-			m_pAudio->Resume();
-			m_pRender->SetPlaybackPaused(false);
+			if (m_playbackMode == AUDIO_ONLY)
+				m_pAudio->SetPaused(false);
+			else {
+				m_pRender->SetScheduleAudioResume(true);
+				m_pRender->SetPlaybackPaused(false);
+			}
 			break;
 		case TRICK_SPEED:
 			// The filter thread needs to be restarted for interlaced streams to be rendered without deinterlacer in trick speed mode. It is started lazily.
 			m_pRender->CancelFilterThread();
 			m_pRender->SetPlaybackPaused(false);
 			m_pRender->SetDeinterlacerDeactivated(true);
-			m_pAudio->Pause();
 			break;
 		case STOP:
 			m_pRender->CancelFilterThread();
@@ -460,33 +527,20 @@ void cSoftHdDevice::OnEnteringState(enum State state) {
 			m_pRender->Reset();
 			m_pRender->DestroyFrameBuffers();
 			m_pRender->ScheduleDisplayBlackFrame();
+			m_playbackMode = NONE;
 
 			m_videoReassemblyBuffer.Reset();
 			m_pVideoStream->ClearVdrCoreToDecoderQueue();
 			m_pRender->ClearDecoderToDisplayQueue();
 			m_pVideoStream->CloseDecoder();
 
-			m_pAudio->Resume();
 			ClearAudio();
 			break;
 		case STILL_PICTURE:
+			m_pRender->SetPlaybackPaused(false);
 			m_pRender->SetDeinterlacerDeactivated(true);
 			break;
 		case DETACHED:
-			// do the same cleanup as in STOP first except audio resume and flushing
-			m_pRender->CancelFilterThread();
-
-			m_pRender->Reset();
-			m_pRender->DestroyFrameBuffers();
-			m_pRender->ScheduleDisplayBlackFrame();
-
-			m_videoReassemblyBuffer.Reset();
-			m_pVideoStream->ClearVdrCoreToDecoderQueue();
-			m_pRender->ClearDecoderToDisplayQueue();
-			m_pVideoStream->CloseDecoder();
-
-			m_audioReassemblyBuffer.Reset();
-
 			// resume the previously stopped threads
 			m_pVideoStream->DecodingThreadResume();
 			m_pRender->DisplayThreadResume();
@@ -514,10 +568,16 @@ void cSoftHdDevice::OnEnteringState(enum State state) {
  *
  * @param state         state being left
  */
-void cSoftHdDevice::OnLeavingState(enum State state) {
+void cSoftHdDevice::OnLeavingState(State state) {
 	switch (state) {
 		case PLAY:
-			// nothing
+			m_pRender->SchedulePlaybackStartAtPtsMs(AV_NOPTS_VALUE);
+			m_pRender->SetPlaybackPaused(true);
+			m_pRender->SetScheduleAudioResume(false);
+			m_pAudio->SetPaused(true);
+			break;
+		case BUFFERING:
+			m_pRender->SetDisplayOneFrameThenPause(false);
 			break;
 		case TRICK_SPEED:
 			// The filter thread needs to be restarted for interlaced streams to be rendered with deinterlacer again. It is started lazily.
@@ -530,17 +590,17 @@ void cSoftHdDevice::OnLeavingState(enum State state) {
 			m_pRender->SetDeinterlacerDeactivated(false);
 			m_pVideoStream->ResetTrickSpeedFramesSentCounter();
 
-			m_pAudio->Resume();
+			m_pRender->SetPlaybackPaused(true);
 			break;
 		case STOP:
 			// nothing
 			break;
 		case STILL_PICTURE:
 			m_pRender->SetDeinterlacerDeactivated(false);
+			m_pRender->SetPlaybackPaused(true);
 			break;
 		case DETACHED:
 			m_pAudio = new cSoftHdAudio(this);
-			m_pAudio->LazyInit();
 			m_pRender = new cVideoRender(this);
 			m_pVideoStream = new cVideoStream(this);
 			m_pAudioDecoder = new cAudioDecoder(m_pAudio);
@@ -551,16 +611,13 @@ void cSoftHdDevice::OnLeavingState(enum State state) {
 	}
 }
 
-
 /**
  * Sets the device into the given state.
  *
  * @param newState       new state
  */
-void cSoftHdDevice::SetState(enum State newState)
+void cSoftHdDevice::SetState(State newState)
 {
-	// No synchronization needed, because SetState is only called from the VDR main thread.
-
 	if (m_state != newState) {
 		LOGDEBUG("device: Preparing to leave state %s", StateToString(m_state));
 		OnLeavingState(m_state);
@@ -605,16 +662,17 @@ bool cSoftHdDevice::SetPlayMode(ePlayMode play_mode)
  */
 int64_t cSoftHdDevice::GetSTC(void)
 {
-//    LOGDEBUG("%s:", __FUNCTION__);
-	if (IsDetached())
-		return AV_NOPTS_VALUE;
+	switch (m_playbackMode) {
+		case NONE:
+			return AV_NOPTS_VALUE;
+		case AUDIO_AND_VIDEO:
+		case VIDEO_ONLY:
+			return m_pRender->GetVideoClock();
+		case AUDIO_ONLY:
+			return m_pAudio->GetHardwareOutputPtsTimebaseUnits();
+	}
 
-	if (m_pRender)
-		return m_pRender->GetVideoClock();
-
-	// could happen during dettached
-	LOGWARNING("device: %s: called without hw decoder", __FUNCTION__);
-	return AV_NOPTS_VALUE;
+	abort();
 }
 
 /**
@@ -649,9 +707,10 @@ void cSoftHdDevice::Clear(void)
 	if (IsDetached())
 		return;
 
-	m_pRender->DisplayThreadHalt(); // the display thread needs to be halted first, otherwise a deadlock can occur in WaitForAudioClock()
+	m_pRender->DisplayThreadHalt();
 	m_pVideoStream->DecodingThreadHalt();
 
+	m_pRender->SetDisplayOneFrameThenPause(true);
 	m_pRender->CancelFilterThread();
 
 	m_videoReassemblyBuffer.Reset();
@@ -664,7 +723,10 @@ void cSoftHdDevice::Clear(void)
 	m_pRender->DestroyFrameBuffers();
 	m_pRender->Reset();
 
+	m_pAudio->SetPaused(true);
 	ClearAudio();
+
+	SetState(BUFFERING);
 
 	m_pRender->DisplayThreadResume();
 	m_pVideoStream->DecodingThreadResume();
@@ -742,53 +804,22 @@ void cSoftHdDevice::HandleStillPicture(const uchar *data, int size)
 }
 
 /**
- * Check if the device is ready for further action.
- *
- * This function is useless, the return value is ignored and
- * all buffers are overrun by vdr.
- *
- * The dvd plugin is using this correct.
+ * Returns true if the device itself or any of the file handles in
+ * Poller is ready for further action.
+ * If TimeoutMs is not zero, the device will wait up to the given number
+ * of milliseconds before returning in case it can't accept any data.
  *
  * @param poller        file handles (unused)
- * @param timeout_ms    timeout in ms to become ready
+ * @param timeoutMs     timeout in ms to become ready
  *
  * @retval true         if ready
  * @retval false        if busy
  */
-bool cSoftHdDevice::Poll(__attribute__ ((unused)) cPoller & poller, int timeout)
+bool cSoftHdDevice::Poll(__attribute__ ((unused)) cPoller & poller, int timeoutMs)
 {
 //	LOGDEBUG("device: %s: timeout %d", __FUNCTION__, timeout_ms);
 
-	if (IsDetached())
-		return true;
-
-	for (;;) {
-		int full;
-		int t;
-		int used;
-		int filled;
-
-//		LOGDEBUG("device: %s: timeout %d", __FUNCTION__, timeout);
-
-		used = m_pAudio->GetUsedBytes();
-		// FIXME: no video!
-		filled = m_pVideoStream->GetAvPacketsFilled();
-		// soft limit + hard limit
-		full = (used > AUDIO_MIN_BUFFER_FREE && filled > 3) ||
-		        m_pAudio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE ||
-		        filled >= VIDEO_PACKET_MAX - 10;
-
-		if (!full || !timeout) {
-			return !full;
-		}
-
-		t = 15;
-		if (timeout < t) {
-			t = timeout;
-		}
-		usleep(t * 1000);		// let display thread work
-		timeout -= t;
-	}
+	usleep(timeoutMs * 1000);
 
 	return true;
 }
@@ -946,7 +977,7 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 //	LOGDEBUG("device: %s: %p %p %d %d", __FUNCTION__, this, data, size, id);
 
 	// hard limit buffer full: don't overrun audio buffers on replay
-	if (m_pAudio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
+	if (m_pAudio->IsBufferFull()) {
 //		LOGDEBUG("device: %s: Buffer is Full (%d|%d)!", __FUNCTION__, m_pAudio->GetFreeBytes(), AUDIO_MIN_BUFFER_FREE);
 		return 0;
 	}
@@ -959,6 +990,8 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 		return size;
 	}
 
+	LOGINFO("AUDIO: %s", Timestamp2String(pesPacket.GetPts(), 90));
+
 	if (m_audioChannelID != id) {
 		m_audioChannelID = id;
 		m_audioReassemblyBuffer.Reset();
@@ -967,6 +1000,9 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 	}
 
 	m_audioReassemblyBuffer.Push(pesPacket.GetPayload(), pesPacket.GetPayloadSize(), pesPacket.GetPts());
+
+	if (IsBufferingThresholdReached())
+		OnEventReceived(BufferingThresholdReachedEvent{});
 
 	AVPacket *avpkt;
 	do {
@@ -1038,7 +1074,7 @@ int cSoftHdDevice::PlayVideo(const uchar *data, int size)
 {
 	// LOGDEBUG("device: %s: %p %d", __FUNCTION__, data, size);
 
-	if (m_pVideoStream->GetAvPacketsFilled() >= VIDEO_PACKET_MAX - 10)
+	if (m_pVideoStream->IsBufferFull())
 		return 0;
 
 	cPesVideo pesPacket((const uint8_t*)data, size);
@@ -1048,6 +1084,8 @@ int cSoftHdDevice::PlayVideo(const uchar *data, int size)
 
 		return size;
 	}
+
+	LOGINFO("vid: %s", Timestamp2String(pesPacket.GetPts(), 90));
 
 	if (m_pVideoStream->GetCodecId() == AV_CODEC_ID_NONE) {
 		// The playback has just started
@@ -1075,6 +1113,82 @@ int cSoftHdDevice::PlayVideo(const uchar *data, int size)
 	}
 
 	return size;
+}
+
+/**
+ * Check if the buffering threshold has been reached
+ *
+ * During the BUFFERING state, this method determines when sufficient audio/video data
+ * has been buffered to start playback.
+ *
+ * @returns true if buffering threshold is reached and playback can start, false otherwise
+ */
+bool cSoftHdDevice::IsBufferingThresholdReached()
+{
+	if (m_state != BUFFERING)
+		return false;
+
+	bool receivedAudio = m_pAudio->HasPts();
+	bool receivedVideo = m_pVideoStream->HasInputPts();
+
+	if ((receivedAudio && !receivedVideo &&                              m_pAudio->GetInputPtsMs()       - m_pAudio->GetOutputPtsMs()  > GetBufferFillLevelThresholdMs()) ||
+	    (!receivedAudio && receivedVideo && m_pRender->HasOutputPts() && m_pVideoStream->GetInputPtsMs() - m_pRender->GetOutputPtsMs() > GetBufferFillLevelThresholdMs())) {
+		LOGDEBUG("device: %s: Detected audio or video only", __FUNCTION__);
+		return true;
+	} else if (!receivedAudio || !receivedVideo || !m_pRender->HasOutputPts())
+		return false; // Either no video or no audio received, yet. Or, video didn't make it to the output buffer, yet.
+
+	int64_t syncedAudioBufferFillLevelMs = m_pAudio->GetInputPtsMs() - GetFirstAudioPtsMsToPlay();
+	int64_t syncedVideoBufferFillLevelMs = m_pVideoStream->GetInputPtsMs() - GetFirstVideoPtsMsToPlay();
+
+	bool reached = m_pRender->IsBufferFull() && // video decoder output buffer (audio hardware output buffer is negligible)
+		syncedVideoBufferFillLevelMs > GetBufferFillLevelThresholdMs() && // video decoder input buffer
+		syncedAudioBufferFillLevelMs > GetBufferFillLevelThresholdMs(); // audio decoder output buffer
+
+	if (reached) {
+		LOGDEBUG2(L_AV_SYNC, "First received PTS: %s (audio), %s (video) buffer fill levels: %ldms (audio) %ldms (video)",
+		Timestamp2String(m_pAudio->GetOutputPtsMs(), 1),
+		Timestamp2String(m_pRender->GetOutputPtsMs(), 1),
+		syncedAudioBufferFillLevelMs,
+		syncedVideoBufferFillLevelMs);
+	}
+
+	return reached;
+}
+
+/**
+ * Calculate the first audio PTS that should be played during synchronized playback
+ *
+ * This method determines the starting audio presentation timestamp when transitioning
+ * from BUFFERING to PLAY state. It synchronizes audio with video by taking the maximum
+ * of both output PTSes, then adjusts for user-configured audio/video delay.
+ *
+ * @returns The first audio PTS in milliseconds that should be played
+ *
+ * @note Positive ConfigVideoAudioDelayMs means audio is intentionally delayed (video ahead)
+ * @note Negative ConfigVideoAudioDelayMs means video is intentionally delayed (audio ahead)
+ */
+int64_t cSoftHdDevice::GetFirstAudioPtsMsToPlay()
+{
+	int64_t ret = std::max(m_pRender->GetOutputPtsMs(), m_pAudio->GetOutputPtsMs());
+
+	if (m_pConfig->ConfigVideoAudioDelayMs < 0)
+		ret -= m_pConfig->ConfigVideoAudioDelayMs;
+
+	return ret;
+}
+
+/**
+ * @see cSoftHdDevice::GetFirstAudioPtsMsToPlay()
+ */
+int64_t cSoftHdDevice::GetFirstVideoPtsMsToPlay()
+{
+	int64_t ret = std::max(m_pRender->GetOutputPtsMs(), m_pAudio->GetOutputPtsMs());
+
+	if (m_pConfig->ConfigVideoAudioDelayMs > 0)
+		ret += m_pConfig->ConfigVideoAudioDelayMs;
+
+	return ret;
 }
 
 /**
@@ -1493,7 +1607,7 @@ int cSoftHdDevice::PlayAudioPkts(AVPacket * pkt)
 {
 	m_pAudio->LazyInit();
 
-	if (m_pAudio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE) {
+	if (m_pAudio->IsBufferFull()) {
 //		LOGERROR("device: %s: m_pAudio->GetFreeBytes() < AUDIO_MIN_BUFFER_FREE!", __FUNCTION__);
 		return 0;
 	}
@@ -1551,4 +1665,12 @@ bool cSoftHdDevice::IsDetached(void) const
 {
 	std::lock_guard<std::mutex> lock(m_mutex);
 	return m_state == State::DETACHED;
+}
+
+/**
+ * Returns the buffer fill level threshold in milliseconds.
+ * Combines the minimum threshold with the user-configured additional buffer length.
+ */
+int cSoftHdDevice::GetBufferFillLevelThresholdMs() {
+	return MIN_BUFFER_FILL_LEVEL_THRESHOLD_MS + m_pConfig->ConfigAdditionalBufferLengthMs;
 }

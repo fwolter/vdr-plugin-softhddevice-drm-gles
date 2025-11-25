@@ -61,8 +61,11 @@ public:
 	void SetInterlaced(bool interlaced);
 	bool IsInterlaced(void) { return m_interlaced; };
 	size_t GetAvPacketsFilled(void) { return m_packets.Size(); };
+	bool IsBufferFull(void) { return m_packets.Size() >= VIDEO_PACKET_MAX; };
 	enum AVCodecID GetCodecId(void) { return m_codecId; };
 	void ResetTrickSpeedFramesSentCounter(void) { m_sentTrickPkts = 0; };
+	bool HasInputPts(void) { return m_inputPts != AV_NOPTS_VALUE; }
+	int64_t GetInputPtsMs(void);
 	void SetVideoSize(int, int);
 	void GetVideoSize(int *, int *, double *);
 
@@ -81,11 +84,12 @@ private:
 	std::vector<uint8_t> m_currentCodecPacket;    ///< fragmentation buffer
 	int64_t m_currentPacketPts = AV_NOPTS_VALUE;  ///< PTS of the currently receiving codec packet
 
-	enum AVCodecID m_codecId;              ///< current codec id
+	enum AVCodecID m_codecId = AV_CODEC_ID_NONE;  ///< current codec id
 	AVCodecParameters *m_pPar = nullptr;   ///< current codec parameters
 	struct AVRational m_timebase;          ///< current codec timebase
 	int m_trickpkts;                       ///< how many avpkt does the decoder need in trickspeed mode?
 	int m_sentTrickPkts = 0;               ///< how many avpkt have been sent to the decoder in trickspeed mode?
+	int64_t m_inputPts = AV_NOPTS_VALUE;   ///< PTS of the first packet in the input buffer
 
 	int m_videoWidth;                      ///< current video width (set by decoder)
 	int m_videoHeight;                     ///< current video height (set by decoder)

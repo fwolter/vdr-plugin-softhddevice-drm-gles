@@ -59,8 +59,7 @@ using Event = std::variant<
 class IEventReceiver
 {
 public:
-	virtual void ScheduleEvent(Event) = 0;
-	virtual void ProcessEvents(void) = 0;
+	virtual void OnEventReceived(const Event&) = 0;
 };
 
 #endif
