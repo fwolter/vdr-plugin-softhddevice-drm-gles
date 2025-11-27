@@ -253,6 +253,7 @@ private:
 	void Grab(cDrmBuffer *);
 	void LogDroppedDuped(int64_t, int64_t, int);
 	int64_t PtsToMs(int64_t pts);
+	void SetBuffer(cDrmBuffer *buf, int height, int width);
 };
 
 #endif
