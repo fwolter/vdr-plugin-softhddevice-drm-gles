@@ -21,6 +21,9 @@
 #ifndef __AUDIO_H
 #define __AUDIO_H
 
+#include <atomic>
+#include <vector>
+
 extern "C"
 {
 #include <libavfilter/avfilter.h>
@@ -29,8 +32,8 @@ extern "C"
 #include <alsa/asoundlib.h>
 #include "ringbuffer.h"
 #include "threads.h"
+#include "event.h"
 
-#define MIN_AUDIO_BUFFER_MS 450		///< minimal output buffer in ms
 #define NORMALIZE_MAX_INDEX 128		///< number of average values
 
 class cSoftHdDevice;
@@ -47,29 +50,24 @@ public:
 	void LazyInit(void);
 	void Exit(void);
 	int Setup(AVCodecContext *, int , int , int);
-	void Resume(void);
-	void Pause(void);
+	void SetPaused(bool);
 	bool IsPaused(void) { return m_paused; };
-	bool IsRunning(void) { return m_running; };
-	void SetRunning(volatile bool running) { m_running = running; };
 	void Filter(AVFrame *, AVCodecContext *);
-	void EnqueueRawData(uint16_t *, int, AVFrame *);
-	bool VideoReady(int64_t);
-	int Skip(int64_t, bool);
+	void Enqueue(uint16_t *, int, AVFrame *);
+	bool IsBufferFull(void) { return m_pRingbuffer->FreeBytes() <= AUDIO_MIN_BUFFER_FREE; }
 
 	void FlushBuffers(void);
 	int GetUsedBytes(void);
 	int GetFreeBytes(void);
-	int64_t GetHardwareOutputPtsMs();
+	int64_t GetHardwareOutputPtsMs(void);
+	int64_t GetHardwareOutputPtsTimebaseUnits(void);
 	int GetPassthrough(void) const { return m_passthrough; }
+	bool HasPts(void) { return m_inputPts != AV_NOPTS_VALUE; }
+	int64_t GetInputPtsMs(void) { return PtsToMs(m_inputPts); }
+	int64_t GetOutputPtsMs(void);
 
-	void ResetNormalizer(void);
-	void ResetCompressor(void);
-	void SetEq(int[17], int);
+	void SetEq(int[18], int);
 	void SetVolume(int);
-	void Mute(void);
-	void Unmute(void);
-	void SetBufferTimeMs(int);
 	void SetDownmix(int downMix) { m_downmix = downMix; };
 	void SetSoftvol(bool softVolume) { m_softVolume = softVolume; };
 	void SetNormalize(bool, int);
@@ -79,20 +77,19 @@ public:
 	void SetAutoAES(bool appendAes) { m_appendAES = appendAes; }
 	void SetTimebase(AVRational *timebase) { m_pTimebase = timebase; };
 
-	void StopAlsaPlayer(void) { m_alsaPlayerRunning = false; };
-	void StartAlsaPlayer(void) { m_alsaPlayerRunning = true; };
 	void FlushAlsaBuffers(void);
-	int PlayWithAlsa(void);
-	bool AlsaPlayerRunning(void) { return m_alsaPlayerRunning; };
+	void CyclicCall(void);
+	void DropSamplesOlderThanPtsMs(int64_t);
+	void ProcessEvents(void);
 
 private:
+	constexpr static int AUDIO_MIN_BUFFER_FREE = 3072 * 8 * 8; ///< Minimum free space in audio buffer 8 packets for 8 channels
 	cSoftHdDevice *m_pDevice;               ///< pointer to device
 	cSoftHdConfig *m_pConfig;               ///< pointer to config
+	IEventReceiver *m_pEventReceiver;       ///< pointer to event receiver
 
 	// thread
 	cAudioThread *m_pAudioThread;           ///< pointer to audio thread
-	volatile bool m_running;                ///< audio running / stopped
-	void StartAudioThread(AVFrame *);       ///< start the audio thread
 
 	// common audio, alsa
 	bool m_initialized = false;             ///< class initialized
@@ -100,21 +97,19 @@ private:
 	unsigned int m_hwSampleRate;            ///< hardware sample rate in Hz
 	unsigned int m_hwNumChannels;           ///< number of hardware channels
 	AVRational *m_pTimebase;                ///< pointer to AVCodecContext pkts_timebase
+	std::mutex m_mutex;                     ///< mutex for thread safety
+	std::vector<Event> m_eventQueue;    ///< event queue for incoming events
 
 	int m_downmix;                          ///< set stereo downmix
 
 	int64_t m_inputPts;                     ///< pts clock (last pts in ringbuffer)
-	int m_skipBytes;                        ///< skip bytes audio to sync to video
-	volatile bool m_videoIsReady;           ///< video audio and video can by synched
-	volatile bool m_paused;                 ///< audio is paused
+	std::atomic<bool> m_paused = true;      ///< audio is paused
 
 	bool m_softVolume;                      ///< flag to use soft volume
 	int m_passthrough;                      ///< passthrough mask
 	const char *m_pPCMDevice;               ///< PCM device name
 	const char *m_pPassthroughDevice;       ///< passthrough device name
 	bool m_appendAES;                       ///< flag ato utomatic append AES
-	unsigned m_startThresholdBytes;         ///< start play, if byte count is filled
-	int m_bufferTimeMs;                     ///< audio buffer time in ms
 
 	// Normalizer
 	bool m_normalize;                       ///< flag to use volume normalize
@@ -133,7 +128,6 @@ private:
 	int m_compressionMaxFactor;             ///< max. compression factor
 
 	// Amplifier
-	bool m_muted;                           ///< audio is muted
 	int m_amplifier;                        ///< software volume amplify factor
 	int m_stereoDescent;                    ///< volume descent for stereo
 	int m_volume;                           ///< current volume (0 .. 1000)
@@ -158,7 +152,6 @@ private:
 	// ring buffer variables
 	cSoftHdRingbuffer *m_pRingbuffer = nullptr;                 ///< sample ring buffer
 	const unsigned m_ringBufferSize = 3 * 5 * 7 * 8 * 2 * 1000; ///< default ring buffer size ~2s 8ch 16bit (3 * 5 * 7 * 8)
-	cMutex m_rbMutex;                                           ///< mutex for ringbuffer access
 
 	void Normalize(uint16_t *, int);
 	void Compress(uint16_t *, int);
@@ -169,14 +162,12 @@ private:
 	void ExitRingbuffer(void);
 
 	void EnqueueFrame(AVFrame *);
-	void Enqueue(uint16_t *, int, AVFrame *);
 
 	// alsa
 	snd_pcm_t *m_pAlsaPCMHandle;         ///< alsa pcm handle
 	snd_mixer_t *m_pAlsaMixer;           ///< alsa mixer handle
 	snd_mixer_elem_t *m_pAlsaMixerElem;  ///< alsa mixer element
 	int m_alsaRatio;                     ///< internal -> mixer ratio * 1000
-	bool m_alsaPlayerRunning;            ///< start/ stop audio player thread
 	bool m_alsaUseMmap;                  ///< use mmap
 	bool m_alsaCanPause;                 ///< hw supports pause
 
@@ -192,8 +183,9 @@ private:
 	int64_t SamplesToPts(int, int);
 	int BytesToMs(int);
 	int MsToBytes(int);
-	int PtsToMs(int64_t);
-	int64_t GetOutputPtsMs(void);
+	int64_t PtsToMs(int64_t);
+	int64_t MsToPts(int64_t);
+	int64_t GetOutputPtsMsInternal(void);
 };
 
 #endif

@@ -54,6 +54,7 @@ bool cSoftHdConfig::SetupParse(const char *name, const char *value)
 	} else if (!strcasecmp(name, "WritePngs"))             { ConfigWritePngs = atoi(value);
 #endif
 #endif
+	} else if (!strcasecmp(name, "AdditionalBufferLengthMs")) { ConfigAdditionalBufferLengthMs = atoi(value);
 	} else if (!strcasecmp(name, "LogLevel"))              { ConfigLogLevels = abs(atoi(value));
 	                                                         ConfigLogState = atoi(value) > 0;
                                                                  PrintLogLevel(ConfigLogState ? ConfigLogLevels : 0);
@@ -68,7 +69,6 @@ bool cSoftHdConfig::SetupParse(const char *name, const char *value)
 	} else if (!strcasecmp(name, "AudioCompression"))      { ConfigAudioCompression = atoi(value);
 	} else if (!strcasecmp(name, "AudioMaxCompression"))   { ConfigAudioMaxCompression = atoi(value);
 	} else if (!strcasecmp(name, "AudioStereoDescent"))    { ConfigAudioStereoDescent = atoi(value);
-	} else if (!strcasecmp(name, "AudioBufferTime"))       { ConfigAudioBufferTime = atoi(value);
 	} else if (!strcasecmp(name, "AudioAutoAES"))          { ConfigAudioAutoAES = atoi(value);
 	} else if (!strcasecmp(name, "AudioEq"))               { ConfigAudioEq = atoi(value);
 	} else if (!strcasecmp(name, "AudioEqBand01b"))        { ConfigAudioEqBand[0] = atoi(value);

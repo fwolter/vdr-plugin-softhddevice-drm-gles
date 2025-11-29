@@ -79,6 +79,7 @@ extern "C" {
  */
 cVideoRender::cVideoRender(cSoftHdDevice *device)
 {
+	m_pEventReceiver = device;
 	m_pDevice = device;
 	m_pConfig = m_pDevice->Config();
 	m_pAudio = m_pDevice->Audio();
@@ -514,95 +515,32 @@ int cVideoRender::CommitBuffer(cDrmBuffer *buf, cDrmBuffer *pip, int osdOnly)
 }
 
 /**
- * Wait for audio to be ready
+ * Log A/V sync debug message
  *
- * If a video is started, wait until we have audio running.
- * The function only exits, if we got a valid audio or if a video close
- * or flush is requested or if the video is paused.
- *
- * @param[in] videoPts       video pts
- * @param[in] framePts       AVFrame pts
- *
+ * @param audioPtsMs               audio pts
+ * @param videoPtsMs               video pts
+ * @param audioBehindVideoByMs     audio is behind video by this many ms
  */
-void cVideoRender::WaitForAudioReady(int64_t videoPts, int64_t framePts)
+void cVideoRender::LogDroppedDuped(int64_t audioPtsMs, int64_t videoPtsMs, int audioBehindVideoByMs)
 {
-	if(!m_startCounter) {
-		LOGDEBUG("videorender: %s: start PTS %s", __FUNCTION__, Timestamp2String(videoPts, 1));
-		m_pAudio->Skip(framePts, 0);
+	LOGERROR("Frame %s (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
+		audioBehindVideoByMs > 0 ? "duped" : "dropped",
+		m_framesDropped,
+		m_framesDuped,
+		m_pDevice->VideoStream()->GetAvPacketsFilled(),
+		m_pFilterThread->GetBufferFrameCount(),
+		atomic_read(&m_framesFilled),
+		m_pAudio->GetUsedBytes(),
+		Timestamp2String(audioPtsMs, 1),
+		Timestamp2String(videoPtsMs, 1),
+		m_pDevice->GetVideoAudioDelayMs(),
+		audioBehindVideoByMs);
 
-		while (!m_pAudio->VideoReady(videoPts)) {
-			if (m_pDisplayThread->ShouldHalt())
-				return;
-			usleep(10000);
-		}
-	}
-}
-
-/**
- * Wait for audio clock
- *
- * @param[out] audioPts      audio pts
- */
-void cVideoRender::WaitForAudioClock(int64_t *audioPts)
-{
-	*audioPts = m_pAudio->GetHardwareOutputPtsMs();
-
-	// check for close/flush request or pause
-	while (*audioPts == (int64_t)AV_NOPTS_VALUE) {
-		if (m_pDisplayThread->ShouldHalt())
-			return;
-		usleep(20000);
-		*audioPts = m_pAudio->GetHardwareOutputPtsMs();
-	};
-}
-
-/**
- * Drop or dup a frame
- *
- * @param videoPts       video pts
- * @param audioPts       AVFrame pts
- *
- * @retval -1            drop a frame
- * @retval 0             we are in sync, or frame duped
- */
-int cVideoRender::HandleDropDup(int64_t videoPts, int64_t audioPts)
-{
-	int diff = videoPts - audioPts - m_pDevice->GetVideoAudioDelayMs();
-
-	if (abs(diff) > 5000) {	// more than 5s
-		LOGDEBUG2(L_AV_SYNC, "More then 5s Pkts %d deint %d, Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
-			m_pDevice->VideoStream()->GetAvPacketsFilled(), m_pFilterThread->GetBufferFrameCount(),
-			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts, 1),
-			Timestamp2String(videoPts, 1), m_pDevice->GetVideoAudioDelayMs(), diff);
-	}
-
-	if (diff < -5) {	// video is more than 5ms behind audio, drop video frame
-		m_framesDropped++;
-		LOGDEBUG2(L_AV_SYNC, "FrameDropped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
-			m_framesDropped, m_framesDuped,
-			m_pDevice->VideoStream()->GetAvPacketsFilled(), m_pFilterThread->GetBufferFrameCount(),
-			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts, 1),
-			Timestamp2String(videoPts, 1), m_pDevice->GetVideoAudioDelayMs(), diff);
-
-		if (!m_startCounter)
-			m_startCounter++;
-
-		return -1;
-	}
-
-	if (diff > 35) {	// audio is more than 35ms behind video, duplicate video frame
+	if (audioBehindVideoByMs > 0)
 		m_framesDuped++;
-		LOGDEBUG2(L_AV_SYNC, "FrameDuped (drop %d, dup %d) Pkts %d deint %d Frames %d UsedBytes %d audio %s video %s Delay %dms diff %dms",
-			m_framesDropped, m_framesDuped,
-			m_pDevice->VideoStream()->GetAvPacketsFilled(), m_pFilterThread->GetBufferFrameCount(),
-			atomic_read(&m_framesFilled), m_pAudio->GetUsedBytes(), Timestamp2String(audioPts, 1),
-			Timestamp2String(videoPts, 1), m_pDevice->GetVideoAudioDelayMs(), diff);
+	else
+		m_framesDropped++;
 
-		usleep(20000);
-		return 0;
-	}
-
-	return 0;
 }
 
 /**
@@ -731,29 +669,6 @@ cDrmBuffer *cVideoRender::GetPipBuffer(AVFrame *frame)
 }
 
 /**
- * Check if we should wait for audio to come up with video
- *
- * @retval 0     wait for video to sync with audio
- * @retval 1     wait for audio to sync with video
- */
-bool cVideoRender::ShouldWaitForAudio(void) {
-	int64_t audioPts = m_pAudio->GetHardwareOutputPtsMs();
-	m_timebaseMutex.Lock();
-	int64_t videoPts = GetVideoClock() * 1000 * av_q2d(m_timebase);
-	m_timebaseMutex.Unlock();
-	if (videoPts == AV_NOPTS_VALUE || audioPts == AV_NOPTS_VALUE)
-		return true;
-
-	int diff = videoPts - audioPts - m_pDevice->GetVideoAudioDelayMs();
-	// audio is behind video, wait for audio
-	if (diff > 0)
-		return true;
-
-	// video is behind audio, so don't wait
-	return false;
-}
-
-/**
  * Do the pageflip
  *
  * @param frame     AVFrame
@@ -811,8 +726,14 @@ void cVideoRender::PageFlipVideo(AVFrame *frame, cDrmBuffer *buf, cDrmBuffer *pi
 /**
  * Display the frame (video and/or osd)
  */
-void cVideoRender::DisplayFrame(AVFrame *frame, AVFrame *pipFrame)
+void cVideoRender::DisplayFrame(AVFrame *frame,  AVFrame *pipFrame, bool bufferEmpty)
 {
+	if (m_pDevice->IsBufferingThresholdReached())
+		m_eventQueue.push_back(BufferingThresholdReachedEvent{});
+
+	if (bufferEmpty && !m_videoPlaybackPaused && m_schedulePlaybackStartAtPtsMs == AV_NOPTS_VALUE && !GetTrickSpeed())
+		m_eventQueue.push_back(BufferUnderrunEvent{VIDEO});
+
 	cDrmBuffer *pipBuf = nullptr;
 	if (pipFrame) {
 		pipBuf = GetPipBuffer(pipFrame);
@@ -846,31 +767,55 @@ void cVideoRender::DisplayFrame(AVFrame *frame, AVFrame *pipFrame)
 		m_framePresentationCounter = std::max(1, GetTrickSpeed());
 
 	if (frame) {
-		// sync audio/video
-		if (!GetTrickSpeed() && !m_destroyCurrentlyDisplayed && !m_playbackPaused && frame->pts != AV_NOPTS_VALUE) {
-			int64_t audioPts;
-			int64_t videoPts;
+		if (m_schedulePlaybackStartAtPtsMs != AV_NOPTS_VALUE) {
+			// check if playback shall start
+			if (PtsToMs(frame->pts) < m_schedulePlaybackStartAtPtsMs) {
+				av_frame_free(&frame); // sets frame to nullptr preventing handling below
 
-			m_timebaseMutex.Lock();
-			videoPts = frame->pts * 1000 * av_q2d(m_timebase);
-			m_timebaseMutex.Unlock();
-
-			WaitForAudioReady(videoPts, frame->pts);
-			WaitForAudioClock(&audioPts);
-
-			int dropNeeded = HandleDropDup(videoPts, audioPts); // blocks if the frame should be duped
-
-			if (dropNeeded < 0) {	// skip the pageflip
-				if (pipFrame)
-					av_frame_free(&pipFrame);
-				av_frame_free(&frame);
 				return;
+			} else
+				m_schedulePlaybackStartAtPtsMs = AV_NOPTS_VALUE;
+		} else if (frame->pts != AV_NOPTS_VALUE && !m_displayOneFrameThenPause) {
+			// A/V sync
+			int64_t audioPtsMs = m_pAudio->GetHardwareOutputPtsMs();
+			int64_t videoPtsMs = PtsToMs(frame->pts);
+
+			if (audioPtsMs != AV_NOPTS_VALUE) {
+				int audioBehindVideoByMs = videoPtsMs - audioPtsMs - m_pDevice->GetVideoAudioDelayMs();
+
+				if (m_resumeAudioScheduled && audioBehindVideoByMs >= 0) { // resume audio from pause
+					LOGDEBUG2(L_AV_SYNC, "videorender: resuming audio playback: video %s, audio %s", Timestamp2String(videoPtsMs, 1), Timestamp2String(audioPtsMs, 1));
+					m_pAudio->SetPaused(false);
+					m_resumeAudioScheduled = false;
+				} else if (!m_pAudio->IsPaused() && audioBehindVideoByMs > AV_SYNC_THRESHOLD_AUDIO_BEHIND_VIDEO_MS) { // duplicate frame
+					LogDroppedDuped(audioPtsMs, videoPtsMs, audioBehindVideoByMs);
+
+					m_framePresentationCounter++; // display the current video frame one period longer
+				} else if (!m_pAudio->IsPaused() && !m_lastFrameWasDropped && audioBehindVideoByMs < -AV_SYNC_THRESHOLD_AUDIO_AHEAD_VIDEO_MS) { // drop frame
+					// Drop max every second frame. Otherwise, the buffer gets drained immediately, if multiple frames in a row are dropped.
+					LogDroppedDuped(audioPtsMs, videoPtsMs, audioBehindVideoByMs);
+
+					if (pipFrame)
+						av_frame_free(&pipFrame);
+
+					av_frame_free(&frame);
+					m_framePresentationCounter--; // skip this pageflip
+					m_lastFrameWasDropped = true;
+
+					return;
+				}
+
+				m_startCounter++;
 			}
-			m_startCounter++;
+
+			if (m_videoPlaybackPaused || GetTrickSpeed())
+				m_pAudio->DropSamplesOlderThanPtsMs(frame->pts * 1000 * av_q2d(m_timebase));
 		}
 
-		if (GetTrickSpeed()) // clear the unplayed samples in the audio buffer in trickspeed to keep it in sync with the video
-			m_pAudio->Skip(frame->pts, 0);
+		if (m_displayOneFrameThenPause) {
+			m_videoPlaybackPaused = true;
+			m_displayOneFrameThenPause = false;
+		}
 
 		// get suitable framebuffer
 		cDrmBuffer *buf = GetBuffer(frame);
@@ -894,12 +839,13 @@ void cVideoRender::DisplayFrame(AVFrame *frame, AVFrame *pipFrame)
 			av_frame_free(&frame);
 		}
 
+		m_lastFrameWasDropped = false;
 		m_pCurrentlyDisplayed = buf;
-	} else if (GetTrickSpeed() && !m_playbackPaused && m_pCurrentlyDisplayed) {
-		// display the current frame again in trickspeed mode when no OSD update is pending
-		PageFlipVideo(m_pCurrentlyDisplayed->Frame(), m_pCurrentlyDisplayed, pipBuf, pipFrame);
 	} else if ((m_pBufOsd && m_pBufOsd->IsDirty())) {
 		PageFlipOsd(pipBuf, pipFrame);
+	} else if (!bufferEmpty && !m_videoPlaybackPaused && m_pCurrentlyDisplayed) {
+		// display the current frame again in trick speed mode or for A/V syncing.
+		PageFlipVideo(m_pCurrentlyDisplayed->Frame(), m_pCurrentlyDisplayed, pipBuf, pipFrame);
 	} else if (pipBuf || m_startgrab) {
 		PageFlipBlack(pipBuf, pipFrame);
 	}
@@ -914,6 +860,15 @@ void cVideoRender::DisplayFrame(AVFrame *frame, AVFrame *pipFrame)
 	}
 
 	m_framePresentationCounter--;
+}
+
+int64_t cVideoRender::PtsToMs(int64_t pts)
+{
+	m_timebaseMutex.Lock();
+	int64_t videoPtsMs = pts * 1000 * av_q2d(m_timebase);
+	m_timebaseMutex.Unlock();
+
+	return videoPtsMs;
 }
 
 /**
@@ -1469,6 +1424,42 @@ AVFrame *cVideoRender::RbGetFrame(void) {
 	atomic_dec(&m_framesFilled);
 
 	return frame;
+}
+
+AVFrame *cVideoRender::RbPeekFrame(void) {
+	return m_framesRb[m_framesRead];
+}
+
+/**
+ * Check if output has a valid PTS
+ *
+ * @return true if the next frame to display has a valid PTS
+ */
+bool cVideoRender::HasOutputPts(void)
+{
+	m_displayQueue.Lock();
+	bool hasPts = GetFramesFilled() > 0 && RbPeekFrame()->pts != AV_NOPTS_VALUE;
+	m_displayQueue.Unlock();
+
+	return hasPts;
+}
+
+/**
+ * Get the output PTS in milliseconds
+ *
+ * Returns the presentation timestamp of the next frame to be displayed.
+ *
+ * @return PTS in milliseconds
+ */
+int64_t cVideoRender::GetOutputPtsMs(void)
+{
+	m_displayQueue.Lock();
+	m_timebaseMutex.Lock();
+	int64_t pts = RbPeekFrame()->pts * 1000 * av_q2d(m_timebase);
+	m_timebaseMutex.Unlock();
+	m_displayQueue.Unlock();
+
+	return pts;
 }
 
 /**
@@ -2074,6 +2065,17 @@ void cVideoRender::SetVideoOutputPosition(const cRect &rect)
 		m_videoIsScaled = true;
 
 	LOGDEBUG("videorender: %s: %d %d %d %d%s", __FUNCTION__, rect.X(), rect.Y(), rect.Width(), rect.Height(), m_videoIsScaled ? ", video is scaled" : "");
+}
+
+/**
+ * Process queued events and forward to event receiver
+ */
+void cVideoRender::ProcessEvents()
+{
+	for (Event event : m_eventQueue)
+		m_pEventReceiver->OnEventReceived(event);
+
+	m_eventQueue.clear();
 }
 
 void cVideoRender::SetPipSize(bool useAlt)

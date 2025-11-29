@@ -21,8 +21,12 @@
 #ifndef __SOFTHDDEVICE_H
 #define __SOFTHDDEVICE_H
 
+#if __cplusplus < 201703L
+#error "C++17 or higher is required"
+#endif
+
 #include <mutex>
-#include <variant>
+#include <atomic>
 
 #include <vdr/dvbspu.h>
 
@@ -38,55 +42,23 @@ extern "C"
 #include "videorender.h"
 #include "softhdosd.h"
 #include "pipreceiver.h"
-
-#if __cplusplus < 201703L
-#error "C++17 or higher is required"
-#endif
+#include "event.h"
 
 // State machine definitions
 // Implementing C++17 visitor pattern
 
+template<class... Ts>
+struct overload : Ts... { using Ts::operator()...; };
+template<class... Ts> overload(Ts...) -> overload<Ts...>;
+
 enum State {
 	STOP,
+	BUFFERING,
 	PLAY,
 	TRICK_SPEED,
 	STILL_PICTURE,
 	DETACHED
 };
-
-
-struct PlayEvent {};
-struct PauseEvent {};
-struct StopEvent {};
-struct TrickSpeedEvent {
-	int speed;
-	bool forward;
-};
-struct StillPictureEvent {
-	const uchar *data;
-	int size;
-};
-struct DetachEvent {};
-struct AttachEvent {};
-
-enum PipState {
-	PIPSTART,
-	PIPSTOP,
-	PIPTOGGLE,
-	PIPCHANUP,
-	PIPCHANDOWN,
-	PIPCHANSWAP,
-	PIPSIZECHANGE,
-	PIPSWAPPOSITION
-};
-struct PipEvent {
-	enum PipState state;
-};
-using Event = std::variant<PlayEvent, PauseEvent, StopEvent, TrickSpeedEvent, StillPictureEvent, DetachEvent, AttachEvent, PipEvent>;
-
-template<class... Ts>
-struct overload : Ts... { using Ts::operator()...; };
-template<class... Ts> overload(Ts...) -> overload<Ts...>;
 
 inline const char* EventToString(const Event& e) {
     return std::visit(overload{
@@ -97,6 +69,8 @@ inline const char* EventToString(const Event& e) {
         [](const StillPictureEvent&) -> const char* { return "StillPictureEvent"; },
         [](const DetachEvent&) -> const char* { return "DetachEvent"; },
         [](const AttachEvent&) -> const char* { return "AttachEvent"; },
+		[](const BufferUnderrunEvent& e) -> const char* { return e.type == AUDIO ? "BufferUnderrunEvent: Audio" : "BufferUnderrunEvent: Video"; },
+		[](const BufferingThresholdReachedEvent&) -> const char* { return "BufferingThresholdReachedEvent"; }
         [](const PipEvent&) -> const char* { return "PipEvent"; },
     }, e);
 }
@@ -104,6 +78,7 @@ inline const char* EventToString(const Event& e) {
 inline const char* StateToString(State s) {
     switch(s) {
         case State::STOP: return "STOP";
+		case State::BUFFERING: return "BUFFERING";
         case State::PLAY: return "PLAY";
         case State::TRICK_SPEED: return "TRICK_SPEED";
         case State::STILL_PICTURE: return "STILL_PICTURE";
@@ -111,6 +86,16 @@ inline const char* StateToString(State s) {
     }
     return "Unknown";
 }
+
+enum PlaybackMode {
+	NONE,
+	AUDIO_AND_VIDEO,
+	AUDIO_ONLY,
+	VIDEO_ONLY
+};
+
+class cAudioDecoder;
+
 
 /*****************************************************************************
  * cSoftHdDevice - cDevice class
@@ -124,7 +109,7 @@ class cSoftHdConfig;
 class cPipReceiver;
 class cPipVideoStream;
 
-class cSoftHdDevice:public cDevice
+class cSoftHdDevice : public cDevice, public IEventReceiver
 {
 public:
 	cSoftHdDevice(cSoftHdConfig *);
@@ -224,15 +209,12 @@ public:
 	int PlayAudioPkts(AVPacket *);
 	int PlayVideoPkts(AVPacket *);
 
-	// State machine
-	void SetState(enum State);
-	void OnEnteringState(enum State);
-	void OnLeavingState(enum State);
-
 	// detach/ attach
 	void Detach(void);
 	void Attach(void);
 	bool IsDetached(void) const;
+
+	bool IsBufferingThresholdReached(void);
 
 	// pip
 	void PipEnable(void);
@@ -246,7 +228,10 @@ public:
 	void PipSwapPosition(void);
 
 private:
-	enum State m_state = DETACHED;   ///< current plugin state, normal plugin start sets detached state
+	static constexpr int MIN_BUFFER_FILL_LEVEL_THRESHOLD_MS = 450; ///< min buffering threshold in ms
+
+	std::atomic<State> m_state = DETACHED; ///< current plugin state, normal plugin start sets detached state
+	std::mutex m_eventMutex;         ///< mutex to protect event queue
 	cDvbSpuDecoder *m_pSpuDecoder;   ///< pointer to spu decoder
 	cSoftHdConfig *m_pConfig;        ///< pointer to cSoftHdConfig object
 	cVideoRender *m_pRender;         ///< pointer to cVideoRender object
@@ -257,8 +242,8 @@ private:
 	cReassemblyBufferVideo m_videoReassemblyBuffer; ///< video pes reassembly buffer
 	cReassemblyBufferAudio m_audioReassemblyBuffer; ///< audio pes reassembly buffer
 
+	std::atomic<PlaybackMode> m_playbackMode = NONE; ///< current playback mode
 	int m_audioChannelID;            ///< current audio channel ID
-	int m_videoAudioDelayMs;         ///< audio/video delayMs set via setup menu
 	bool m_grabActive;               ///< simple lock variable
 	                                 ///< skips a new grab request if the last one is still active
 
@@ -270,6 +255,8 @@ private:
 	cReassemblyBufferVideo m_pipReassemblyBuffer; ///< pip pes reassembly buffer
 	mutable std::mutex m_mutex;      ///< mutex to lock the state machine
 	std::mutex m_sizeMutex;          ///< mutex to lock screen size (which is accessed by different threads)
+	std::atomic<bool> m_receivedAudio = false; ///< flag if audio packets have been received
+	std::atomic<bool> m_receivedVideo = false; ///< flag if video packets have been received
 	bool m_pipUseAlt;                ///< use alternative pip position
 
 	int m_screenWidth;
@@ -278,11 +265,19 @@ private:
 
 	int PlayVideoInternal(cVideoStream *, cReassemblyBufferVideo *, const uchar *, int);
 	void ClearAudio(void);
-	void Exit(void);
 	void OnEventReceived(const Event&);
-	void HandlePause(void);
 	void HandleStillPicture(const uchar *data, int size);
+	int64_t GetFirstAudioPtsMsToPlay();
+	int64_t GetFirstVideoPtsMsToPlay();
 
+	int GetBufferFillLevelThresholdMs();
+
+	// State machine
+	void SetState(State);
+	void OnEnteringState(State);
+	void OnLeavingState(State);
+
+	// PIP
 	void SetEnablePip(bool);
 	void TogglePip(void);
 	void ChangePipChannel(int);

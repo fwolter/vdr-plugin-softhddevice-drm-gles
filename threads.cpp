@@ -102,7 +102,8 @@ void cDisplayThread::Action(void)
 		m_pRender->FramesRbLock();
 
 		AVFrame *frame = nullptr;
-		if (m_pRender->GetFramesFilled() > 0 && !m_pRender->IsPlaybackPaused() && m_pRender->ShallDisplayNextFrame())
+		bool bufferEmpty = (m_pRender->GetFramesFilled() == 0);
+		if (!bufferEmpty && !m_pRender->IsPlaybackPaused() && m_pRender->ShallDisplayNextFrame())
 			frame = m_pRender->RbGetFrame();
 
 		m_pRender->FramesRbUnlock();
@@ -115,9 +116,11 @@ void cDisplayThread::Action(void)
 
 		m_pRender->PipFramesRbUnlock();
 
-		m_pRender->DisplayFrame(frame, pipFrame);
+		m_pRender->DisplayFrame(frame, pipFrame, bufferEmpty);
 
 		m_mutex.unlock();
+
+		m_pRender->ProcessEvents();
 
 		usleep(1000);
 	}
@@ -150,62 +153,23 @@ cAudioThread::~cAudioThread(void)
 
 void cAudioThread::Action(void)
 {
-	m_mutex.Lock();
 	LOGDEBUG("threads: audio thread started");
 	while (Running()) {
-		if (!m_pAudio->IsPaused()) {
-			m_pAudio->FlushAlsaBuffers();
-			m_pAudio->ResetCompressor();
-			m_pAudio->ResetNormalizer();
-		}
+		m_pAudio->CyclicCall();
+		m_pAudio->ProcessEvents();
 
-		m_pAudio->SetRunning(0);
-		m_pAudio->StartAlsaPlayer();
-
-		// wait for sync start, if audio isn't running
-		if (!m_pAudio->IsRunning()) {
-			LOGDEBUG2(L_SOUND, "audio thread: wait on start condition");
-			m_startWait.Wait(m_mutex);
-		}
-
-		LOGDEBUG("audio thread: start condition signalled");
-		while(Running()) {
-			if (!m_pAudio->AlsaPlayerRunning())
-				break;
-
-			if (m_pAudio->IsPaused()) {
-				usleep(10000);
-				continue;
-			}
-
-			if (m_pAudio->GetUsedBytes()) {
-				// try to play some samples
-				m_pAudio->PlayWithAlsa();
-			} else {
-//				LOGDEBUG2(L_SOUND, "audio thread: ring buffer is empty");
-				usleep(5000);
-			}
-		}
+		usleep(10000);
 	}
 	LOGDEBUG("threads: audio thread stopped");
 }
 
 void cAudioThread::Stop(void)
 {
-	m_pAudio->SetRunning(1);
-	m_pAudio->StopAlsaPlayer();
-	m_startWait.Broadcast();
-
 	if (!Active())
 		return;
 
 	LOGDEBUG("threads: stopping audio thread");
 	Cancel(2);
-}
-
-void cAudioThread::SendStartSignal(void)
-{
-	m_startWait.Broadcast();
 }
 
 /*****************************************************************************

@@ -22,6 +22,9 @@
 #ifndef __VIDEORENDER_H
 #define __VIDEORENDER_H
 
+#include <atomic>
+#include <vector>
+
 #include <xf86drm.h>
 #include <xf86drmMode.h>
 
@@ -59,6 +62,7 @@ extern "C" {
 #include "grab.h"
 #include "drmplane.h"
 #include "config.h"
+#include "event.h"
 
 #define RENDERBUFFERS 36                 ///< number of render video buffers
 
@@ -70,6 +74,9 @@ extern "C" {
 #define QUIRK_CODEC_SKIP_NUM_FRAMES     2          ///< skip QUIRK_CODEC_SKIP_NUM_FRAMES, in case QUIRK_CODEC_SKIP_FIRST_FRAMES is set
 #define QUIRK_CODEC_DISABLE_MPEG_HW     1 << 4     ///< set, if disable mpeg hardware decoder
 #define QUIRK_CODEC_DISABLE_H264_HW     1 << 5     ///< set, if disable h264 hardware decoder
+
+#define AV_SYNC_THRESHOLD_AUDIO_BEHIND_VIDEO_MS 35 ///< threshold in ms, when to duplicate video frames to keep audio and video in sync
+#define AV_SYNC_THRESHOLD_AUDIO_AHEAD_VIDEO_MS 5   ///< threshold in ms, when to drop video frames to keep audio and video in sync
 
 class cDrmDevice;
 class cSoftHdConfig;
@@ -94,10 +101,12 @@ public:
 	void GetStats(int *, int *, int *);
 	void ResetFrameCounter(void);
 	void Reset();
-	void SetPlaybackPaused(bool pause) { m_playbackPaused = pause; };
-	bool IsPlaybackPaused(void) { return m_playbackPaused; };
+	void SetPlaybackPaused(bool pause) { m_videoPlaybackPaused = pause; };
+	bool IsPlaybackPaused(void) { return m_videoPlaybackPaused; };
 	void SetDeinterlacerDeactivated(bool deactivate) { m_deinterlacerDeactivated = deactivate; };
 	bool IsDeinterlacerDeactivated(void) { return m_deinterlacerDeactivated; };
+	void SetScheduleAudioResume(bool resume) { m_resumeAudioScheduled = resume; };
+	void ProcessEvents(void);
 
 	// OSD
 	void OsdClear(void);
@@ -129,11 +138,14 @@ public:
 
 	// Frame and buffer
 	void RenderFrame(AVCodecContext *, AVFrame *);
-	void DisplayFrame(AVFrame *, AVFrame *);
+	void DisplayFrame(AVFrame *, AVFrame *, bool);
 	void EnqueueFB(AVFrame *);
 	int GetFramesFilled(void) { return atomic_read(&m_framesFilled); };
 	void RbPushFrame(AVFrame *);
 	AVFrame *RbGetFrame(void);
+	AVFrame *RbPeekFrame(void);
+	bool HasOutputPts(void);
+	int64_t GetOutputPtsMs(void);
 	void FramesRbLock(void);
 	void FramesRbUnlock(void);
 	bool IsInterlacedFrame(AVFrame *);
@@ -141,6 +153,8 @@ public:
 	void DestroyFrameBuffers(void);
 	void ClearDecoderToDisplayQueue(void);
 	bool IsBufferFull(void);
+	void SetDisplayOneFrameThenPause(bool pause) { m_displayOneFrameThenPause = pause; };
+	void SchedulePlaybackStartAtPtsMs(int64_t ptsMs) { m_schedulePlaybackStartAtPtsMs = ptsMs; };
 
 	// Filter
 	void ClearFramesToFilter(void) { m_numFramesToFilter = 0; };
@@ -187,6 +201,7 @@ private:
 	cMutex m_playbackMutex;             ///< mutex used around m_videoIsPaused
 	cMutex m_videoClockMutex;           ///< mutex used around m_pts
 	cMutex m_displayQueue;              ///< mutex used while accessing the render ringbuffer
+	std::vector<Event> m_eventQueue;    ///< event queue for incoming events
 
 	int m_hardwareQuirks;               ///< hardware specific quirks
 
@@ -217,6 +232,7 @@ private:
 	int m_startCounter;                 ///< counter for displayed frames, indicates a video start
 	int m_framesDuped = 0;              ///< number of frames duplicated
 	int m_framesDropped = 0;            ///< number of frames dropped
+	bool m_lastFrameWasDropped = false; ///< true, if the last frame was dropped
 	AVRational m_timebase;              ///< timebase used for pts, set by first RenderFrame()
 	cMutex m_timebaseMutex;             ///< mutex used around m_timebase
 	int64_t m_pts;                      ///< current video PTS
@@ -235,9 +251,14 @@ private:
 	int m_numBuffers = 0;               ///< number of framebuffers currently set up
 	int m_enqueueBufferIdx;             ///< index of the current (sw) framebuffer in the array
 	bool m_osdShown;                    ///< set, if osd is shown currently
-	bool m_displayBlackFrame = false;   ///< set, if a black frame shall be displayed
-	bool m_destroyCurrentlyDisplayed = false; ///< set, if the currently displayed buffer shall be destroyed in the display thread
-	bool m_playbackPaused = false;      ///< set, if playback is frozen (used for pause)
+	std::atomic<bool> m_displayBlackFrame = false;                        ///< set, if a black frame shall be displayed
+	std::atomic<bool> m_destroyCurrentlyDisplayed = false;                ///< set, if the currently displayed buffer shall be destroyed in the display thread
+	std::atomic<bool> m_videoPlaybackPaused = true;                       ///< set, if playback is frozen (used for pause)
+	std::atomic<bool> m_resumeAudioScheduled = false;                     ///< set, if audio resume is scheduled after a pause
+	std::atomic<bool> m_displayOneFrameThenPause = false;                 ///< set, if only one frame shall be displayed and then pause playback
+	std::atomic<int64_t> m_schedulePlaybackStartAtPtsMs = AV_NOPTS_VALUE; ///< if set, frames with PTS older than this will be dropped
+
+	IEventReceiver *m_pEventReceiver;   ///< pointer to event receiver
 
 #ifdef USE_GLES
 	bool m_disableOglOsd;               ///< set, if ogl osd is disabled
@@ -264,10 +285,6 @@ private:
 	int GetFrameFlags(AVFrame *);
 	void SetFrameFlags(AVFrame *, int);
 	void SetVideoClock(int64_t);
-	bool ShouldWaitForAudio(void);
-	void WaitForAudioReady(int64_t, int64_t);
-	void WaitForAudioClock(int64_t *);
-	int HandleDropDup(int64_t, int64_t);
 	void PageFlip(AVFrame *, cDrmBuffer *, AVFrame *, cDrmBuffer *, int);
 	void PageFlipBlack(cDrmBuffer *, AVFrame *);
 	void PageFlipOsd(cDrmBuffer *, AVFrame *);
@@ -283,6 +300,8 @@ private:
 	void SetPipBuffer(cDrmBuffer *);
 	int CommitBuffer(cDrmBuffer *, cDrmBuffer *, int);
 	void Grab(cDrmBuffer *, cDrmBuffer *);
+	void LogDroppedDuped(int64_t, int64_t, int);
+	int64_t PtsToMs(int64_t);
 };
 
 #endif

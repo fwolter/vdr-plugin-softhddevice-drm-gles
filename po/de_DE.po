@@ -87,6 +87,9 @@ msgstr "Verstecke Hauptmenüeintrag"
 msgid "GPU mem used for image caching (MB)"
 msgstr "GPU-Speichergröße für Bild-Zwischenspeicher (MB)"
 
+msgid "Additional buffer size (ms)"
+msgstr "Zusätzlicher Puffer (ms)"
+
 msgid "Statistics"
 msgstr "Statistiken"
 
@@ -199,9 +202,6 @@ msgstr "Hardware"
 
 msgid "Software"
 msgstr "Software"
-
-msgid "Audio buffer size (ms)"
-msgstr "Audio Puffergröße (ms)"
 
 msgid "Enable normalize volume"
 msgstr "Aktiviere Lautstärkenormalisierung"

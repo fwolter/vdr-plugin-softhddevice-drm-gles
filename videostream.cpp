@@ -107,7 +107,15 @@ void cVideoStream::Flush(void)
  */
 bool cVideoStream::PushAvPacket(AVPacket *avpkt)
 {
+	if (avpkt->pts != AV_NOPTS_VALUE)
+		m_inputPts = avpkt->pts;
+
 	return m_packets.Push(avpkt);
+}
+
+int64_t cVideoStream::GetInputPtsMs(void)
+{
+	return m_inputPts * 1000 * av_q2d(m_timebase);
 }
 
 /**
@@ -139,6 +147,8 @@ void cVideoStream::ClearVdrCoreToDecoderQueue(void)
 		AVPacket *avpkt = m_packets.Pop();
 		av_packet_free(&avpkt);
 	}
+
+	m_inputPts = AV_NOPTS_VALUE;
 }
 
 /**
