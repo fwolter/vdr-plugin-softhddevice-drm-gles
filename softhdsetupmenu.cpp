@@ -80,6 +80,8 @@ void cMenuSetupSoft::Create(void)
 			Add(new cMenuEditIntItem(tr("GPU mem used for image caching (MB)"), &m_cMaxSizeGPUImageCache, 0, 4000));
 		}
 #endif
+
+		Add(new cMenuEditIntItem(tr("Additional buffer size (ms)"), &m_cAdditionalBufferLengthMs, 0, 1000));
 	}
 
 	//
@@ -283,6 +285,7 @@ cMenuSetupSoft::cMenuSetupSoft(cSoftHdDevice *device)
 #ifdef USE_GLES
 	m_cMaxSizeGPUImageCache = m_pConfig->ConfigMaxSizeGPUImageCache;
 #endif
+	m_cAdditionalBufferLengthMs= m_pConfig->ConfigAdditionalBufferLengthMs;
 
 	//
 	//	Debug
@@ -376,6 +379,7 @@ void cMenuSetupSoft::Store(void)
 #ifdef USE_GLES
 	SetupStore("MaxSizeGPUImageCache", m_pConfig->ConfigMaxSizeGPUImageCache = m_cMaxSizeGPUImageCache);
 #endif
+	SetupStore("AdditionalBufferLengthMs", m_pConfig->ConfigAdditionalBufferLengthMs = m_cAdditionalBufferLengthMs);
 
 	//
 	// Debug

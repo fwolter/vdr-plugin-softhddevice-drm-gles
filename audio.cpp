@@ -64,6 +64,7 @@ extern "C"
 cSoftHdAudio::cSoftHdAudio(cSoftHdDevice *device)
 {
 	m_pDevice = device;
+	m_pEventReceiver = device;
 	m_pConfig = m_pDevice->Config();
 
 	m_pPassthroughDevice = m_pConfig->ConfigAudioPassthroughDevice;
@@ -90,12 +91,7 @@ cSoftHdAudio::cSoftHdAudio(cSoftHdDevice *device)
 	m_passthrough = 0;
 	if (m_pConfig->ConfigAudioPassthroughState)
 		m_passthrough = m_pConfig->ConfigAudioPassthroughMask;
-	m_bufferTimeMs = MIN_AUDIO_BUFFER_MS + m_pConfig->ConfigAudioBufferTime;
 
-	m_paused = false;
-	m_muted = false;
-	m_running = false;
-	m_alsaPlayerRunning = false;
 	m_alsaCanPause = false;
 
 	m_inputPts = AV_NOPTS_VALUE;
@@ -256,21 +252,6 @@ void cSoftHdAudio::Normalize(uint16_t *samples, int count)
 }
 
 /**
- * Reset normalize settings
- */
-void cSoftHdAudio::ResetNormalizer(void)
-{
-	int i;
-
-	m_normalizeCounter = 0;
-	m_normalizeReady = 0;
-	for (i = 0; i < NORMALIZE_MAX_INDEX; ++i) {
-		m_normalizeAverage[i] = 0U;
-	}
-	m_normalizeFactor = 1000;
-}
-
-/**
  * Compress audio
  *
  * @param samples   sample buffer
@@ -326,17 +307,6 @@ void cSoftHdAudio::Compress(uint16_t *samples, int count)
 }
 
 /**
- * Reset compressor
- */
-void cSoftHdAudio::ResetCompressor(void)
-{
-	m_compressionFactor = 2000;
-	if (m_compressionFactor > m_compressionMaxFactor) {
-		m_compressionFactor = m_compressionMaxFactor;
-	}
-}
-
-/**
  * Software amplifier
  *
  * @param samples   sample buffer
@@ -349,7 +319,7 @@ void cSoftHdAudio::SoftAmplify(int16_t *samples, int count)
 	int i;
 
 	// silence
-	if (m_muted || !m_amplifier) {
+	if (m_volume == 0 || !m_amplifier) {
 		memset(samples, 0, count);
 		return;
 	}
@@ -642,6 +612,42 @@ void cSoftHdAudio::ExitRingbuffer(void)
  *****************************************************************************/
 
 /**
+ * Drop samples older than the given PTS
+ *
+ * Removes audio samples from the ringbuffer that have a presentation timestamp
+ * older than the specified ptsMs.
+ *
+ * @param ptsMs     presentation timestamp in milliseconds - samples older than this will be dropped
+ */
+void cSoftHdAudio::DropSamplesOlderThanPtsMs(int64_t ptsMs)
+{
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	if (!HasPts())
+		return;
+
+	int dropBytes = MsToBytes(std::max((int64_t)0, ptsMs - GetOutputPtsMsInternal()));
+
+	// The bytes to drop must be a multiple of the frame size (channels * bytes per sample)
+	int frameSize = m_hwNumChannels * m_bytesPerSample;
+	int frames = dropBytes / frameSize;
+	dropBytes = frames * frameSize;
+
+	dropBytes = std::min(dropBytes, (int)m_pRingbuffer->UsedBytes());
+
+	if (dropBytes > 0) {
+		LOGDEBUG2(L_AV_SYNC, "audio: %s: dropping %dms audio samples to start in sync with the video (output PTS %s -> %s, target PTS %s)",
+			__FUNCTION__,
+			BytesToMs(dropBytes),
+			Timestamp2String(GetOutputPtsMsInternal(), 1),
+			Timestamp2String(GetOutputPtsMsInternal() + BytesToMs(dropBytes), 1),
+			Timestamp2String(ptsMs, 1));
+
+		m_pRingbuffer->ReadAdvance(dropBytes);
+	}
+}
+
+/**
  * Place samples in audio output queue
  *
  * @param frame		audio frame
@@ -656,12 +662,6 @@ void cSoftHdAudio::EnqueueFrame(AVFrame *frame)
 	int byteCount = frame->nb_samples * frame->ch_layout.nb_channels * m_bytesPerSample;
 	buffer = (uint16_t *)frame->data[0];
 
-	if (!m_alsaPlayerRunning) {
-		av_frame_free(&frame);
-//		LOGDEBUG2(L_SOUND, "audio: %s: Alsa player is not running!", __FUNCTION__);
-		return;
-	}
-
 	if (m_compression) {		// in place operation
 		Compress(buffer, byteCount);
 	}
@@ -671,32 +671,8 @@ void cSoftHdAudio::EnqueueFrame(AVFrame *frame)
 	ReorderAudioFrame(buffer, byteCount, frame->ch_layout.nb_channels);
 
 	Enqueue((uint16_t *)buffer, byteCount, frame);
-	if (!m_running && !m_paused)		// check, if we can start the thread
-		StartAudioThread(frame);
 
 	av_frame_free(&frame);
-}
-
-/**
- * Place samples in spdif audio output queue
- *
- * Places data as is in the ringbuffer. Caller has to ensure,
- * that necessary headers have been added to the buffer before (e.g. for passthrough).
- *
- * @param buffer     data buffer
- * @param count      number of bytes in data buffer
- * @param frame      decoded frame (used to get frame parameters), gets unreferenced
- */
-void cSoftHdAudio::EnqueueRawData(uint16_t *buffer, int count, AVFrame *frame)
-{
-	if (!m_alsaPlayerRunning) {
-//		LOGDEBUG2(L_SOUND, "audio: %s: Alsa player is not running!", __FUNCTION__);
-		return;
-	}
-
-	Enqueue(buffer, count, frame);
-	if (!m_running && !m_paused)		// check, if we can start the thread
-		StartAudioThread(frame);
 }
 
 /**
@@ -708,45 +684,13 @@ void cSoftHdAudio::EnqueueRawData(uint16_t *buffer, int count, AVFrame *frame)
  */
 void cSoftHdAudio::Enqueue(uint16_t *buffer, int count, AVFrame *frame)
 {
-	size_t n;
+	std::lock_guard<std::mutex> lock(m_mutex);
 
-	m_rbMutex.Lock();
-	n = m_pRingbuffer->Write((const uint16_t *)buffer, count);
+	size_t n = m_pRingbuffer->Write((const uint16_t *)buffer, count);
 	if (n != (size_t) count)
 		LOGERROR("audio: %s: can't place %d samples in ring buffer", __FUNCTION__, count);
 
 	m_inputPts = frame->pts + SamplesToPts(frame->nb_samples, frame->sample_rate);
-	m_rbMutex.Unlock();
-}
-
-/**
- * Start audio thread if possible and skip
- */
-void cSoftHdAudio::StartAudioThread(AVFrame *frame)
-{
-	size_t usedBytes = m_pRingbuffer->UsedBytes();
-	int skipBytes = m_skipBytes;
-	// FIXME: round to packet size
-
-	LOGDEBUG2(L_AV_SYNC, "audio: %s: start? in Rb %4zdms to skip %dms nb_samples %d", __FUNCTION__, BytesToMs(usedBytes), BytesToMs(skipBytes), frame->nb_samples);
-	if (skipBytes > 0) {
-		if (usedBytes < (size_t)skipBytes) {
-			skipBytes = usedBytes;
-		}
-		m_skipBytes -= skipBytes;
-		m_pRingbuffer->ReadAdvance(skipBytes);
-		usedBytes = m_pRingbuffer->UsedBytes();
-	}
-	// forced start or enough video + audio buffered
-	// for some exotic channels * 4 too small
-	if ((m_videoIsReady && m_startThresholdBytes < usedBytes) || m_startThresholdBytes * 4 < usedBytes) {
-		// restart play-back
-		// no lock needed, can wakeup next time
-		LOGDEBUG2(L_AV_SYNC, "audio: %s: start play-back Threshold %ums RingBuffer %zums m_videoIsReady %d", __FUNCTION__, BytesToMs(m_startThresholdBytes), BytesToMs(usedBytes), m_videoIsReady);
-		m_running = true;
-		LOGDEBUG2(L_SOUND, "audio: %s: start thread", __FUNCTION__);
-		m_pAudioThread->SendStartSignal();
-	}
 }
 
 /**
@@ -890,61 +834,6 @@ void cSoftHdAudio::Filter(AVFrame *inframe, AVCodecContext *ctx)
 }
 
 /**
- * Check, if we are able to sync audio and video
- *
- * Called before video sync, once we got a video frame.
- * It starts the audio thread, if there is more than m_startThreshold data in the ringbuffer
- * and skips audio frames if necessary.
- *
- * @param videoPtsMs   real video presentation timestamp
- *
- * @retval false       we did not get a valid audio pts to sync, so video thread must wait
- * @retval true        audio was started or is already running
- */
-bool cSoftHdAudio::VideoReady(int64_t videoPtsMs)
-{
-	if (m_running)
-		return true;
-
-	// no valid audio known
-	if (m_inputPts == AV_NOPTS_VALUE) {
-		LOGDEBUG2(L_SOUND, "audio: %s: can't do a/v start, no valid PTS", __FUNCTION__);
-		return false;
-	}
-
-	int usedBytes = m_pRingbuffer->UsedBytes();
-	int64_t outputPtsMs = PtsToMs(m_inputPts) - BytesToMs(usedBytes);
-
-	int skipMs = videoPtsMs - outputPtsMs - m_pDevice->GetVideoAudioDelayMs();
-
-	if (skipMs > 0) {
-		int skipBytes = MsToBytes(skipMs);
-
-		// the bytes to skip must be a multiple of m_hwNumChannels * m_bytesPerSample
-		int frames = skipBytes / m_hwNumChannels / m_bytesPerSample;
-		skipBytes = frames * m_hwNumChannels * m_bytesPerSample;
-
-		if (skipBytes > usedBytes) {
-			m_skipBytes = skipBytes - usedBytes;
-			skipBytes = usedBytes;
-		}
-		LOGDEBUG2(L_AV_SYNC, "audio: %s: RB %" PRId64 "ms skip %dms to skip %dms", __FUNCTION__, BytesToMs(usedBytes), BytesToMs(skipMs), BytesToMs(m_skipBytes));
-		m_pRingbuffer->ReadAdvance(skipBytes);
-
-		usedBytes = m_pRingbuffer->UsedBytes();
-	}
-
-	// enough audio buffered
-	if ((int)m_startThresholdBytes < usedBytes) {
-		m_running = true;
-		LOGDEBUG2(L_SOUND, "audio: %s: start thread", __FUNCTION__);
-		m_pAudioThread->SendStartSignal();
-	}
-	m_videoIsReady = true;
-	return true;
-}
-
-/**
  * Convert audio sample count to PTS units
  *
  * @param count            number of audio samples
@@ -961,8 +850,18 @@ int64_t cSoftHdAudio::SamplesToPts(int count, int sampleRateHz) {
  * @param pts     presentation timestamp in timebase units
  * @return time in milliseconds
  */
-int cSoftHdAudio::PtsToMs(int64_t pts) {
-	return (int)(pts * av_q2d(*m_pTimebase) * 1000);
+int64_t cSoftHdAudio::PtsToMs(int64_t pts) {
+	return pts * av_q2d(*m_pTimebase) * 1000;
+}
+
+/**
+ * Convert milliseconds to PTS
+ *
+ * @param pts     presentation timestamp in milliseconds
+ * @return time in timebase units
+ */
+int64_t cSoftHdAudio::MsToPts(int64_t ptsMs) {
+	return ptsMs / av_q2d(*m_pTimebase) / 1000;
 }
 
 /**
@@ -993,63 +892,6 @@ int cSoftHdAudio::BytesToMs(int count)
 }
 
 /**
- * Skip Audio if it's behind video
- *
- * @param videoPts   real video presentation timestamp
- * @param skipAll    if true, skip all audio frames
- *                   if false, keep one byte left
- *                   this is a workaround to avoid empty audio ringbuffer
- */
-int cSoftHdAudio::Skip(int64_t videoPts, bool skipAll)
-{
-	// no valid audio pts known
-	if (m_inputPts == AV_NOPTS_VALUE) {
-		LOGDEBUG2(L_AV_SYNC, "audio: %s: can't do skip, no valid audio PTS", __FUNCTION__);
-		return -1;
-	}
-
-	// no valid video pts
-	if (videoPts == AV_NOPTS_VALUE) {
-		LOGDEBUG2(L_AV_SYNC, "audio: %s: can't do skip, no valid video PTS", __FUNCTION__);
-		return -1;
-	}
-
-	while (1) {
-		int usedBytes = m_pRingbuffer->UsedBytes();
-
-		if (BytesToMs(usedBytes) == 0)
-			break;
-
-		int64_t outputPtsMs = PtsToMs(m_inputPts) - BytesToMs(usedBytes);
-
-		int skipMs = PtsToMs(videoPts) - outputPtsMs - m_pDevice->GetVideoAudioDelayMs();
-
-		if (skipMs <= 0) // audio >= video
-			break;
-
-		int skipBytes = MsToBytes(skipMs);
-
-		// the bytes to skip must be a multiple of m_hwNumChannels * m_bytesPerSample
-		int frames = skipBytes / m_hwNumChannels / m_bytesPerSample;
-		skipBytes = frames * m_hwNumChannels * m_bytesPerSample;
-
-		if (skipBytes >= usedBytes)
-			skipBytes = usedBytes - (1 - skipAll) * m_hwNumChannels * m_bytesPerSample;
-
-		LOGDEBUG2(L_AV_SYNC, "audio: %s: RB %" PRId64 "ms skip %dms audio %s -> %s video %s", __FUNCTION__,
-			BytesToMs(usedBytes),
-			BytesToMs(skipBytes),
-			Timestamp2String(outputPtsMs, 1),
-			Timestamp2String(outputPtsMs + BytesToMs(skipBytes), 1),
-			Timestamp2String(PtsToMs(videoPts), 1));
-
-		m_pRingbuffer->ReadAdvance(skipBytes);
-	}
-
-	return 0;
-}
-
-/**
  * Flush audio buffers
  *
  * Stop alsa player if running,
@@ -1057,17 +899,18 @@ int cSoftHdAudio::Skip(int64_t videoPts, bool skipAll)
  */
 void cSoftHdAudio::FlushBuffers(void)
 {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
 	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
 
-	if (m_running)
-		m_alsaPlayerRunning = false;
-	else if (m_inputPts != AV_NOPTS_VALUE)
+	if (!m_initialized)
+		return;
+
+	if (m_inputPts != AV_NOPTS_VALUE)
 		FlushAlsaBuffers();
 
-	while(m_running) {
-		usleep(5000);
-	}
-
+	m_pRingbuffer->Reset();
+	m_inputPts = AV_NOPTS_VALUE;
 	m_filterChanged = 1;
 }
 
@@ -1076,6 +919,8 @@ void cSoftHdAudio::FlushBuffers(void)
  */
 int cSoftHdAudio::GetFreeBytes(void)
 {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
 	return m_pRingbuffer ? m_pRingbuffer->FreeBytes() : INT32_MAX;
 }
 
@@ -1102,6 +947,13 @@ int cSoftHdAudio::GetUsedBytes(void)
  */
 int64_t cSoftHdAudio::GetOutputPtsMs(void)
 {
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	return GetOutputPtsMsInternal();
+}
+
+int64_t cSoftHdAudio::GetOutputPtsMsInternal(void)
+{
 	return PtsToMs(m_inputPts) - BytesToMs(m_pRingbuffer->UsedBytes());
 }
 
@@ -1116,30 +968,35 @@ int64_t cSoftHdAudio::GetOutputPtsMs(void)
  */
 int64_t cSoftHdAudio::GetHardwareOutputPtsMs(void)
 {
-	if (!m_running || !m_hwSampleRate ||
-		!m_pAlsaPCMHandle || m_inputPts == AV_NOPTS_VALUE) {
+	std::lock_guard<std::mutex> lock(m_mutex);
 
+	if (!m_hwSampleRate || !m_pAlsaPCMHandle || m_inputPts == AV_NOPTS_VALUE)
 		return AV_NOPTS_VALUE;
-	}
 
-	m_rbMutex.Lock();
 	// delay in frames in alsa + kernel buffers
 	snd_pcm_sframes_t delaySamples;
-	if (snd_pcm_delay(m_pAlsaPCMHandle, &delaySamples) < 0) {
-		if (!m_paused)
-			LOGDEBUG2(L_SOUND, "audio: %s: no hw delay", __FUNCTION__);
+	if (snd_pcm_delay(m_pAlsaPCMHandle, &delaySamples) < 0)
 		delaySamples = 0L;
-	}
 
 	if (delaySamples < 0) {
 		LOGDEBUG2(L_SOUND, "audio: %s: delay < 0", __FUNCTION__);
 		delaySamples = 0L;
 	}
 
-	int64_t ptsMs = GetOutputPtsMs() - (int64_t)delaySamples * 1000 / m_hwSampleRate;
-	m_rbMutex.Unlock();
+	return GetOutputPtsMsInternal() - (int64_t)delaySamples * 1000 / m_hwSampleRate;
+}
 
-	return ptsMs;
+/**
+ * Get the hardware output PTS in timebase units
+ *
+ * @return presentation timestamp in timebase units
+ */
+int64_t cSoftHdAudio::GetHardwareOutputPtsTimebaseUnits(void) {
+	int64_t ptsMs = GetHardwareOutputPtsMs();
+	if (ptsMs == AV_NOPTS_VALUE)
+		return AV_NOPTS_VALUE;
+
+	return MsToPts(ptsMs);
 }
 
 /**
@@ -1150,7 +1007,6 @@ int64_t cSoftHdAudio::GetHardwareOutputPtsMs(void)
 void cSoftHdAudio::SetVolume(int volume)
 {
 	m_volume = volume;
-	m_muted = volume == 0;
 	// reduce loudness for stereo output
 	if (m_stereoDescent && m_hwNumChannels == 2 && !m_passthrough) {
 		volume -= m_stereoDescent;
@@ -1167,90 +1023,33 @@ void cSoftHdAudio::SetVolume(int volume)
 }
 
 /**
- * Mute audio
- */
-void cSoftHdAudio::Mute(void)
-{
-	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
-	m_muted = true;
-}
-
-/**
- * Unmute audio
- */
-void cSoftHdAudio::Unmute(void)
-{
-	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
-	m_muted = false;
-}
-
-/**
- * Resume audio
+ * Set audio playback paused state
  *
- * Resume audio playback, if it is paused.
+ * @param pause     true to pause, false to resume
  */
-void cSoftHdAudio::Resume(void)
+void cSoftHdAudio::SetPaused(bool pause)
 {
-	int err;
+	LOGDEBUG2(L_SOUND, "audio: %s: %d", __FUNCTION__, pause);
 
-	if (!m_paused && !m_alsaCanPause)
-		return;
+	std::lock_guard<std::mutex> lock(m_mutex);
 
-	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
+	m_paused = pause;
+
 	if (m_alsaCanPause) {
-		snd_pcm_state_t state;
-		state = snd_pcm_state(m_pAlsaPCMHandle);
-		if (state == SND_PCM_STATE_PAUSED) {
-			LOGDEBUG2(L_SOUND, "audio: %s: state paused, try snd_pcm_pause(0)!", __FUNCTION__);
-			if ((err = snd_pcm_pause(m_pAlsaPCMHandle, 0))) {
-				LOGERROR("audio: %s: snd_pcm_pause(): %s", __FUNCTION__, snd_strerror(err));
-			}
-		}
-	} else {
-		m_paused = false;
-		if (m_startThresholdBytes < m_pRingbuffer->UsedBytes()) {
-			LOGDEBUG2(L_SOUND, "audio: %s: start thread", __FUNCTION__);
-			m_pAudioThread->SendStartSignal();
-		}
-	}
-}
+		snd_pcm_state_t expectedState;
+		if (pause)
+			expectedState = SND_PCM_STATE_RUNNING;
+		else
+			expectedState = SND_PCM_STATE_PAUSED;
 
-/**
- * Pause audio
- */
-void cSoftHdAudio::Pause(void)
-{
-	int err;
-
-	if (m_paused)
-		return;
-
-	LOGDEBUG2(L_SOUND, "audio: %s", __FUNCTION__);
-	if (m_alsaCanPause) {
-		snd_pcm_state_t state;
-		state = snd_pcm_state(m_pAlsaPCMHandle);
-		if (state == SND_PCM_STATE_RUNNING) {
+		if (snd_pcm_state(m_pAlsaPCMHandle) == expectedState) {
 			LOGDEBUG2(L_SOUND, "audio: %s: state running, try snd_pcm_pause(1)!", __FUNCTION__);
-			if ((err = snd_pcm_pause(m_pAlsaPCMHandle, 1))) {
-				LOGERROR("audio: %s: snd_pcm_pause(): %s", __FUNCTION__, snd_strerror(err));
-			}
-		}
-	} else {
-		m_paused = true;
-	}
-}
 
-/**
- * Set audio buffer time.
- *
- * PES audio packets have a max distance of 300 ms.
- * TS audio packet have a max distance of 100 ms.
- * The period size of the audio buffer is 24 ms.
- * With streamdev sometimes extra +100ms are needed.
- */
-void cSoftHdAudio::SetBufferTimeMs(int delayMs)
-{
-	m_bufferTimeMs = MIN_AUDIO_BUFFER_MS + delayMs;
+			int ret = snd_pcm_pause(m_pAlsaPCMHandle, pause);
+			if (ret)
+				LOGERROR("audio: %s: snd_pcm_pause(): %s", __FUNCTION__, snd_strerror(ret));
+		}
+	}
 }
 
 /**
@@ -1336,8 +1135,6 @@ void cSoftHdAudio::Exit(void)
 
 		AlsaExit();
 		ExitRingbuffer();
-		m_running = false;
-		m_paused = false;
 	}
 	m_initialized = false;
 }
@@ -1383,10 +1180,17 @@ void cSoftHdAudio::FlushAlsaBuffers(void)
 		LOGDEBUG2(L_SOUND, "audio: %s: pcm state %s", __FUNCTION__, snd_pcm_state_name(state));
 	}
 
-	m_pRingbuffer->Reset();
-	m_skipBytes = 0;
-	m_inputPts = AV_NOPTS_VALUE;
-	m_videoIsReady = false;
+	m_compressionFactor = 2000;
+	if (m_compressionFactor > m_compressionMaxFactor)
+		m_compressionFactor = m_compressionMaxFactor;
+
+	m_normalizeCounter = 0;
+	m_normalizeReady = 0;
+
+	for (int i = 0; i < NORMALIZE_MAX_INDEX; ++i)
+		m_normalizeAverage[i] = 0U;
+
+	m_normalizeFactor = 1000;
 }
 
 /******************************************************************************
@@ -1394,104 +1198,86 @@ void cSoftHdAudio::FlushAlsaBuffers(void)
  *****************************************************************************/
 
 /**
- * Play some samples and return
+ * Cyclic audio playback call
  *
- * PlayWithAlsa is called in the cAudioThread
- *
- * @retval -1        error
- * @retval 1         running
+ * Handles audio output to ALSA, writing samples from the ring buffer
+ * to the hardware when space is available.
  */
-int cSoftHdAudio::PlayWithAlsa(void)
+void cSoftHdAudio::CyclicCall()
 {
-	for (;;) {
-		int avail;
-		int n;
-		int err;
-		int frames;
-		const void *p;
+	if (m_paused || !m_pAlsaPCMHandle)
+		return;
 
-		if (m_paused || !m_alsaPlayerRunning || !m_pAlsaPCMHandle)
-			return 1;
-
-		// wait for space in kernel buffers
-		if ((err = snd_pcm_wait(m_pAlsaPCMHandle, 150)) < 0) {
-//			LOGERROR("audio: %s: snd_pcm_wait error? '%s'", __FUNCTION__, snd_strerror(err));
-			err = snd_pcm_recover(m_pAlsaPCMHandle, err, 0);
-//			LOGERROR("audio: %s: snd_pcm_wait error: snd_pcm_recover %s", __FUNCTION__, snd_strerror(err));
-		}
-
-		if (m_paused || !m_alsaPlayerRunning)
-			return 1;
-
-		// how many bytes can be written?
-//		n = snd_pcm_avail_update(m_pAlsaPCMHandle);
-		n = snd_pcm_avail(m_pAlsaPCMHandle);
-		if (n < 0) {
-			if (n == -EAGAIN) {
-				continue;
-			}
-			err = snd_pcm_recover(m_pAlsaPCMHandle, n, 0);
-			if (err >= 0) {
-				continue;
-			}
-			LOGERROR("audio: %s: snd_pcm_avail_update(): %s", __FUNCTION__, snd_strerror(n));
-			return -1;
-		}
-		avail = snd_pcm_frames_to_bytes(m_pAlsaPCMHandle, n);
-		if (avail < 256) {		// too much overhead
-			LOGDEBUG2(L_SOUND, "audio: %s: break state '%s' avail %d", __FUNCTION__,
-				snd_pcm_state_name(snd_pcm_state(m_pAlsaPCMHandle)), avail);
-			break;
-		}
-
-		n = m_pRingbuffer->GetReadPointer(&p);
-		if (!n) { // ring buffer empty
-			LOGWARNING("audio: %s: ring buffer empty Videopkts: %d", __FUNCTION__,
-			           m_pDevice->VideoStream()->GetAvPacketsFilled());
-		}
-		if (n < avail) { // not enough bytes in ring buffer
-			avail = n;
-		}
-		if (!avail) { // full or buffer empty
-			break;
-		}
-		// muting pass-through AC-3, can produce disturbance
-		if (m_muted || (m_softVolume && !m_passthrough)) {
-			// FIXME: quick&dirty cast
-			SoftAmplify((int16_t *) p, avail);
-			// FIXME: if not all are written, we double amplify them
-		}
-
-		frames = snd_pcm_bytes_to_frames(m_pAlsaPCMHandle, avail);
-
-		m_rbMutex.Lock();
-		if (m_alsaUseMmap) {
-			err = snd_pcm_mmap_writei(m_pAlsaPCMHandle, p, frames);
-		} else {
-			err = snd_pcm_writei(m_pAlsaPCMHandle, p, frames);
-		}
-		m_pRingbuffer->ReadAdvance(avail);
-		m_rbMutex.Unlock();
-		if (err != frames) {
-			if (err < 0) {
-				if (err == -EAGAIN) {
-					continue;
-				}
-				LOGWARNING("audio: %s: writei underrun error? '%s'", __FUNCTION__, snd_strerror(err));
-				err = snd_pcm_recover(m_pAlsaPCMHandle, err, 0);
-				if (err >= 0) {
-					continue;
-				}
-				LOGERROR("audio: %s: snd_pcm_writei failed: %s", __FUNCTION__, snd_strerror(err));
-				return -1;
-			}
-			// this could happen, if underrun happened
-			LOGWARNING("audio: %s: not all frames written", __FUNCTION__);
-			avail = snd_pcm_frames_to_bytes(m_pAlsaPCMHandle, err);
-			break;
-		}
+	// wait for space in kernel buffers
+	int ret = snd_pcm_wait(m_pAlsaPCMHandle, 150);
+	if (ret < 0) {
+		ret = snd_pcm_recover(m_pAlsaPCMHandle, ret, 0);
+		return;
+	} else if (ret == 0) {
+		LOGDEBUG2(L_SOUND, "audio: %s: snd_pcm_wait timeout", __FUNCTION__);
+		return;
 	}
-	return 0;
+
+	std::lock_guard<std::mutex> lock(m_mutex);
+
+	// check if paused while waiting for kernel buffer space
+	if (m_paused)
+		return;
+
+	// how many bytes can be written?
+	ret = snd_pcm_avail(m_pAlsaPCMHandle);
+	if (ret < 0) {
+		if (ret == -EAGAIN)
+			return;
+
+		if (snd_pcm_recover(m_pAlsaPCMHandle, ret, 0) < 0)
+			LOGERROR("audio: %s: failed to recover from snd_pcm_avail: %s", __FUNCTION__, snd_strerror(ret));
+
+		LOGERROR("audio: %s: snd_pcm_avail(): %s", __FUNCTION__, snd_strerror(ret));
+		return;
+	}
+
+	int alsaBufferFreeBytes = snd_pcm_frames_to_bytes(m_pAlsaPCMHandle, ret);
+
+	const void *data;
+	size_t inputBufferFillLevel = m_pRingbuffer->GetReadPointer(&data);
+
+	if (inputBufferFillLevel == 0)
+		m_eventQueue.push_back(BufferUnderrunEvent{AUDIO});
+
+	int bytesToWrite = std::min(alsaBufferFreeBytes, (int)inputBufferFillLevel);
+
+	if (bytesToWrite == 0)
+		return;
+
+	// muting pass-through AC-3, can produce disturbance
+	if (m_volume == 0 || (m_softVolume && !m_passthrough)) {
+		// FIXME: quick&dirty cast
+		SoftAmplify((int16_t *) data, bytesToWrite);
+		// FIXME: if not all are written, we double amplify them
+	}
+
+	int framesToWrite = snd_pcm_bytes_to_frames(m_pAlsaPCMHandle, bytesToWrite);
+
+	if (m_alsaUseMmap)
+		ret = snd_pcm_mmap_writei(m_pAlsaPCMHandle, data, framesToWrite);
+	else
+		ret = snd_pcm_writei(m_pAlsaPCMHandle, data, framesToWrite);
+
+	m_pRingbuffer->ReadAdvance(bytesToWrite);
+
+	if (ret != framesToWrite) {
+		if (ret < 0) {
+			if (ret == -EAGAIN)
+				return;
+
+			LOGWARNING("audio: %s: writei failed: %s", __FUNCTION__, snd_strerror(ret));
+
+			if (snd_pcm_recover(m_pAlsaPCMHandle, ret, 0) < 0)
+				LOGERROR("audio: %s: failed to recover from writei: %s", __FUNCTION__, snd_strerror(ret));
+		} else
+			LOGWARNING("audio: %s: not all frames written", __FUNCTION__);
+	}
 }
 
 /**
@@ -1744,15 +1530,9 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 	snd_pcm_hw_params_t *hwparams;
 	snd_pcm_state_t state;
 	int err;
-	int delayMs;
 	unsigned bufferTimeUs = 100'000;
 
 	m_downmix = 0;
-
-	if (m_running) {
-		LOGDEBUG2(L_SOUND, "audio: %s: Audio is Running -> FlushBuffers", __FUNCTION__);
-		FlushBuffers();
-	}
 
 	state = snd_pcm_state(m_pAlsaPCMHandle);
 	if (state == SND_PCM_STATE_XRUN) {
@@ -1816,32 +1596,16 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 		return -1;
 	}
 
-	// update buffer
-	m_startThresholdBytes = MsToBytes(bufferTimeUs / 1000);
-
-	// buffer time/delay in ms
-	delayMs = m_bufferTimeMs;
-	if (m_pDevice->GetVideoAudioDelayMs() > 0) {
-		delayMs += m_pDevice->GetVideoAudioDelayMs();
-	}
-	if (m_startThresholdBytes < (unsigned)MsToBytes(delayMs)) {
-		m_startThresholdBytes = MsToBytes(delayMs);
-	}
-	// no bigger, than 1/3 the buffer
-	if (m_startThresholdBytes > m_ringBufferSize / 3) {
-		m_startThresholdBytes = m_ringBufferSize / 3;
-	}
-
 	LOGINFO("audio: alsa set up:\n"
 		"           Channels %d SampleRate %d%s\n"
 		"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
 		"           Supports pause: %s mmap: %s\n"
-		"           AlsaBufferTime %dms m_bufferTimeMs %dms Threshold %ums",
+		"           AlsaBufferTime %dms",
 		channels, sample_rate, passthrough ? " -> passthrough" : "",
 		m_hwNumChannels, m_hwSampleRate,
 		snd_pcm_format_name(SND_PCM_FORMAT_S16),
 		m_alsaCanPause ? "yes" : "no", m_alsaUseMmap ? "yes" : "no",
-		bufferTimeUs / 1000, m_bufferTimeMs, BytesToMs(m_startThresholdBytes));
+		bufferTimeUs / 1000);
 	return 0;
 }
 
@@ -1869,7 +1633,6 @@ void cSoftHdAudio::AlsaInit(void)
 	snd_lib_error_set_handler(AlsaNoopCallback);
 #endif
 
-	m_bufferTimeMs = MIN_AUDIO_BUFFER_MS;
 	AlsaInitPCMDevice();
 	AlsaInitMixer();
 }
@@ -1888,4 +1651,15 @@ void cSoftHdAudio::AlsaExit(void)
 		m_pAlsaMixer = NULL;
 		m_pAlsaMixerElem = NULL;
 	}
+}
+
+/**
+ * Process queued events and forward to event receiver
+ */
+void cSoftHdAudio::ProcessEvents()
+{
+	for (Event event : m_eventQueue)
+		m_pEventReceiver->OnEventReceived(event);
+
+	m_eventQueue.clear();
 }

@@ -61,7 +61,11 @@ public:
 	cVideoDecoder *Decoder(void) { return m_pDecoder; };
 	void StartDecoder(cVideoDecoder *decoder, const char *);
 	size_t GetAvPacketsFilled(void) { return m_packets.Size(); };
+	bool IsBufferFull(void) { return m_packets.Size() >= VIDEO_PACKET_MAX; };
 	enum AVCodecID GetCodecId(void) { return m_codecId; };
+	void ResetTrickSpeedFramesSentCounter(void) { m_sentTrickPkts = 0; };
+	bool HasInputPts(void) { return m_inputPts != AV_NOPTS_VALUE; }
+	int64_t GetInputPtsMs(void);
 	void SetVideoSize(int, int);
 	void GetVideoSize(int *, int *, double *);
 
@@ -77,9 +81,10 @@ protected:
 
 	cQueue<AVPacket> m_packets{VIDEO_PACKET_MAX}; ///< AVPackets queue
 
-	enum AVCodecID m_codecId;              ///< current codec id
+	enum AVCodecID m_codecId = AV_CODEC_ID_NONE;  ///< current codec id
 	AVCodecParameters *m_pPar = nullptr;   ///< current codec parameters
 	struct AVRational m_timebase;          ///< current codec timebase
+	int64_t m_inputPts = AV_NOPTS_VALUE;   ///< PTS of the first packet in the input buffer
 	volatile bool m_newStream;             ///< flag for new stream
 
 	void TryInitDecoder(void);             ///< init/ open the decoder if necessary
@@ -92,7 +97,8 @@ protected:
 	virtual void TrickspeedFlushDecoderBuffers(void) {}
 
 private:
-	cDecodingThread *m_pDecodingThread;    ///< pointer to decoding thread
+	cDecodingThread *m_pDecodingThread;    ///< pointer to decoding thread	int64_t m_inputPts = AV_NOPTS_VALUE;   ///< PTS of the first packet in the input buffer
+
 	int m_videoWidth;                      ///< current video width (set by decoder)
 	int m_videoHeight;                     ///< current video height (set by decoder)
 	std::mutex m_mutex;                    ///< mutex to lock video size (which is accessed by different threads)

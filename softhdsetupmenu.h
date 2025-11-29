@@ -48,6 +48,7 @@ protected:
 #ifdef USE_GLES
 	int m_cMaxSizeGPUImageCache;
 #endif
+	int m_cAdditionalBufferLengthMs;
 
 	// Statistics
 	int m_cStatistics;

@@ -180,7 +180,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		swab(avpkt->data, spdif + 4, avpkt->size);
 		memset(spdif + 4 + avpkt->size / 2, 0, spdifSize - 8 - avpkt->size);
 
-		m_pAudio->EnqueueRawData(spdif, spdifSize, frame);
+		m_pAudio->Enqueue(spdif, spdifSize, frame);
 		return 1;
 	}
 
@@ -226,7 +226,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		spdif[3] = htole16(m_spdifIndex * 8);
 		memset(spdif + 4 + m_spdifIndex / 2, 0, spdifSize - 8 - m_spdifIndex);
 
-		m_pAudio->EnqueueRawData(spdif, spdifSize, frame);
+		m_pAudio->Enqueue(spdif, spdifSize, frame);
 		m_spdifIndex = 0;
 		m_spdifRepeatCount = 0;
 		return 1;
@@ -282,7 +282,7 @@ int cAudioDecoder::DecodePassthrough(const AVPacket * avpkt, AVFrame *frame)
 		swab(avpkt->data, spdif + 4, avpkt->size);
 		memset(spdif + 4 + avpkt->size, 0, burstSz - 8 - avpkt->size);
 
-		m_pAudio->EnqueueRawData(spdif, burstSz, frame);
+		m_pAudio->Enqueue(spdif, burstSz, frame);
 		return 1;
 	}
 

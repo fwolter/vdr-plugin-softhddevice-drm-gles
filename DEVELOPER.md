@@ -1,6 +1,6 @@
 # Developer Documentation - softhddevice-drm-gles
 
-This document contains technical documentation for developers, including the playback state machine and video data flow.
+This document contains technical documentation for developers.
 
 ## Playmode Graph
 
@@ -102,14 +102,12 @@ stateDiagram-v2
     Stop --> Detached: DetachEvent
 
     Play --> TrickSpeed: TrickSpeedEvent
-    Play --> Stop: StopEvent
-    Play --> Play: PauseEvent/StillPictureEvent
-    Play --> Detached: DetachEvent
+    Play --> Stop: StopEvent<br/>DetachEvent
+    Play --> Play: StillPictureEvent<br/>PauseEvent<br/>PlayEvent
 
     TrickSpeed --> Play: PlayEvent
-    TrickSpeed --> Stop: StopEvent
-    TrickSpeed --> TrickSpeed: PauseEvent/StillPictureEvent
-    TrickSpeed --> Detached: DetachEvent
+    TrickSpeed --> Stop: StopEvent<br/>DetachEvent
+    TrickSpeed --> TrickSpeed: StillPictureEvent<br/>PauseEvent<br/>TrickSpeedEvent
 
     classDef stopState fill:#e57373,stroke:#d32f2f,stroke-width:2px,color:#000
     classDef playState fill:#81c784,stroke:#388e3c,stroke-width:2px,color:#000
@@ -296,3 +294,25 @@ Then, the frame with the first sync word is sent to the decoder, followed by the
 
 This synchronization mechanism is only done when a stream starts, or when the data after a frame does not start with the sync word.
 The latter can happen for example on bad reception when garbage is received.
+
+## Buffering
+
+The audio and video data is buffered when VDR calls `SetPlayMode(pmAudioVideo)`, or `Clear()`, or when the buffer underruns during playback.
+
+The first audio PTS value and the first video PTS value VDR sends (and are received in `PlayVideo()`/`PlayAudio()`) differ in most cases (up to 3.5s were observed).
+The subset having only video or only audio is dropped, so that playback starts at the first frame where video *and* audio are available.
+However, the first received video frame is not dropped but displayed immediately after `Clear()` is called.
+This comes into handy when using `SkipSeconds`, having a responsive experience when seeking in a recording.
+
+To calculate if the buffer fill levels are sufficient to start playback, the following algorithm is implemented:
+
+- Start decoding audio and video as soon as packets arrive, but do not start playback, yet.
+- On each `Play*()` invocation, find the oldest PTS in each buffer (audio and video).
+- Use the buffer with the newer of both values to calculate its fill level (this will be the buffer having audio *and* video the whole buffer).
+- When the fill threshold of that buffer is reached, truncate the above mentioned subset of the other buffer.
+- Wait if the display output queue is not completely filled, yet.
+- Start playback.
+
+## Misc
+
+- The audio is initilized lazily (only when playback starts), because there is no sound device, yet, when HDMI is used as sound output, if the TV is off.
