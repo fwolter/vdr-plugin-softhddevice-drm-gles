@@ -1038,10 +1038,7 @@ static void ReleaseFrame( __attribute__ ((unused)) void *opaque, uint8_t *data)
 /**
  * Render a frame
  *
- * Frames either
- * - go via the deinterlacer or
- * - are pushed directly in the render ringbuffer or
- * - go via PushSoftwareDecodedFrame to the render ringbuffer if the buffer has to be prepared before.
+ * Frames either go through the filter thread or directly into the render buffer.
  *
  * @param videoCtx      ffmpeg video codec context
  * @param frame         frame to render

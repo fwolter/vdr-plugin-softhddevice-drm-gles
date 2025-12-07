@@ -227,7 +227,7 @@ private:
 	cFilterThread *m_pFilterThread;     ///< pointer to deinterlace filter thread
 	cMutex m_trickspeedMutex;           ///< mutex used while accessing trickspeed parameters
 	cMutex m_videoClockMutex;           ///< mutex used around m_pts
-	std::mutex m_drmBufferPeekMutex;   ///< mutex used while accessing the DRM buffer queue
+	std::mutex m_drmBufferPeekMutex;    ///< mutex used while accessing the DRM buffer queue
 	std::vector<Event> m_eventQueue;    ///< event queue for incoming events
 
 	int m_hardwareQuirks;               ///< hardware specific quirks
