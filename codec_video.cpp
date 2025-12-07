@@ -281,13 +281,14 @@ int cVideoDecoder::Open(enum AVCodecID codecId, AVCodecParameters * par,
 	m_pVideoCtx->pkt_timebase.num = 1;
 	m_pVideoCtx->pkt_timebase.den = 90000;
 
-	if (timebase) {
-		m_pVideoCtx->pkt_timebase.num = timebase->num;
-		m_pVideoCtx->pkt_timebase.den = timebase->den;
-	}
+	if (timebase)
+		m_pVideoCtx->pkt_timebase = *timebase;
 
-	// amlogic h264 decoder needs this
 	if (codecId == AV_CODEC_ID_H264) {
+		// prevent the decoder from outputting the first frame too early, leading to a gap between the first and the second frame (see DEVELOPER.md)
+		m_pVideoCtx->has_b_frames = 4;
+
+		// amlogic h264 decoder needs this
 		if (par) {
 			m_pVideoCtx->coded_width = par->width;
 			m_pVideoCtx->coded_height = par->height;
