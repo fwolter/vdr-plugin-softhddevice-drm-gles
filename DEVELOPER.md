@@ -300,7 +300,7 @@ The latter can happen for example on bad reception when garbage is received.
 The audio and video data is buffered when VDR calls `SetPlayMode(pmAudioVideo)`, or `Clear()`, or when the buffer underruns during playback.
 
 The first audio PTS value and the first video PTS value VDR sends (and are received in `PlayVideo()`/`PlayAudio()`) differ in most cases (up to 3.5s were observed).
-The subset having only video or only audio is dropped, so that playback starts at the first frame where video *and* audio are available.
+The subset having only video or only audio is dropped, so that playback starts at the first frame where video *and* audio are present.
 However, the first received video frame is not dropped but displayed immediately after `Clear()` is called.
 This comes into handy when using `SkipSeconds`, having a responsive experience when seeking in a recording.
 
@@ -312,6 +312,40 @@ To calculate if the buffer fill levels are sufficient to start playback, the fol
 - When the fill threshold of that buffer is reached, truncate the above mentioned subset of the other buffer.
 - Wait if the display output queue is not completely filled, yet.
 - Start playback.
+
+### Example: Buffering a H.264 Live Stream
+
+This is a real-life example, switching to the TV station "DMAX" (576i/H.264).
+
+The first video packets (20.890-21.510s) are dropped, because they contain no codec information/I-frame.
+So, the first frame the decoder outputs is 21.510s, which is also the first frame being displayed.
+
+All audio samples are dropped (21.510-20.302=1.208s), which have PTS values before the initially displayed video frame to let audio and video start in sync.
+
+At the point the buffer threshold is reached (450ms), the audio buffer has a size of 21.886-21.510=0.376s and the video buffer of 22.490-21.510=0.980s.
+
+The audio buffer size is apparently below the threshold in this example.
+Nevertheless, the buffer threshold is reached, because the the PTS values represent the start of a frame, and the threshold calculation takes the end of the last audio frame into account.
+
+The PTS timestamps in the following timeline are truncated to seconds for simplicity, but represent real values.
+
+```mermaid
+timeline
+title PTS Timeline: Live Stream Buffering
+
+section Dropped
+20.302s: First arrived audio packet
+20.890s: First arrived video packet
+section Displayed
+21.510s: First video packet with a key frame: First audio/video frame to be output
+21.886s: Last arrived audio packet before the buffer threshold is reached
+22.490s: Last arrived video packet before the buffer threshold is reached
+```
+
+The time between the first received PES packet of this stream and the first pageflip are 1.8s in this example.
+
+That the first PTS to be output is determined by the video stream seems to be the common case.
+If the first audio packet arrives after the first decoded video frame, the initial PTS to be output would be determined by the audio stream.
 
 ## Misc
 
