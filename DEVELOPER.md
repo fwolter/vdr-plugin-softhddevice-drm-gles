@@ -294,7 +294,7 @@ The latter can happen for example on bad reception when garbage is received.
 
 ## Buffering
 
-The audio and video data is buffered when VDR calls `SetPlayMode(pmAudioVideo)`, or `Clear()`, or when the buffer underruns during playback.
+The audio and video data is buffered when VDR calls `SetPlayMode(pmAudioVideo)`, `Clear()` or when the buffer underruns during playback.
 
 The first audio PTS value and the first video PTS value VDR sends (and are received in `PlayVideo()`/`PlayAudio()`) differ in most cases (up to 3.5s were observed).
 The subset having only video or only audio is dropped, so that playback starts at the first frame where video *and* audio are present.
