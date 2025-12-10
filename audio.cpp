@@ -1181,6 +1181,9 @@ void cSoftHdAudio::FlushAlsaBuffers(void)
 		m_normalizeAverage[i] = 0U;
 
 	m_normalizeFactor = 1000;
+
+	m_lastAlsaFlush = cTimeMs::Now();
+	m_logStart = true;
 }
 
 /******************************************************************************
@@ -1253,6 +1256,12 @@ void cSoftHdAudio::CyclicCall()
 		ret = snd_pcm_mmap_writei(m_pAlsaPCMHandle, data, framesToWrite);
 	else
 		ret = snd_pcm_writei(m_pAlsaPCMHandle, data, framesToWrite);
+
+	if (m_logStart) {
+		m_logStart = false;
+		uint64_t startDelay = cTimeMs::Now() - m_lastAlsaFlush;
+		LOGDEBUG("START AUDIO %ms after flush", (int)startDelay);
+	}
 
 	m_pRingbuffer->ReadAdvance(bytesToWrite);
 

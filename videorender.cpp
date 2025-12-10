@@ -579,6 +579,10 @@ void cVideoRender::PageFlipOsd(cDrmBuffer *pipBuf)
 void cVideoRender::PageFlipVideo(cDrmBuffer *buf, cDrmBuffer *pipBuf)
 {
 	PageFlip(buf, pipBuf);
+	if (m_logStart) {
+		LOGDEBUG("START VIDEO");
+		m_logStart = false;
+	}
 }
 
 /**
@@ -1066,6 +1070,7 @@ int64_t cVideoRender::GetVideoClock(void)
 void cVideoRender::ResetFrameCounter(void)
 {
 	m_startCounter = 0;
+	m_logStart = true;
 	LOGDEBUG("videorender: %s: reset m_startCounter %d TrickSpeed %d", __FUNCTION__, m_startCounter, GetTrickSpeed());
 }
 

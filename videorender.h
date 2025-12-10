@@ -206,6 +206,8 @@ private:
 	cMutex m_videoClockMutex;           ///< mutex used around m_pts
 	std::mutex m_drmBufferPeekMutex;    ///< mutex used while accessing the DRM buffer queue
 	std::vector<Event> m_eventQueue;    ///< event queue for incoming events
+	bool m_logStart = true;
+
 
 	cQueue<cDrmBuffer> m_drmBufferQueue{VIDEO_SURFACES_MAX};     ///< queue for DRM buffers to be displayed (VIDEO_SURFACES_MAX is defined in thread.h)
 	cQueue<cDrmBuffer> m_pipDrmBufferQueue{VIDEO_SURFACES_MAX};  ///< queue for PIP DRM buffers to be displayed (VIDEO_SURFACES_MAX is defined in thread.h)

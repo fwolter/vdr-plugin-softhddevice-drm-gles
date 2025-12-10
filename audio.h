@@ -90,6 +90,8 @@ private:
 
 	// thread
 	cAudioThread *m_pAudioThread;           ///< pointer to audio thread
+	bool m_logStart = true;
+	std::atomic<uint64_t> m_lastAlsaFlush = 0;
 
 	// common audio, alsa
 	bool m_initialized = false;             ///< class initialized
