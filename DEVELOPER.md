@@ -334,7 +334,7 @@ section Dropped
 20.302s: First arrived audio packet
 20.890s: First arrived video packet
 section Displayed
-21.510s: First video packet with a key frame: First audio/video frame to be output
+21.510s: First video packet with a codec syncword being detected: First audio/video frame to be output
 21.886s: Last arrived audio packet before the buffer threshold is reached
 22.490s: Last arrived video packet before the buffer threshold is reached
 ```
@@ -343,6 +343,10 @@ The time between the first received PES packet of this stream and the first page
 
 That the first PTS to be output is determined by the video stream seems to be the common case.
 If the first audio packet arrives after the first decoded video frame, the initial PTS to be output would be determined by the audio stream.
+
+Side note: For additional responsiveness/optimization, the first video packets (until the first sync word was received), were tried to put through the decoder (opened with the correct codec ID), but the decoder responded with invalid data.
+Only tried with H.264.
+
 
 ## Misc
 

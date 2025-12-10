@@ -386,16 +386,16 @@ void cVideoStream::DecodeInput(void)
  */
 void cVideoStream::GetVideoSize(int *width, int *height, double *aspect_ratio)
 {
-	std::lock_guard<std::mutex> lock(m_mutex);
+	AVCodecContext *videoCtx = m_pDecoder->GetContext();
 
-	if (m_pDecoder && m_pDecoder->GetContext()) {
-		*width = m_pDecoder->GetContext()->coded_width;
-		*height = m_pDecoder->GetContext()->coded_height;
+	if (m_pDecoder && videoCtx) {
+		*width = videoCtx->coded_width;
+		*height = videoCtx->coded_height;
 		*aspect_ratio = *width / (double)*height;
 	} else {
 		*width = 0;
 		*height = 0;
-		*aspect_ratio = 0.0;
+		*aspect_ratio = 1.0;
 	}
 }
 
