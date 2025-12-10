@@ -307,7 +307,7 @@ To calculate if the buffer fill levels are sufficient to start playback, the fol
 - On each `Play*()` invocation, find the oldest PTS in each buffer (audio and video).
 - Use the buffer with the newer of both values to calculate its fill level (this will be the buffer having audio *and* video the whole buffer).
 - When the fill threshold of that buffer is reached, truncate the above mentioned subset of the other buffer.
-- Wait if the display output queue is not completely filled, yet.
+- Wait until the display output queue is completely filled.
 - Start playback.
 
 ### Example: Buffering a H.264 Live Stream
