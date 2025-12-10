@@ -610,6 +610,7 @@ void cVideoRender::DisplayFrame()
 		if (m_schedulePlaybackStartAtPtsMs != AV_NOPTS_VALUE) {
 			// check if playback shall start
 			if (PtsToMs(drmBuffer->frame->pts) < m_schedulePlaybackStartAtPtsMs) {
+				LOGINFO("Dropping video frame %s", Timestamp2String(drmBuffer->frame->pts, 90));
 				drmBuffer->PresentationFinished();
 				return;
 			} else {
