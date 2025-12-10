@@ -168,7 +168,7 @@ static int ReadHWPlatform(void)
  */
 cVideoStream::cVideoStream(cVideoRender *render, cQueue<cDrmBuffer> *drmBufferQueue, cSoftHdConfig *config, const char *identifier, std::function<void(AVFrame *)> frameOutput)
 {
-	LOGDEBUG("videostream %s: %s:", __FUNCTION__, identifier);
+	LOGDEBUG("videostream %s: %s", __FUNCTION__, identifier);
 
 	m_pRender = render;
 	m_pDrmBufferQueue = drmBufferQueue;
