@@ -373,7 +373,7 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 						m_pAudio->SetPaused(false);
 					else {
 						m_pAudio->SetPaused(false);
-						m_pRender->SchedulePlaybackStartAtPtsMs(m_pRender->GetOutputPtsMs() + 80);
+						m_pRender->SchedulePlaybackStartAtPtsMs(m_pRender->GetOutputPtsMs());
 					}
 				},
 				[this](const PauseEvent&) {
