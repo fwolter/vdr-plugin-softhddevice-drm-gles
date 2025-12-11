@@ -345,6 +345,7 @@ void cSoftHdDevice::OnEventReceived(const Event& event)
 						int64_t firstVideoPtsMs = GetFirstVideoPtsMsToPlay();
 						// store the first PTSes beforehand, because dropping samples/frames will change the output of GetFirst*PtsMsToPlay()
 						m_pAudio->DropSamplesOlderThanPtsMs(firstAudioPtsMs);
+						m_pAudio->SetPaused(false);
 						m_pRender->SchedulePlaybackStartAtPtsMs(firstVideoPtsMs);
 					} else if (receivedAudio) {
 						LOGDEBUG("device: audio only detected");

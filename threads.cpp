@@ -142,6 +142,11 @@ void cAudioThread::Action(void)
 		m_pAudio->CyclicCall();
 		m_pAudio->ProcessEvents();
 
+		auto i = m_pAudio->GetHardwareOutputPtsMs();
+
+		if (i != AV_NOPTS_VALUE)
+			LOGINFO("Current audio PTS: %s", Timestamp2String(i, 1));
+
 		usleep(10000);
 	}
 	LOGDEBUG("threads: audio thread stopped");
