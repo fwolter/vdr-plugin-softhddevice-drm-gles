@@ -327,13 +327,10 @@ cSoftOsdProvider::~cSoftOsdProvider()
 {
 	LOGDEBUG2(L_OSD, "osdprovider %s:", __FUNCTION__);
 
-	if (m_pDevice->IsOsdProviderSet()) {
-		m_pDevice->ResetOsdProvider();
 #ifdef USE_GLES
-		if (!m_pDevice->OglOsdIsDisabled())
-			StopOpenGlThread();
+	if (!m_pDevice->OglOsdIsDisabled())
+		StopOpenGlThread();
 #endif
-	}
 }
 
 /**
@@ -431,12 +428,12 @@ bool cSoftOsdProvider::StartOpenGlThread(void) {
  * Stop the OpenGL thread
  */
 void cSoftOsdProvider::StopOpenGlThread(void) {
-	LOGDEBUG2(L_OPENGL, "osdprovider: %s: stopping OpenGL worker thread", __FUNCTION__);
 	if (m_pOglThread) {
+		LOGDEBUG2(L_OPENGL, "osdprovider: %s: stopping OpenGL worker thread", __FUNCTION__);
 		m_pOglThread->Stop();
+		LOGINFO("OpenGL worker thread stopped");
 	}
 	m_pOglThread.reset();
-	LOGINFO("OpenGL worker thread stopped");
 }
 
 /**

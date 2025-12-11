@@ -164,6 +164,17 @@ cSoftHdDevice::~cSoftHdDevice(void)
 }
 
 /**
+ * Called by VDR when the plugin is started.
+ */
+int cSoftHdDevice::Start(void)
+{
+	LOGDEBUG("device: %s", __FUNCTION__);
+	OnEventReceived(AttachEvent{});
+
+	return true;
+}
+
+/**
  * Called by VDR when the plugin is stopped.
  */
 void cSoftHdDevice::Stop(void)
@@ -191,10 +202,9 @@ void cSoftHdDevice::ClearAudio(void)
 void cSoftHdDevice::MakePrimaryDevice(bool on)
 {
 	LOGDEBUG("device: %s: %d", __FUNCTION__, on);
+
 	if (on)
-		OnEventReceived(AttachEvent{});
-	else
-		OnEventReceived(DetachEvent{});
+		m_pOsdProvider = new cSoftOsdProvider(this); // no need to delete it, VDR does it
 
 	cDevice::MakePrimaryDevice(on);
 }
@@ -538,19 +548,17 @@ void cSoftHdDevice::OnEnteringState(State state) {
 			m_pPipStream->Exit();
 			delete m_pPipStream;
 
-			m_pAudio->Exit();
 			m_pRender->Exit(); // render must be stopped before videostream!
 			m_pVideoStream->Exit();
-
+			m_pAudio->Exit(); // audio must be stopped after renderer!
 #ifdef USE_GLES
-			if (m_pOsdProvider) // can be deleted by VDR already
-				m_pOsdProvider->StopOpenGlThread();
+			m_pOsdProvider->StopOpenGlThread();
 #endif
-
 			delete m_pAudioDecoder; // includes a Close()
 			delete m_pVideoStream;
 			delete m_pRender;
 			delete m_pAudio;
+
 			break;
 	}
 }
@@ -604,8 +612,6 @@ void cSoftHdDevice::OnLeavingState(State state) {
 			m_pPipStream->StartDecoder(); // starts decoding thread
 			// Audio is init lazily (includes starting thread)
 
-			if (!m_pOsdProvider)
-				m_pOsdProvider = new cSoftOsdProvider(this); // no need to delete it, VDR does it
 			break;
 	}
 }
@@ -1723,7 +1729,17 @@ int cSoftHdDevice::PlayVideoPkts(AVPacket * pkt)
  */
 void cSoftHdDevice::Detach(void)
 {
-	MakePrimaryDevice(false);
+	if (Replaying()) {
+		LOGDEBUG("device: %s: Device is replaying, stop replay first", __FUNCTION__);
+		StopReplay();
+	}
+
+	if (IsPrimaryDevice(false)) {
+		m_needsMakePrimary = true;
+		MakePrimaryDevice(false);
+	}
+
+	OnEventReceived(DetachEvent{});
 }
 
 /**
@@ -1734,7 +1750,12 @@ void cSoftHdDevice::Detach(void)
  */
 void cSoftHdDevice::Attach(void)
 {
-	MakePrimaryDevice(true);
+	if (m_needsMakePrimary) {
+		MakePrimaryDevice(true);
+		m_needsMakePrimary = false;
+	}
+
+	OnEventReceived(AttachEvent{});
 }
 
 /**
