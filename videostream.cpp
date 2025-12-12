@@ -355,23 +355,20 @@ void cVideoStream::DecodeInput(void)
 	}
 
 	// in backward trickspeed force the decoder to decode the frame, if minPkts are sent
-	bool flushDecoder = false;
 	if (ret == 0 && m_pRender->GetTrickSpeed() && !m_pRender->GetTrickForward()) {
 		m_sentTrickPkts++;
 		if (m_sentTrickPkts >= minPkts) {
 			m_pDecoder->SendPacket(NULL);
 			m_sentTrickPkts = 0;
-			flushDecoder = true;
 		}
 	}
 
 	// receive frame from decoder
-	if (!m_newStream) { // this is for mediaplayer?
-		if (m_pDecoder->ReceiveFrame(&frame) == 0)
-			RenderFrame(frame);
-	}
+	ret = m_pDecoder->ReceiveFrame(&frame);
+	if (ret == 0)
+		RenderFrame(frame);
 
-	if (ret == AVERROR_EOF || flushDecoder) {
+	if (ret == AVERROR_EOF) {
 		FlushDecoder();
 		m_sentTrickPkts = 0;
 	}
