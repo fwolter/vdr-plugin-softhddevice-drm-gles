@@ -53,7 +53,7 @@ void cDrmPlane::FillProperties(int fd)
 {
 	drmModeObjectProperties *props = drmModeObjectGetProperties(fd, GetId(), DRM_MODE_OBJECT_PLANE);
 	if (!props) {
-		LOGERROR("drmplane: %s: could not get %u properties: %s", GetId(), __FUNCTION__, strerror(errno));
+		LOGERROR("drmplane: %s: could not get %u properties: %s", __FUNCTION__, GetId(), strerror(errno));
 		return;
 	}
 
