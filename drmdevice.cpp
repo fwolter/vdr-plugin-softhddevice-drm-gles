@@ -493,6 +493,51 @@ int cDrmDevice::Init(void)
 		m_zposPrimary = best_primary_osd_plane.GetZpos();
 		m_osdPlane.SetZpos(m_zposPrimary);
 		m_useZpos = true;
+	} else if (best_primary_video_plane.GetId() && best_primary_osd_plane.GetId() && best_primary_video_plane.GetId() == best_primary_osd_plane.GetId()) {
+		// fallback using the CURSOR plane for the OSD, e.g. for RockPro64 (RK3399) connected via HDMI, whose CRTC has only a PRIMARY and a CURSOR plane
+		cDrmPlane best_cursor_osd_plane;
+		for (j = 0; j < planeRes->count_planes; j++) {
+			plane = drmModeGetPlane(m_fdDrm, planeRes->planes[j]);
+			if (!plane)
+				continue;
+
+			if (plane->possible_crtcs & (1 << m_crtcIndex)) {
+				uint64_t type = 0;
+				GetPropertyValue(m_fdDrm, planeRes->planes[j], DRM_MODE_OBJECT_PLANE, "type", &type);
+
+				if (type == DRM_PLANE_TYPE_CURSOR) {
+					for (k = 0; k < plane->count_formats; k++) {
+						if (plane->formats[k] == DRM_FORMAT_ARGB8888) {
+							best_cursor_osd_plane.SetId(plane->plane_id);
+							best_cursor_osd_plane.SetType(type);
+							best_cursor_osd_plane.SetZpos(100);
+							break;
+						}
+					}
+				}
+			}
+
+			drmModeFreePlane(plane);
+			if (best_cursor_osd_plane.GetId())
+				break;
+		}
+
+		if (best_cursor_osd_plane.GetId()) {
+			LOGINFO("drmdevice: %s: Using PRIMARY plane for Video and CURSOR plane for OSD", __FUNCTION__);
+			m_videoPlane.SetId(best_primary_video_plane.GetId());
+			m_videoPlane.SetType(best_primary_video_plane.GetType());
+			m_zposPrimary = best_primary_video_plane.GetZpos();
+			m_videoPlane.SetZpos(m_zposPrimary);
+
+			m_osdPlane.SetId(best_cursor_osd_plane.GetId());
+			m_osdPlane.SetType(best_cursor_osd_plane.GetType());
+			m_zposOverlay = best_cursor_osd_plane.GetZpos();
+			m_osdPlane.SetZpos(m_zposOverlay);
+			m_useZpos = true;
+		} else {
+			LOGFATAL("drmdevice: %s: Only one suitable plane found (PRIMARY), and no suitable CURSOR plane for OSD!", __FUNCTION__);
+			return -1;
+		}
 	} else {
 		LOGERROR("drmdevice: %s: No suitable planes found!", __FUNCTION__);
 		return -1;
