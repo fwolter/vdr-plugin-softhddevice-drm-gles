@@ -347,7 +347,32 @@ If the first audio packet arrives after the first decoded video frame, the initi
 Side note: For additional responsiveness/optimization, the first video packets (until the first sync word was received), were tried to put through the decoder (opened with the correct codec ID), but the decoder responded with invalid data.
 Only tried with H.264.
 
-
 ## Misc
 
-- The audio is initilized lazily (only when playback starts), because there is no sound device, yet, when HDMI is used as sound output, if the TV is off.
+### Audio
+
+The audio is initilized lazily (only when playback starts), because there is no sound device, yet, when HDMI is used as sound output, if the TV is off.
+
+### H.264
+
+When the very first received H.264 packet contains an I-frame, the decoder outputs the decoded frame immediately.
+Then, the following frame might be put out too early, because the decoder is missing context of the following B-frames.
+
+The following log shows a gap of 80ms (four frames) between the first and the second output frame:
+
+```log
+2025-12-07T11:21:26.900272+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        1 PTS  4:36:27.099 <<---
+2025-12-07T11:21:26.900296+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: ReceiveFrame:      1 PTS  4:36:27.099 --->> ( 0)
+2025-12-07T11:21:26.923616+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        2 PTS  4:36:27.259 <<---
+2025-12-07T11:21:26.942355+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        3 PTS  4:36:27.179 <<---
+2025-12-07T11:21:26.942381+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: ReceiveFrame:      2 PTS  4:36:27.179 --->> ( 1)
+2025-12-07T11:21:26.953928+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        4 PTS  4:36:27.139 <<---
+2025-12-07T11:21:26.956967+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        5 PTS  4:36:27.119 <<---
+2025-12-07T11:21:26.960527+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        6 PTS  4:36:27.159 <<---
+2025-12-07T11:21:26.970708+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        7 PTS  4:36:27.219 <<---
+2025-12-07T11:21:26.973824+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        8 PTS  4:36:27.199 <<---
+2025-12-07T11:21:26.976761+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: SendPacket:        9 PTS  4:36:27.239 <<---
+2025-12-07T11:21:26.976777+0100 raspi vdr[118560]: [118572] [softhddevice][Packet] videocodec: ReceiveFrame:      3 PTS  4:36:27.199 --->> ( 6)
+```
+
+To overcome this, the decoder is forced to wait four B-frames, before putting out the very first frame by setting `m_pVideoCtx->has_b_frames = 4`.
