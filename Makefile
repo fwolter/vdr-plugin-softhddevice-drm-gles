@@ -40,6 +40,12 @@ endif
 
 VERSION = $(shell grep 'static const char \*const VERSION *=' $(PLUGIN).cpp | awk '{ print $$7 }' | sed -e 's/[";]//g')
 
+### The Git revision:
+# On a tag with clean tree: empty string
+# On a tag with dirty tree: show hash with -dirty (prefixed with dash)
+# Not on a tag: show hash (with -dirty if dirty, prefixed with dash)
+GIT_DESCRIBE ?= $(shell git describe --exact-match HEAD 2>/dev/null >/dev/null && git diff --quiet && git diff --cached --quiet && echo "" || (HASH=$$(git describe --always --dirty --exclude "*" 2>/dev/null || echo "unknown"); echo "-$$HASH"))
+
 ### The directory environment:
 
 # Use package data if installed...otherwise assume we're under the VDR source directory:
@@ -116,7 +122,7 @@ endif
 
 INCLUDES +=
 
-DEFINES += -DPLUGIN_NAME_I18N='"$(PLUGIN)"' -D_GNU_SOURCE $(CONFIG)
+DEFINES += -DPLUGIN_NAME_I18N='"$(PLUGIN)"' -D_GNU_SOURCE $(CONFIG) -DGIT_DESCRIBE='"$(GIT_DESCRIBE)"'
 
 ### Make it standard
 
@@ -201,6 +207,10 @@ install-i18n: $(I18Nmsgs)
 ### Targets:
 
 $(OBJS): Makefile
+
+# Force rebuild of main plugin object to update GIT_DESCRIBE
+.PHONY: force
+$(PLUGIN).o: force
 
 $(SOFILE): $(OBJS)
 	$(CXX) $(CXXFLAGS) $(LDFLAGS) -shared $(OBJS) $(LIBS) -o $@
