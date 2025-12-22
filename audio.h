@@ -169,7 +169,7 @@ private:
 	bool m_alsaUseMmap;                  ///< use mmap
 	bool m_alsaCanPause;                 ///< hw supports pause
 
-	void XrunRecovery(void);
+	void HandleError(int);
 	char *OpenAlsaDevice(const char *, int);
 	char *FindAlsaDevice(const char *, const char *, int);
 	int AlsaSetup(int channels, int sample_rate, int passthrough);
