@@ -168,7 +168,7 @@ private:
 	int m_alsaRatio;                     ///< internal -> mixer ratio * 1000
 	bool m_alsaUseMmap;                  ///< use mmap
 
-	void XrunRecovery(void);
+	void HandleError(int);
 	char *OpenAlsaDevice(const char *, int);
 	char *FindAlsaDevice(const char *, const char *, int);
 	int AlsaSetup(int channels, int sample_rate, int passthrough);

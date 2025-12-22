@@ -1036,19 +1036,17 @@ void cSoftHdAudio::Exit(void)
  *****************************************************************************/
 
 /**
- * xrun recovery
+ * handle error
  */
-void cSoftHdAudio::XrunRecovery(void)
+void cSoftHdAudio::HandleError(int error)
 {
-	int err;
-	snd_pcm_state_t state;
+	if (snd_pcm_state(m_pAlsaPCMHandle) == SND_PCM_STATE_XRUN)
+		m_eventQueue.push_back(BufferUnderrunEvent{AUDIO});
 
-	err = snd_pcm_prepare(m_pAlsaPCMHandle);
-	if (err < 0) {
-		state = snd_pcm_state(m_pAlsaPCMHandle);
-		LOGERROR("audio: %s: Can't recovery from xrun: %s pcm state: %s", __FUNCTION__,
-			snd_strerror(err), snd_pcm_state_name(state));
-	}
+	if (snd_pcm_recover(m_pAlsaPCMHandle, error, 0) < 0)
+		LOGERROR("audio: %s: Cannot recover: %s", __FUNCTION__, snd_strerror(error));
+
+	snd_pcm_prepare(m_pAlsaPCMHandle);
 }
 
 /**
@@ -1107,7 +1105,7 @@ bool cSoftHdAudio::CyclicCall()
 	// wait for space in kernel buffers
 	int ret = snd_pcm_wait(m_pAlsaPCMHandle, 150);
 	if (ret < 0) {
-		ret = snd_pcm_recover(m_pAlsaPCMHandle, ret, 0);
+		HandleError(ret);
 		return false;
 	} else if (ret == 0) {
 		LOGERROR("audio: %s: snd_pcm_wait() timeout", __FUNCTION__);
@@ -1122,19 +1120,13 @@ bool cSoftHdAudio::CyclicCall()
 		if (freeAlsaBufferFrameCount == -EAGAIN)
 			return false;
 
-		if (snd_pcm_recover(m_pAlsaPCMHandle, freeAlsaBufferFrameCount, 0) < 0)
-			LOGERROR("audio: %s: failed to recover from snd_pcm_avail: %s", __FUNCTION__, snd_strerror(freeAlsaBufferFrameCount));
-
-		LOGERROR("audio: %s: snd_pcm_avail(): %s", __FUNCTION__, snd_strerror(freeAlsaBufferFrameCount));
+		HandleError(freeAlsaBufferFrameCount);
 		return false;
 	}
 
 	// calculcate amount of data to write
 	const void *data;
 	ssize_t inputBufferFillLevelBytes = m_pRingbuffer.GetReadPointer(&data);
-
-	if (inputBufferFillLevelBytes == 0)
-		m_eventQueue.push_back(BufferUnderrunEvent{AUDIO});
 
 	int bytesToWrite = std::min(snd_pcm_frames_to_bytes(m_pAlsaPCMHandle, freeAlsaBufferFrameCount), inputBufferFillLevelBytes);
 
@@ -1433,7 +1425,6 @@ void cSoftHdAudio::AlsaSetVolume(int volume)
 int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 {
 	snd_pcm_hw_params_t *hwparams;
-	snd_pcm_state_t state;
 	int err;
 	unsigned bufferTimeUs = 100'000;
 
@@ -1445,12 +1436,6 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 	}
 
 	m_downmix = 0;
-
-	state = snd_pcm_state(m_pAlsaPCMHandle);
-	if (state == SND_PCM_STATE_XRUN) {
-		LOGERROR("audio: %s: recover from xrun pcm state: %s", __FUNCTION__, snd_pcm_state_name(state));
-		XrunRecovery();
-	}
 
 	snd_pcm_hw_params_alloca(&hwparams);
 	if ((err = snd_pcm_hw_params_any(m_pAlsaPCMHandle, hwparams)) < 0) {
@@ -1492,7 +1477,7 @@ int cSoftHdAudio::AlsaSetup(int channels, int sample_rate, int passthrough)
 		m_alsaUseMmap ? SND_PCM_ACCESS_MMAP_INTERLEAVED :
 		SND_PCM_ACCESS_RW_INTERLEAVED, m_hwNumChannels, m_hwSampleRate, 1, bufferTimeUs))) {
 
-		state = snd_pcm_state(m_pAlsaPCMHandle);
+		snd_pcm_state_t state = snd_pcm_state(m_pAlsaPCMHandle);
 		LOGERROR("audio: %s: set params error: %s\n"
 			"           Channels %d SampleRate %d\n"
 			"           HWChannels %d HWSampleRate %d SampleFormat %s\n"
