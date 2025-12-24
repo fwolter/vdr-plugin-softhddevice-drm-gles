@@ -1083,6 +1083,9 @@ int cSoftHdDevice::PlayAudio(const uchar *data, int size, uchar id)
 		return size;
 	}
 
+	if (Transferring()) // TODO is this the right approach to detect live streaming?
+		m_pAudio->ClockDriftCompensation(); // compensation is only necessary with live streams
+
 	if (m_audioChannelID != id) {
 		m_audioChannelID = id;
 		m_audioReassemblyBuffer.Reset();
