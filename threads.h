@@ -39,7 +39,6 @@ class cDecodingThread : public cThread
 {
 public:
 	cDecodingThread(cVideoStream *, const char *);
-	virtual ~cDecodingThread(void);
 	void Stop(void);
 	void Halt(void) { m_mutex.lock(); };
 	void Resume(void) { m_mutex.unlock(); };
@@ -61,7 +60,6 @@ class cDisplayThread : public cThread
 {
 public:
 	cDisplayThread(cVideoRender *);
-	virtual ~cDisplayThread(void);
 	void Stop(void);
 	void Halt(void) { m_mutex.lock(); };
 	void Resume(void) { m_mutex.unlock(); };
@@ -83,7 +81,6 @@ class cAudioThread : public cThread
 {
 public:
 	cAudioThread(cSoftHdAudio *);
-	virtual ~cAudioThread(void);
 	void Stop(void);
 
 private:
@@ -100,7 +97,6 @@ class cFilterThread : public cThread
 {
 public:
 	cFilterThread(cVideoRender *, cQueue<cDrmBuffer> *, const char *, std::function<void(AVFrame *)>);
-	virtual ~cFilterThread(void);
 	void InitAndStart(const AVCodecContext *, AVFrame *, bool);
 	void Stop(void);
 	void PushFrame(AVFrame *);

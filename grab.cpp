@@ -288,25 +288,6 @@ static int BlitVideo(uint8_t *dst, uint8_t *src, int dstW, int dstH, int dstX, i
  ****************************************************************************/
 
 /**
- * Grab buffer class constructor
- */
-cGrabBuffer::cGrabBuffer(void)
-{
-	m_pBuf = NULL;
-	m_pResult = NULL;
-
-	cRect m_rect;
-	m_size = 0;
-}
-
-/**
- * Grab buffer class destructor
- */
-cGrabBuffer::~cGrabBuffer(void)
-{
-}
-
-/**
  * Free the grab buffer
  */
 void cGrabBuffer::FreeDrmBuf(void)
@@ -337,21 +318,6 @@ void cGrabBuffer::SetDrmBuf(cDrmBuffer *buf)
 /*****************************************************************************
  * cSoftHdGrab class
  ****************************************************************************/
-
-/**
- * Grabber class constructor
- */
-cSoftHdGrab::cSoftHdGrab(cVideoRender *render)
-{
-	m_pRender = render;
-}
-
-/**
- * Grabber class destructor
- */
-cSoftHdGrab::~cSoftHdGrab(void)
-{
-}
 
 /**
  * Start a grab in the video renderer

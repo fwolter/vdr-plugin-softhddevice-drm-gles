@@ -52,8 +52,8 @@ class cVideoRender;
 class cGrabBuffer
 {
 public:
-	cGrabBuffer(void);
-	virtual ~cGrabBuffer(void);
+	cGrabBuffer(void) = default;
+
 	void FreeDrmBuf(void);
 	void SetDrmBuf(cDrmBuffer *);
 
@@ -69,10 +69,10 @@ public:
 	int GetSize(void) { return m_size; };
 	cDrmBuffer *GetDrmBuf(void) { return m_pBuf; };
 private:
-	uint8_t *m_pResult;          ///< pointer to grabbed image
-	struct cDrmBuffer *m_pBuf;   ///< pointer to original buffer
-	int m_size;                  ///< size of grabbed data
-	cRect m_rect;                ///< rect of the grabbed data
+	uint8_t *m_pResult = nullptr;        ///< pointer to grabbed image
+	struct cDrmBuffer *m_pBuf = nullptr; ///< pointer to original buffer
+	int m_size = 0;                      ///< size of grabbed data
+	cRect m_rect;                        ///< rect of the grabbed data
 };
 
 /**
@@ -81,8 +81,7 @@ private:
 class cSoftHdGrab
 {
 public:
-	cSoftHdGrab(cVideoRender *);
-	virtual ~cSoftHdGrab(void);
+	cSoftHdGrab(cVideoRender *render) : m_pRender(render) {};
 
 	bool Active(void) { return m_isActive; };
 	bool Start(bool, int, int, int, int, int);
@@ -93,7 +92,7 @@ private:
 	cVideoRender *m_pRender;
 	uint8_t *m_grabbedImage;
 	int m_grabbedSize;
-	bool m_isActive;
+	bool m_isActive = false;
 
 	bool m_isJpeg = true;
 	int m_quality;
