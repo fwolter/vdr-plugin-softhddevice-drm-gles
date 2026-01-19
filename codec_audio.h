@@ -27,9 +27,9 @@ extern "C" {
 
 /**
  * bits used for the passthrough mask
+ *
+ * 0x01 and 0x02 are kept unused for compatibility with an existing setup.conf
  */
-#define CODEC_PCM  0x01      ///< PCM bit mask
-#define CODEC_MPA  0x02      ///< MPA bit mask (not used)
 #define CODEC_AC3  0x04      ///< AC-3 bit mask
 #define CODEC_EAC3 0x08      ///< E-AC-3 bit mask
 #define CODEC_DTS  0x10      ///< DTS bit mask
@@ -46,7 +46,7 @@ enum IEC61937
 	IEC61937_DTS2 = 0x0C,      ///< DTS type II (1024 samples)
 	IEC61937_DTS3 = 0x0D,      ///< DTS type III (2048 samples)
 	IEC61937_DTSHD = 0x11,     ///< DTS HD data (not used)
-	IEC61937_TRUEHD = 0x16,	   ///< TrueHD data (not used)
+	IEC61937_TRUEHD = 0x16,    ///< TrueHD data (not used)
 };
 
 #define IEC61937_PREAMBLE1      0xF872
