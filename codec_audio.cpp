@@ -288,7 +288,7 @@ int cAudioDecoder::UpdateFormat(void)
 	int isPassthrough = 0;
 	int err;
 
-	LOGDEBUG2(L_SOUND, "audiocodec: %s: format change %s %dHz *%d channels%s%s%s%s%s%d", __FUNCTION__,
+	LOGDEBUG2(L_SOUND, "audiocodec: %s: format change %s %dHz *%d channels%s%s%s%s%d", __FUNCTION__,
 		av_get_sample_fmt_name(m_pAudioCtx->sample_fmt), m_pAudioCtx->sample_rate, m_pAudioCtx->ch_layout.nb_channels,
 		m_passthroughMask & CODEC_AC3 ? " AC3" : "",
 		m_passthroughMask & CODEC_EAC3 ? " EAC3" : "",
